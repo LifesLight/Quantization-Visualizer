@@ -313,13 +313,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             qFloats[i + j] = qVal;
                         }
                     } else {
-                        const qmax = Math.pow(2, weightBits - 1) - 1;
-                        scale = maxAbs / qmax;
+                        const nlevels = Math.pow(2, weightBits);
+                        scale = (2 * maxAbs) / (nlevels - 1);
                         if (scale === 0) scale = 1e-9;
-                        const qmin = -Math.pow(2, weightBits - 1);
                         for (let j = 0; j < chunk.length; j++) {
-                            const q = Math.max(qmin, Math.min(qmax, Math.round(chunk[j] / scale)));
-                            const qVal = q * scale;
+                            const q = Math.max(0, Math.min(nlevels - 1, Math.round((chunk[j] + maxAbs) / scale)));
+                            const qVal = q * scale - maxAbs;
                             chunkQ.push(qVal);
                             qFloats[i + j] = qVal;
                         }
@@ -421,6 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const superChunkQ = [];
 
                 if (hasOffset) {
+                    // Asymmetric kquant: full 2^bits range, all codes used
                     const qmaxWeight = Math.pow(2, weightBits) - 1;
                     for (let i = 0; i < superChunk.length; i += subSize) {
                         const chunk = superChunk.slice(i, i + subSize);
@@ -449,6 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, superMinScale, superMinOffset, ...getErrStats(superChunk, superChunkQ) });
                 } else {
                     if (weightBits === 1) {
+                        // 1-bit sign: both codes always used
                         const qmaxSub = Math.pow(2, subBits) - 1;
                         for (let i = 0; i < superChunk.length; i += subSize) {
                             const chunk = superChunk.slice(i, i + subSize);
@@ -470,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, ...getErrStats(superChunk, superChunkQ) });
                     } else {
                         const qmaxWeightSym = Math.pow(2, weightBits - 1) - 1;
-                        const qminWeightSym = -Math.pow(2, weightBits - 1);
+                        const qminWeightSym = -qmaxWeightSym;
                         const qmaxSub = Math.pow(2, subBits) - 1;
                         for (let i = 0; i < superChunk.length; i += subSize) {
                             const chunk = superChunk.slice(i, i + subSize);
@@ -508,7 +509,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (qType === 'none') {
             formulaBox.innerHTML = `No Quantization applied.`;
         } else if (qType === 'sym') {
-            formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale.</span>`;
+            formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span> &minus; MaxAbs</span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one scale. All 2<sup>${weightBits}</sup> codes used; MaxAbs = Scale &times; (2<sup>${weightBits}</sup>&minus;1)/2 is implicit.</span>`;
         } else if (qType === 'asym') {
             formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span> + <span class="eq-pill">Min<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale and one offset.</span>`;
         } else if (qType === 'turbo') {
@@ -536,7 +537,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (hasOffset) {
                 formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; ( <span class="eq-pill">SubScale_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperScale<span class="bits">${basePrecision}b</span></span> ) + ( <span class="eq-pill">SubMin_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperMinScale<span class="bits">${basePrecision}b</span></span> + <span class="eq-pill">SuperMin<span class="bits">${basePrecision}b</span></span> )</span>` + kDesc;
             } else {
-                formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; ( <span class="eq-pill">SubScale_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperScale<span class="bits">${basePrecision}b</span></span> )</span>` + kDesc;
+                formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; ( <span class="eq-pill">SubScale_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperScale<span class="bits">${basePrecision}b</span></span> )</span><br><span style="color:var(--text-muted);font-size:0.8rem;">Symmetric clamp [&minus;${Math.pow(2,weightBits-1)-1}, +${Math.pow(2,weightBits-1)-1}]: all stored codes have a valid dequant level.</span>` + kDesc;
             }
         }
 
