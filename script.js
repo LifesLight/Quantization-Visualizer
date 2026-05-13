@@ -1,7 +1,5 @@
-// --- EXACT MATHEMATICAL HELPER FUNCTIONS ---
+/* Copyright (c) Alexander Kurtz 2026 */
 
-// 1. Dynamic Lloyd-Max Quantizer Centroid Generator
-// Mathematically calculates optimal scalar centroids for N(0,1) via PDF numerical integration.
 const lloydMaxCache = {};
 function getLloydMaxCentroids(bits) {
     if (lloydMaxCache[bits]) return lloydMaxCache[bits];
