@@ -171,6 +171,11 @@
                                 <option value="Q5_K">Q5_K</option>
                                 <option value="Q6_K">Q6_K</option>
                             </optgroup>
+                            <optgroup label="TurboQuant (KV)">
+                                <option value="turbo2">Turbo2 (2-bit)</option>
+                                <option value="turbo3">Turbo3 (3-bit)</option>
+                                <option value="turbo4">Turbo4 (4-bit)</option>
+                            </optgroup>
                         </select>
                     </div>
 
@@ -181,6 +186,7 @@
                             <option value="sym" selected>Symmetric (Q4_0 style)</option>
                             <option value="asym">Asymmetric (Q4_1 style)</option>
                             <option value="kquant">Superblock (Q4_K style)</option>
+                            <option value="turbo">TurboQuant (Polar+SRHT)</option>
                         </select>
                     </div>
                     <div class="settings-group">
@@ -196,6 +202,39 @@
                             <option value="64">64</option>
                         </select>
                     </div>
+
+                    <div id="turbo-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
+                        <div class="settings-group">
+                            <label for="turbo-bits">Lloyd-Max Centroids (Bits)</label>
+                            <select id="turbo-bits">
+                                <option value="2">2-bit (4 centroids)</option>
+                                <option value="3">3-bit (8 centroids)</option>
+                                <option value="4" selected>4-bit (16 centroids)</option>
+                            </select>
+                        </div>
+                        <div class="settings-group">
+                            <label for="turbo-block-size">WHT Block Size</label>
+                            <select id="turbo-block-size">
+                                <option value="32">32</option>
+                                <option value="64">64</option>
+                                <option value="128" selected>128</option>
+                                <option value="256">256</option>
+                            </select>
+                        </div>
+                        <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
+                            title="Subsampled Randomized Hadamard Transform. Applies a diagonal random sign flip followed by a Walsh-Hadamard Transform to mathematically guarantee a Gaussian-like distribution, eliminating outlier impact.">
+                            <input type="checkbox" id="turbo-wht" checked
+                                style="width: auto; margin: 0; cursor: pointer;">
+                            <label for="turbo-wht" style="margin: 0; cursor: pointer;">Enable SRHT</label>
+                        </div>
+                        <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
+                            title="Quantized Johnson-Lindenstrauss. Adds a 1-bit symmetric error correction (+/- MAE) to neutralize inner-product bias and reduce the aggregate quantization error.">
+                            <input type="checkbox" id="turbo-qjl" checked
+                                style="width: auto; margin: 0; cursor: pointer;">
+                            <label for="turbo-qjl" style="margin: 0; cursor: pointer;">Enable QJL</label>
+                        </div>
+                    </div>
+
                     <div id="kquant-settings"
                         style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">

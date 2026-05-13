@@ -1,3 +1,78 @@
+// --- EXACT MATHEMATICAL HELPER FUNCTIONS ---
+
+// 1. Dynamic Lloyd-Max Quantizer Centroid Generator
+// Mathematically calculates optimal scalar centroids for N(0,1) via PDF numerical integration.
+const lloydMaxCache = {};
+function getLloydMaxCentroids(bits) {
+    if (lloydMaxCache[bits]) return lloydMaxCache[bits];
+    const levels = Math.pow(2, bits);
+    const centroids = new Float64Array(levels);
+
+    // Initial uniform distribution across effective +/- 3 std devs
+    for (let i = 0; i < levels; i++) centroids[i] = -3 + (6 * (i + 0.5)) / levels;
+
+    const pdf = (x) => Math.exp(-x * x / 2); // Constant drops out in fraction
+
+    // Iterative k-means integration solver
+    for (let iter = 0; iter < 100; iter++) {
+        const thresholds = new Float64Array(levels + 1);
+        thresholds[0] = -10;
+        for (let i = 0; i < levels - 1; i++) thresholds[i + 1] = (centroids[i] + centroids[i + 1]) / 2;
+        thresholds[levels] = 10;
+
+        for (let i = 0; i < levels; i++) {
+            let num = 0, den = 0;
+            const tStart = thresholds[i];
+            const tEnd = thresholds[i + 1];
+            const steps = 200;
+            const dt = (tEnd - tStart) / steps;
+
+            for (let j = 0; j < steps; j++) {
+                const x = tStart + (j + 0.5) * dt;
+                const p = pdf(x);
+                num += x * p;
+                den += p;
+            }
+            if (den > 1e-9) centroids[i] = num / den;
+        }
+    }
+    lloydMaxCache[bits] = Array.from(centroids);
+    return lloydMaxCache[bits];
+}
+
+// 2. Fast Walsh-Hadamard Transform (FWHT)
+// Mathematically orthogonal structured rotation (self-inverse). 
+function fwht(data) {
+    let n = data.length;
+    let p2 = 1; while (p2 < n) p2 *= 2;
+    let res = new Float64Array(p2);
+    for (let i = 0; i < n; i++) res[i] = data[i];
+
+    for (let h = 1; h < p2; h *= 2) {
+        for (let i = 0; i < p2; i += h * 2) {
+            for (let j = i; j < i + h; j++) {
+                let x = res[j];
+                let y = res[j + h];
+                res[j] = x + y;
+                res[j + h] = x - y;
+            }
+        }
+    }
+
+    // Normalization maintains perfect isometry.
+    let scale = 1 / Math.sqrt(p2);
+    for (let i = 0; i < p2; i++) res[i] *= scale;
+    return Array.from(res).slice(0, n);
+}
+
+// 3. Deterministic Pseudo-Random Sign generator for SRHT Diagonal
+function getSignFlip(index) {
+    let h = Math.sin(index * 12.9898 + 1) * 43758.5453;
+    return (h - Math.floor(h)) >= 0.5 ? 1 : -1;
+}
+
+// --- MAIN VISUALIZER LOGIC ---
+
 document.addEventListener('DOMContentLoaded', () => {
     const toggleLeft = document.getElementById('toggle-left');
     const toggleRight = document.getElementById('toggle-right');
@@ -38,74 +113,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateUI() {
         const qType = qTypeEl.value;
-        document.getElementById('block-settings').style.display = (qType === 'sym' || qType === 'asym') ? 'flex' : 'none';
+        const isStandard = (qType === 'sym' || qType === 'asym');
+
+        document.getElementById('block-settings').style.display = isStandard ? 'flex' : 'none';
         document.getElementById('kquant-settings').style.display = qType === 'kquant' ? 'flex' : 'none';
+        document.getElementById('turbo-settings').style.display = qType === 'turbo' ? 'flex' : 'none';
+
+        document.getElementById('quant-bits').parentElement.style.display = qType === 'turbo' ? 'none' : 'flex';
         document.getElementById('card-super').style.display = qType === 'kquant' ? 'flex' : 'none';
     }
 
     const loadPreset = (preset) => {
         switch (preset) {
-            case 'Q2_0':
-                qTypeEl.value = 'sym'; qBitsEl.value = 2; document.getElementById('block-size').value = '32';
-                break;
-            case 'Q2_1':
-                qTypeEl.value = 'asym'; qBitsEl.value = 2; document.getElementById('block-size').value = '32';
-                break;
-            case 'Q4_0':
-                qTypeEl.value = 'sym'; qBitsEl.value = 4; document.getElementById('block-size').value = '32';
-                break;
-            case 'Q4_1':
-                qTypeEl.value = 'asym'; qBitsEl.value = 4; document.getElementById('block-size').value = '32';
-                break;
-            case 'Q5_0':
-                qTypeEl.value = 'sym'; qBitsEl.value = 5; document.getElementById('block-size').value = '32';
-                break;
-            case 'Q5_1':
-                qTypeEl.value = 'asym'; qBitsEl.value = 5; document.getElementById('block-size').value = '32';
-                break;
-            case 'Q8_0':
-                qTypeEl.value = 'sym'; qBitsEl.value = 8; document.getElementById('block-size').value = '32';
-                break;
+            case 'Q2_0': qTypeEl.value = 'sym'; qBitsEl.value = 2; document.getElementById('block-size').value = '32'; break;
+            case 'Q2_1': qTypeEl.value = 'asym'; qBitsEl.value = 2; document.getElementById('block-size').value = '32'; break;
+            case 'Q4_0': qTypeEl.value = 'sym'; qBitsEl.value = 4; document.getElementById('block-size').value = '32'; break;
+            case 'Q4_1': qTypeEl.value = 'asym'; qBitsEl.value = 4; document.getElementById('block-size').value = '32'; break;
+            case 'Q5_0': qTypeEl.value = 'sym'; qBitsEl.value = 5; document.getElementById('block-size').value = '32'; break;
+            case 'Q5_1': qTypeEl.value = 'asym'; qBitsEl.value = 5; document.getElementById('block-size').value = '32'; break;
+            case 'Q8_0': qTypeEl.value = 'sym'; qBitsEl.value = 8; document.getElementById('block-size').value = '32'; break;
             case 'Q2_K':
                 qTypeEl.value = 'kquant'; qBitsEl.value = 2;
-                document.getElementById('block-size').value = '16';
-                document.getElementById('superblock-size').value = '256';
-                document.getElementById('subblock-size').value = '16';
-                document.getElementById('subblock-bits').value = 4;
-                document.getElementById('subblock-offset').checked = true;
-                break;
+                document.getElementById('block-size').value = '16'; document.getElementById('superblock-size').value = '256';
+                document.getElementById('subblock-size').value = '16'; document.getElementById('subblock-bits').value = 4;
+                document.getElementById('subblock-offset').checked = true; break;
             case 'Q3_K':
                 qTypeEl.value = 'kquant'; qBitsEl.value = 3;
-                document.getElementById('block-size').value = '16';
-                document.getElementById('superblock-size').value = '256';
-                document.getElementById('subblock-size').value = '16';
-                document.getElementById('subblock-bits').value = 6;
-                document.getElementById('subblock-offset').checked = false;
-                break;
+                document.getElementById('block-size').value = '16'; document.getElementById('superblock-size').value = '256';
+                document.getElementById('subblock-size').value = '16'; document.getElementById('subblock-bits').value = 6;
+                document.getElementById('subblock-offset').checked = false; break;
             case 'Q4_K':
                 qTypeEl.value = 'kquant'; qBitsEl.value = 4;
-                document.getElementById('block-size').value = '32';
-                document.getElementById('superblock-size').value = '256';
-                document.getElementById('subblock-size').value = '32';
-                document.getElementById('subblock-bits').value = 6;
-                document.getElementById('subblock-offset').checked = true;
-                break;
+                document.getElementById('block-size').value = '32'; document.getElementById('superblock-size').value = '256';
+                document.getElementById('subblock-size').value = '32'; document.getElementById('subblock-bits').value = 6;
+                document.getElementById('subblock-offset').checked = true; break;
             case 'Q5_K':
                 qTypeEl.value = 'kquant'; qBitsEl.value = 5;
-                document.getElementById('block-size').value = '32';
-                document.getElementById('superblock-size').value = '256';
-                document.getElementById('subblock-size').value = '32';
-                document.getElementById('subblock-bits').value = 6;
-                document.getElementById('subblock-offset').checked = true;
-                break;
+                document.getElementById('block-size').value = '32'; document.getElementById('superblock-size').value = '256';
+                document.getElementById('subblock-size').value = '32'; document.getElementById('subblock-bits').value = 6;
+                document.getElementById('subblock-offset').checked = true; break;
             case 'Q6_K':
                 qTypeEl.value = 'kquant'; qBitsEl.value = 6;
-                document.getElementById('block-size').value = '16';
-                document.getElementById('superblock-size').value = '256';
-                document.getElementById('subblock-size').value = '16';
-                document.getElementById('subblock-bits').value = 8;
-                document.getElementById('subblock-offset').checked = false;
-                break;
+                document.getElementById('block-size').value = '16'; document.getElementById('superblock-size').value = '256';
+                document.getElementById('subblock-size').value = '16'; document.getElementById('subblock-bits').value = 8;
+                document.getElementById('subblock-offset').checked = false; break;
+            case 'turbo2':
+                qTypeEl.value = 'turbo';
+                document.getElementById('turbo-bits').value = '2'; document.getElementById('turbo-block-size').value = '128';
+                document.getElementById('turbo-wht').checked = true; document.getElementById('turbo-qjl').checked = true; break;
+            case 'turbo3':
+                qTypeEl.value = 'turbo';
+                document.getElementById('turbo-bits').value = '3'; document.getElementById('turbo-block-size').value = '128';
+                document.getElementById('turbo-wht').checked = true; document.getElementById('turbo-qjl').checked = true; break;
+            case 'turbo4':
+                qTypeEl.value = 'turbo';
+                document.getElementById('turbo-bits').value = '4'; document.getElementById('turbo-block-size').value = '128';
+                document.getElementById('turbo-wht').checked = true; document.getElementById('turbo-qjl').checked = true; break;
         }
         updateUI();
         render();
@@ -159,7 +222,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('gen-bias'), document.getElementById('gen-std'),
         document.getElementById('gen-scale'), document.getElementById('gen-bimodal-dist'),
         document.getElementById('gen-bimodal-spread'), document.getElementById('gen-outlier-prob'),
-        document.getElementById('gen-outlier-mult'), document.getElementById('gen-uni-range')
+        document.getElementById('gen-outlier-mult'), document.getElementById('gen-uni-range'),
+        document.getElementById('turbo-bits'), document.getElementById('turbo-block-size'),
+        document.getElementById('turbo-wht'), document.getElementById('turbo-qjl')
     ];
 
     autoUpdateElements.forEach(el => el.addEventListener('change', () => {
@@ -194,6 +259,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let subSize = parseInt(document.getElementById('subblock-size').value) || 32;
         const subBits = parseInt(document.getElementById('subblock-bits').value) || 6;
         const hasOffset = document.getElementById('subblock-offset').checked;
+
+        if (qType === 'turbo') {
+            blockSize = parseInt(document.getElementById('turbo-block-size').value) || 128;
+        }
 
         const blockMeta = [];
         const superMeta = [];
@@ -247,6 +316,89 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 blockMeta.push({ idx: i / blockSize, size: chunk.length, scale, min: offset, ...getErrStats(chunk, chunkQ) });
+            }
+        } else if (qType === 'turbo') {
+            const tBits = parseInt(document.getElementById('turbo-bits').value) || 4;
+            const useWht = document.getElementById('turbo-wht').checked;
+            const useQjl = document.getElementById('turbo-qjl').checked;
+
+            // Generate exact optimal centroids for standard normal distribution using Lloyd-Max algorithm
+            const centroids = getLloydMaxCentroids(tBits);
+
+            // Base precision used for the uniform RMS scaler. QJL provides +1 extra bias-correction bit.
+            bpw = tBits + (useQjl ? 1 : 0) + (basePrecision / blockSize);
+
+            for (let i = 0; i < floats.length; i += blockSize) {
+                const chunk = floats.slice(i, i + blockSize);
+                let actualLen = chunk.length;
+                let padLen = 1; while (padLen < actualLen) padLen *= 2;
+                let chunkPadded = [...chunk];
+                while (chunkPadded.length < padLen) chunkPadded.push(0);
+
+                // Stage 1: SRHT (Subsampled Randomized Hadamard Transform) 
+                // Deterministic diagonal sign flip guarantees Johnson-Lindenstrauss applicability
+                if (useWht) {
+                    for (let j = 0; j < padLen; j++) chunkPadded[j] *= getSignFlip(j);
+                }
+
+                // Rotational Kernel spreads energy perfectly, causing coordinates to obey Normal Distribution
+                let chunkW = useWht ? fwht(chunkPadded) : [...chunkPadded];
+
+                // Scale factor calculation: RMS Std-dev formulation over transformed space
+                let sumSq = 0;
+                for (let j = 0; j < padLen; j++) sumSq += chunkW[j] * chunkW[j];
+                let rms = Math.sqrt(sumSq / padLen) || 1e-9;
+
+                let chunkQ = [];
+                let residuals = [];
+
+                // Stage 2: Scalar quantization onto the normalized block using Lloyd-Max centroids
+                for (let j = 0; j < padLen; j++) {
+                    let normVal = chunkW[j] / rms;
+                    let bestC = centroids[0];
+                    let bestDist = Math.abs(normVal - bestC);
+                    for (let c = 1; c < centroids.length; c++) {
+                        let d = Math.abs(normVal - centroids[c]);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestC = centroids[c];
+                        }
+                    }
+                    let qv = bestC * rms;
+                    chunkQ.push(qv);
+                    residuals.push(chunkW[j] - qv);
+                }
+
+                // Stage 3: Optional QJL 1-bit bias correction to neutralize inner-product decay
+                let meanAbsRes = 0;
+                if (useQjl) {
+                    let absResSum = residuals.reduce((s, v) => s + Math.abs(v), 0);
+                    meanAbsRes = absResSum / padLen;
+                    for (let j = 0; j < padLen; j++) {
+                        // 1-bit logic: mathematically symmetric representation of the residual
+                        chunkQ[j] += (residuals[j] >= 0 ? 1 : -1) * meanAbsRes;
+                    }
+                }
+
+                // Reconstruct to original coordinates using identical FWHT Inverse
+                let chunkOut = useWht ? fwht(chunkQ) : chunkQ;
+
+                // Re-apply diagonal sign flip to completely invert rotation back to original axes
+                if (useWht) {
+                    for (let j = 0; j < padLen; j++) chunkOut[j] *= getSignFlip(j);
+                }
+
+                for (let j = 0; j < actualLen; j++) {
+                    qFloats[i + j] = chunkOut[j];
+                }
+
+                blockMeta.push({
+                    idx: i / blockSize,
+                    size: actualLen,
+                    scale: rms,
+                    qjlScale: meanAbsRes,
+                    ...getErrStats(chunk, chunkOut.slice(0, actualLen))
+                });
             }
         } else if (qType === 'kquant') {
             bpw = weightBits + ((hasOffset ? 2 : 1) * subBits / subSize) + ((hasOffset ? 3 : 1) * basePrecision / sbSize);
@@ -349,6 +501,26 @@ document.addEventListener('DOMContentLoaded', () => {
             formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale.</span>`;
         } else if (qType === 'asym') {
             formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span> + <span class="eq-pill">Min<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale and one offset.</span>`;
+        } else if (qType === 'turbo') {
+            const tBits = parseInt(document.getElementById('turbo-bits').value) || 4;
+            const useWht = document.getElementById('turbo-wht').checked;
+            const useQjl = document.getElementById('turbo-qjl').checked;
+
+            let qjlStr = useQjl ? ` + <span class="eq-pill">QJL_1bit<span class="bits">1b</span></span>` : ``;
+            let srhtStr = useWht ? `<span class="eq-pill" title="Diagonal Random Sign Array">D</span> &times; <span class="eq-pill" title="Orthogonal Fast Walsh-Hadamard Transform">FWHT</span> &times; ` : ``;
+
+            let footerDesc = `Every ${blockSize} weights share one RMS scale.`;
+            if (useWht && useQjl) {
+                footerDesc += ` SRHT forces Gaussian distribution; QJL adds 1-bit bias correction.`;
+            } else if (useWht) {
+                footerDesc += ` SRHT rotates features into a Gaussian distribution.`;
+            } else if (useQjl) {
+                footerDesc += ` QJL adds 1-bit bias correction to raw values.`;
+            } else {
+                footerDesc += ` Applying static Lloyd-Max to raw distribution.`;
+            }
+
+            formulaBox.innerHTML = `<span>Weight = ${srhtStr}[ ( <span class="eq-pill">LloydMax<span class="bits">${tBits}b</span></span> &times; <span class="eq-pill">RMS_Scale<span class="bits">${basePrecision}b</span></span> )${qjlStr} ]</span><br><span style="color:var(--text-muted);font-size:0.8rem;">${footerDesc}</span>`;
         } else if (qType === 'kquant') {
             const kDesc = `<br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${subSize} weights share a sub-scale, and every ${sbSize} weights share a super-scale.</span>`;
             if (hasOffset) {
@@ -420,7 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
             grp.className = 'block-group'; grp.style.flex = floats.length;
             floats.forEach((v, i) => grp.appendChild(createBar(v, qFloats[i], i)));
             frag.appendChild(grp);
-        } else if (qType === 'sym' || qType === 'asym') {
+        } else if (qType === 'sym' || qType === 'asym' || qType === 'turbo') {
             for (let i = 0; i < floats.length; i += blockSize) {
                 const chunk = floats.slice(i, i + blockSize);
                 const grp = document.createElement('div');
@@ -463,9 +635,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const bm = blockMeta[bGrp.dataset.bIdx];
                 iBIdx.textContent = `[${bm.idx}]`;
                 let htm = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div><div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>`;
-                if (qType === 'sym' || qType === 'asym') {
+                if (qType === 'sym' || qType === 'asym' || qType === 'turbo') {
                     htm += `<div class="data-row" style="margin-top:4px"><span>Scale (FP):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
                     if (qType === 'asym') htm += `<div class="data-row"><span>Min (FP):</span> <span>${bm.min.toFixed(5)}</span></div>`;
+                    if (qType === 'turbo' && bm.qjlScale > 0) htm += `<div class="data-row"><span>QJL Scale:</span> <span>${bm.qjlScale.toFixed(5)}</span></div>`;
                 } else if (qType === 'kquant') {
                     htm += `<div style="margin-top:6px; color:var(--primary-color);">Sub Scale Math:</div><div class="data-row"><span>Int (<span class="val-hl">${bm.intScale}</span>) &times; SuperScale &nbsp;&nbsp;=&nbsp;</span> <span>${bm.qScale.toFixed(5)}</span></div>`;
                     if (bm.intMin !== undefined) {
