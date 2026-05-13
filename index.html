@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Float Quantization Visualizer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body id="body">
+    <div class="container">
+        <header>
+            <h1 id="title">Float Quantization Visualizer</h1>
+            <p>Interactive Q4_K Block Architecture & Error Analysis</p>
+        </header>
+
+        <main>
+            <div class="panel-wrapper" id="panel-left-wrapper">
+                <div class="panel">
+                    <div class="panel-header">1. Input Data</div>
+                    <div class="settings-group">
+                        <label>Generate Floats</label>
+                        <select id="gen-dist">
+                            <option value="normal" selected>Normal Dist. (Gaussian)</option>
+                            <option value="laplace">Laplace (NN Weights)</option>
+                            <option value="bimodal">Bimodal (Grouped)</option>
+                            <option value="outliers">Normal + Outliers</option>
+                            <option value="uniform">Uniform Random</option>
+                        </select>
+
+                        <div class="gen-advanced-wrapper">
+                            <button id="gen-adv-toggle" class="adv-toggle-btn">
+                                <span>Advanced Parameters</span>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path d="M7 10l5 5 5-5z" />
+                                </svg>
+                            </button>
+                            <div id="gen-adv-panel" class="adv-panel" style="display: none;">
+                                <div class="settings-group">
+                                    <label>Global Bias (Offset)</label>
+                                    <input type="number" id="gen-bias" value="0.0" step="0.5">
+                                </div>
+
+                                <div id="param-normal" class="dist-params" style="display:flex;">
+                                    <label>Standard Deviation</label>
+                                    <input type="number" id="gen-std" value="1.0" step="0.1" min="0.1">
+                                </div>
+                                <div id="param-laplace" class="dist-params" style="display:none;">
+                                    <label>Scale (Diversity)</label>
+                                    <input type="number" id="gen-scale" value="1.0" step="0.1" min="0.1">
+                                </div>
+                                <div id="param-bimodal" class="dist-params" style="display:none;">
+                                    <label>Peak Distance</label>
+                                    <input type="number" id="gen-bimodal-dist" value="4.0" step="0.5">
+                                    <label style="margin-top:4px;">Spread (Std Dev)</label>
+                                    <input type="number" id="gen-bimodal-spread" value="1.2" step="0.1" min="0.1">
+                                </div>
+                                <div id="param-outliers" class="dist-params" style="display:none;">
+                                    <label>Outlier Probability</label>
+                                    <input type="number" id="gen-outlier-prob" value="0.02" step="0.01" min="0" max="1">
+                                    <label style="margin-top:4px;">Outlier Scale Multiplier</label>
+                                    <input type="number" id="gen-outlier-mult" value="5.0" step="0.5" min="1.0">
+                                </div>
+                                <div id="param-uniform" class="dist-params" style="display:none;">
+                                    <label>Range (Spread)</label>
+                                    <input type="number" id="gen-uni-range" value="10.0" step="1.0" min="0.1">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 8px; margin-top: 4px;">
+                            <input type="number" id="gen-count" value="256" min="1" max="8192" style="flex: 1;"
+                                title="Count">
+                            <button id="gen-btn" class="action-btn secondary" style="flex: 1;">Generate</button>
+                        </div>
+                    </div>
+                    <div class="input-group" style="margin-top: 10px;">
+                        <label for="float-input">Raw Floats Block</label>
+                        <textarea id="float-input" placeholder="e.g. 1.2, -0.5, 3.14, -2.2, 0.1"></textarea>
+                    </div>
+                    <div class="settings-group">
+                        <label for="centering-mode">Chart Y-Axis Mode</label>
+                        <select id="centering-mode">
+                            <option value="zero">Centered around Zero</option>
+                            <option value="mid">Data Range Bounds</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="viz-wrapper">
+                <button class="toggle-btn left-toggle" id="toggle-left"><svg viewBox="0 0 24 24">
+                        <path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" />
+                    </svg></button>
+                <button class="toggle-btn right-toggle" id="toggle-right"><svg viewBox="0 0 24 24">
+                        <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+                    </svg></button>
+
+                <div class="viz-container" id="viz-container">
+                    <div class="axis-label top"><span id="chart-max-lbl">Max: 0</span></div>
+
+                    <div class="chart-area" id="chart-area">
+                        <div class="baseline" id="baseline"></div>
+                    </div>
+
+                    <div class="axis-label bottom"><span id="chart-min-lbl">Min: 0</span></div>
+
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: var(--accent-color);"></div> Pos. Quantized
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: var(--negative-color);"></div> Neg. Quantized
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color"
+                                style="background: repeating-linear-gradient(45deg, var(--error-color), var(--error-color) 3px, transparent 3px, transparent 6px);">
+                            </div> Quantization Error
+                        </div>
+                    </div>
+
+                    <div class="equation-box" id="equation-box"></div>
+
+                    <div class="inspector-panel" id="inspector-panel">
+                        <div class="inspector-card">
+                            <h4>Weight Inspector <span id="ins-w-idx">[-]</span></h4>
+                            <div class="inspector-data" id="ins-w-data">
+                                <div class="empty-state">Hover over a bar to inspect</div>
+                            </div>
+                        </div>
+                        <div class="inspector-card">
+                            <h4>Sub-Block stats <span id="ins-b-idx">[-]</span></h4>
+                            <div class="inspector-data" id="ins-b-data">
+                                <div class="empty-state">Hover over a block to inspect</div>
+                            </div>
+                        </div>
+                        <div class="inspector-card" id="card-super">
+                            <h4>Super-Block stats <span id="ins-sb-idx">[-]</span></h4>
+                            <div class="inspector-data" id="ins-sb-data">
+                                <div class="empty-state">Hover over a superblock</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-wrapper" id="panel-right-wrapper">
+                <div class="panel">
+                    <div class="panel-header">2. Quant Engine</div>
+
+                    <div class="settings-group">
+                        <label for="preset-select">Presets</label>
+                        <select id="preset-select">
+                            <option value="custom">-- Custom --</option>
+                            <optgroup label="Symmetric (_0)">
+                                <option value="Q2_0">Q2_0</option>
+                                <option value="Q4_0" selected>Q4_0</option>
+                                <option value="Q5_0">Q5_0</option>
+                                <option value="Q8_0">Q8_0</option>
+                            </optgroup>
+                            <optgroup label="Asymmetric (_1)">
+                                <option value="Q2_1">Q2_1</option>
+                                <option value="Q4_1">Q4_1</option>
+                                <option value="Q5_1">Q5_1</option>
+                            </optgroup>
+                            <optgroup label="K-Quants (_K)">
+                                <option value="Q2_K">Q2_K</option>
+                                <option value="Q3_K">Q3_K</option>
+                                <option value="Q4_K">Q4_K</option>
+                                <option value="Q5_K">Q5_K</option>
+                                <option value="Q6_K">Q6_K</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="settings-group">
+                        <label for="quant-type">Quantization Scheme</label>
+                        <select id="quant-type">
+                            <option value="none">None (FP32 baseline)</option>
+                            <option value="sym" selected>Symmetric (Q4_0 style)</option>
+                            <option value="asym">Asymmetric (Q4_1 style)</option>
+                            <option value="kquant">Superblock (Q4_K style)</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label for="quant-bits">Weight Resolution (Bits)</label>
+                        <input type="number" id="quant-bits" value="4" min="1" max="8">
+                    </div>
+
+                    <div id="block-settings" class="settings-group" style="display: flex;">
+                        <label for="block-size">Block Size</label>
+                        <select id="block-size">
+                            <option value="16">16</option>
+                            <option value="32" selected>32</option>
+                            <option value="64">64</option>
+                        </select>
+                    </div>
+                    <div id="kquant-settings"
+                        style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
+                        <div class="settings-group">
+                            <label for="superblock-size">Superblock Size</label>
+                            <select id="superblock-size">
+                                <option value="64">64</option>
+                                <option value="128">128</option>
+                                <option value="256" selected>256</option>
+                                <option value="512">512</option>
+                            </select>
+                        </div>
+                        <div class="settings-group">
+                            <label for="subblock-size">Sub-block Size</label>
+                            <select id="subblock-size">
+                                <option value="8">8</option>
+                                <option value="16">16</option>
+                                <option value="32" selected>32</option>
+                            </select>
+                        </div>
+                        <div class="settings-group">
+                            <label for="subblock-bits">Sub-block Scaler/Min (Bits)</label>
+                            <input type="number" id="subblock-bits" value="6" min="1" max="8">
+                        </div>
+                        <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="subblock-offset" checked
+                                style="width: auto; margin: 0; cursor: pointer;">
+                            <label for="subblock-offset" style="margin: 0; cursor: pointer;">Include Min/Offset
+                                (Asym)</label>
+                        </div>
+                    </div>
+
+                    <div class="settings-group" style="margin-top: auto;">
+                        <label>Global Stats</label>
+                        <div class="stats-box" id="quant-stats">Waiting...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
