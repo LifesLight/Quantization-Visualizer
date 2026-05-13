@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             val += bias;
-            arr.push(val.toFixed(4));
+            arr.push(val.toFixed(5));
         }
         inputEl.value = arr.join(', ');
         render();
