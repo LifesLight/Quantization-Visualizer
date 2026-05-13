@@ -98,6 +98,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const distEl = document.getElementById('gen-dist');
     const advToggleBtn = document.getElementById('gen-adv-toggle');
     const advPanel = document.getElementById('gen-adv-panel');
+    const genCountEl = document.getElementById('gen-count');
+
+    genCountEl.addEventListener('keydown', (e) => {
+        let val = parseInt(genCountEl.value) || 1;
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            genCountEl.value = Math.min(8192, val * 2);
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            genCountEl.value = Math.max(1, Math.floor(val / 2));
+        }
+    });
 
     advToggleBtn.addEventListener('click', () => {
         const isHidden = advPanel.style.display === 'none';
