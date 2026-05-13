@@ -358,30 +358,52 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        const sMax = modeEl.value === 'mid' ? Math.max(...floats) + ((Math.max(...floats) - Math.min(...floats)) * 0.1) : Math.max(...floats.map(Math.abs)) * 1.1;
-        const sMin = modeEl.value === 'mid' ? Math.min(...floats) - ((Math.max(...floats) - Math.min(...floats)) * 0.1) : -sMax;
+        let dMax = Math.max(...floats);
+        let dMin = Math.min(...floats);
+        if (dMax === dMin) {
+            dMax += 0.1;
+            dMin -= 0.1;
+        }
+        const spread = dMax - dMin;
+
+        const sMax = modeEl.value === 'mid' ? dMax + spread * 0.1 : Math.max(0.1, ...floats.map(Math.abs)) * 1.1;
+        const sMin = modeEl.value === 'mid' ? dMin - spread * 0.1 : -sMax;
+
         document.getElementById('chart-max-lbl').textContent = `Max: ${sMax.toFixed(2)}`;
         document.getElementById('chart-min-lbl').textContent = `Min: ${sMin.toFixed(2)}`;
 
         chartArea.innerHTML = '<div class="baseline" id="baseline"></div>';
-        document.getElementById('baseline').style.bottom = `${((0 - sMin) / (sMax - sMin)) * 100}%`;
+
+        const baselineY = ((0 - sMin) / (sMax - sMin)) * 100;
+        const baselineEl = document.getElementById('baseline');
+        if (baselineY >= 0 && baselineY <= 100) {
+            baselineEl.style.bottom = `${baselineY}%`;
+            baselineEl.style.display = 'block';
+        } else {
+            baselineEl.style.display = 'none';
+        }
 
         const frag = document.createDocumentFragment();
         let bIdx = 0, sbIdx = 0;
+
+        const clamp = (val) => Math.max(0, Math.min(100, val));
 
         const createBar = (val, valQ, globalIdx) => {
             const bar = document.createElement('div');
             bar.className = 'bar';
             bar.dataset.idx = globalIdx;
-            const yCenter = ((0 - sMin) / (sMax - sMin)) * 100;
-            const yVQ = ((valQ - sMin) / (sMax - sMin)) * 100;
-            const yV = ((val - sMin) / (sMax - sMin)) * 100;
+
+            const yCenter = clamp(((0 - sMin) / (sMax - sMin)) * 100);
+            const yVQ = clamp(((valQ - sMin) / (sMax - sMin)) * 100);
+            const yV = clamp(((val - sMin) / (sMax - sMin)) * 100);
+
             const qFill = document.createElement('div');
             qFill.className = 'bar-fill';
             qFill.style.bottom = `${Math.min(yCenter, yVQ)}%`;
             qFill.style.height = `${Math.abs(yVQ - yCenter)}%`;
             qFill.style.backgroundColor = valQ >= 0 ? 'var(--accent-color)' : 'var(--negative-color)';
             bar.appendChild(qFill);
+
             const errH = Math.abs(yV - yVQ);
             if (errH > 0.05) {
                 const errFill = document.createElement('div');
