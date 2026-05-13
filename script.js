@@ -213,17 +213,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 const min = Math.min(...chunk), max = Math.max(...chunk), maxAbs = Math.max(...chunk.map(Math.abs));
 
                 let scale, offset = 0;
-                if (isAsym) { scale = (max - min) / (Math.pow(2, weightBits) - 1); offset = min; }
-                else { scale = maxAbs / (Math.pow(2, weightBits - 1) - 1); }
-                if (scale === 0) scale = 1e-9;
-
                 const chunkQ = [];
-                for (let j = 0; j < chunk.length; j++) {
-                    let qVal;
-                    if (isAsym) { const q = Math.max(0, Math.min(Math.pow(2, weightBits) - 1, Math.round((chunk[j] - offset) / scale))); qVal = q * scale + offset; }
-                    else { const qmax = Math.pow(2, weightBits - 1) - 1; const q = Math.max(-Math.pow(2, weightBits - 1), Math.min(qmax, Math.round(chunk[j] / scale))); qVal = q * scale; }
-                    chunkQ.push(qVal);
-                    qFloats[i + j] = qVal;
+
+                if (isAsym) {
+                    scale = (max - min) / (Math.pow(2, weightBits) - 1);
+                    if (scale === 0) scale = 1e-9;
+                    offset = min;
+                    for (let j = 0; j < chunk.length; j++) {
+                        const q = Math.max(0, Math.min(Math.pow(2, weightBits) - 1, Math.round((chunk[j] - offset) / scale)));
+                        const qVal = q * scale + offset;
+                        chunkQ.push(qVal);
+                        qFloats[i + j] = qVal;
+                    }
+                } else {
+                    if (weightBits === 1) {
+                        scale = maxAbs || 1e-9;
+                        for (let j = 0; j < chunk.length; j++) {
+                            const qVal = (chunk[j] >= 0 ? 1 : -1) * scale;
+                            chunkQ.push(qVal);
+                            qFloats[i + j] = qVal;
+                        }
+                    } else {
+                        const qmax = Math.pow(2, weightBits - 1) - 1;
+                        scale = maxAbs / qmax;
+                        if (scale === 0) scale = 1e-9;
+                        const qmin = -Math.pow(2, weightBits - 1);
+                        for (let j = 0; j < chunk.length; j++) {
+                            const q = Math.max(qmin, Math.min(qmax, Math.round(chunk[j] / scale)));
+                            const qVal = q * scale;
+                            chunkQ.push(qVal);
+                            qFloats[i + j] = qVal;
+                        }
+                    }
                 }
                 blockMeta.push({ idx: i / blockSize, size: chunk.length, scale, min: offset, ...getErrStats(chunk, chunkQ) });
             }
@@ -265,28 +286,50 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, superMinScale, superMinOffset, ...getErrStats(superChunk, superChunkQ) });
                 } else {
-                    const qmaxWeightSym = Math.pow(2, weightBits - 1) - 1;
-                    const qminWeightSym = -Math.pow(2, weightBits - 1);
-                    const qmaxSub = Math.pow(2, subBits) - 1;
-                    for (let i = 0; i < superChunk.length; i += subSize) {
-                        const chunk = superChunk.slice(i, i + subSize);
-                        const maxAbs = Math.max(...chunk.map(Math.abs));
-                        subScales.push(maxAbs / qmaxWeightSym || 1e-9);
+                    if (weightBits === 1) {
+                        const qmaxSub = Math.pow(2, subBits) - 1;
+                        for (let i = 0; i < superChunk.length; i += subSize) {
+                            const chunk = superChunk.slice(i, i + subSize);
+                            const maxAbs = Math.max(...chunk.map(Math.abs));
+                            subScales.push(maxAbs || 1e-9);
+                        }
+                        const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
+                        for (let k = 0; k < subScales.length; k++) {
+                            const intScale = Math.max(0, Math.min(qmaxSub, Math.round(subScales[k] / superScale)));
+                            qSubScales.push(intScale * superScale);
+                            subMetaTmp.push({ intScale, qScale: intScale * superScale });
+                        }
+                        for (let i = 0; i < superChunk.length; i++) {
+                            const subIdx = Math.floor(i / subSize);
+                            const qV = (superChunk[i] >= 0 ? 1 : -1) * qSubScales[subIdx];
+                            superChunkQ.push(qV);
+                            qFloats[s + i] = qV;
+                        }
+                        superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, ...getErrStats(superChunk, superChunkQ) });
+                    } else {
+                        const qmaxWeightSym = Math.pow(2, weightBits - 1) - 1;
+                        const qminWeightSym = -Math.pow(2, weightBits - 1);
+                        const qmaxSub = Math.pow(2, subBits) - 1;
+                        for (let i = 0; i < superChunk.length; i += subSize) {
+                            const chunk = superChunk.slice(i, i + subSize);
+                            const maxAbs = Math.max(...chunk.map(Math.abs));
+                            subScales.push(maxAbs / qmaxWeightSym || 1e-9);
+                        }
+                        const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
+                        for (let k = 0; k < subScales.length; k++) {
+                            const intScale = Math.max(0, Math.min(qmaxSub, Math.round(subScales[k] / superScale)));
+                            qSubScales.push(intScale * superScale);
+                            subMetaTmp.push({ intScale, qScale: intScale * superScale });
+                        }
+                        for (let i = 0; i < superChunk.length; i++) {
+                            const subIdx = Math.floor(i / subSize);
+                            const q = Math.max(qminWeightSym, Math.min(qmaxWeightSym, Math.round(superChunk[i] / qSubScales[subIdx])));
+                            const qV = q * qSubScales[subIdx];
+                            superChunkQ.push(qV);
+                            qFloats[s + i] = qV;
+                        }
+                        superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, ...getErrStats(superChunk, superChunkQ) });
                     }
-                    const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
-                    for (let k = 0; k < subScales.length; k++) {
-                        const intScale = Math.max(0, Math.min(qmaxSub, Math.round(subScales[k] / superScale)));
-                        qSubScales.push(intScale * superScale);
-                        subMetaTmp.push({ intScale, qScale: intScale * superScale });
-                    }
-                    for (let i = 0; i < superChunk.length; i++) {
-                        const subIdx = Math.floor(i / subSize);
-                        const q = Math.max(qminWeightSym, Math.min(qmaxWeightSym, Math.round(superChunk[i] / qSubScales[subIdx])));
-                        const qV = q * qSubScales[subIdx];
-                        superChunkQ.push(qV);
-                        qFloats[s + i] = qV;
-                    }
-                    superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, ...getErrStats(superChunk, superChunkQ) });
                 }
                 for (let i = 0; i < superChunk.length; i += subSize) {
                     const chunk = superChunk.slice(i, i + subSize);
@@ -303,9 +346,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (qType === 'none') {
             formulaBox.innerHTML = `No Quantization applied.`;
         } else if (qType === 'sym') {
-            formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span> ${qType === 'asym' ? `+ <span class="eq-pill">Min<span class="bits">${basePrecision}b</span></span>` : ''}</span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale.</span>`;
+            formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale.</span>`;
         } else if (qType === 'asym') {
-            formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span> ${qType === 'asym' ? `+ <span class="eq-pill">Min<span class="bits">${basePrecision}b</span></span>` : ''}</span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale and one offset.</span>`;
+            formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span> + <span class="eq-pill">Min<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale and one offset.</span>`;
         } else if (qType === 'kquant') {
             const kDesc = `<br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${subSize} weights share a sub-scale, and every ${sbSize} weights share a super-scale.</span>`;
             if (hasOffset) {
