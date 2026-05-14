@@ -5,10 +5,8 @@ import { render, updateInspector } from './render.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     populateDynamicSelectors();
-    
     initUIListeners();
 
-    // Re-render when any quant setting or generator param changes
     elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
         if (e.target.id.startsWith('gen-')) {
             generateData();
@@ -38,11 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.chartArea.addEventListener('mouseover', (e) => {
         const bar = e.target.closest('.bar');
         if (!bar) return;
-        const idx = parseInt(bar.dataset.idx);
-        updateInspector(idx);
+        const idx = parseInt(bar.dataset.idx, 10);
+        if (!Number.isNaN(idx)) updateInspector(idx);
     });
 
-    // Initialize Default State
     applyPreset('Q4_0');
     elements.presetEl.value = 'Q4_0';
     updateUI();

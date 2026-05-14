@@ -180,9 +180,9 @@
 
                     <div class="settings-group">
                         <label for="quant-type">Quantization Scheme</label>
-                        <select id="quant-type">
-                        </select>
+                        <select id="quant-type"></select>
                     </div>
+
                     <div class="settings-group">
                         <label for="quant-bits">Weight Resolution (Bits)</label>
                         <input type="number" id="quant-bits" value="4" min="1" max="8">
@@ -199,7 +199,10 @@
 
                     <div id="turbo-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">
-                            <label for="turbo-bits">Lloyd-Max Centroids (Bits)</label>
+                            <label for="turbo-bits"
+                                title="Base centroid resolution for the Lloyd-Max table. More bits means more codewords.">
+                                Lloyd-Max Centroids (Bits)
+                            </label>
                             <select id="turbo-bits">
                                 <option value="2">2-bit (4 centroids)</option>
                                 <option value="3">3-bit (8 centroids)</option>
@@ -207,7 +210,10 @@
                             </select>
                         </div>
                         <div class="settings-group">
-                            <label for="turbo-block-size">WHT Block Size</label>
+                            <label for="turbo-block-size"
+                                title="Number of coefficients that share one RMS scale and one transform domain quantization pass.">
+                                WHT Block Size
+                            </label>
                             <select id="turbo-block-size">
                                 <option value="32">32</option>
                                 <option value="64">64</option>
@@ -216,16 +222,72 @@
                             </select>
                         </div>
                         <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
-                            title="Subsampled Randomized Hadamard Transform. Applies a diagonal random sign flip followed by a Walsh-Hadamard Transform to mathematically guarantee a Gaussian-like distribution, eliminating outlier impact.">
+                            title="Diagonal random sign flip plus Walsh-Hadamard transform. This spreads energy across coefficients before quantization, so the level distribution is easier to fit.">
                             <input type="checkbox" id="turbo-wht" checked
                                 style="width: auto; margin: 0; cursor: pointer;">
                             <label for="turbo-wht" style="margin: 0; cursor: pointer;">Enable SRHT</label>
                         </div>
                         <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
-                            title="Quantized Johnson-Lindenstrauss. Adds a 1-bit symmetric error correction (+/- MAE) to neutralize inner-product bias and reduce the aggregate quantization error.">
+                            title="Adds a 1-bit symmetric correction after quantization to reduce average bias in the residual.">
                             <input type="checkbox" id="turbo-qjl" checked
                                 style="width: auto; margin: 0; cursor: pointer;">
                             <label for="turbo-qjl" style="margin: 0; cursor: pointer;">Enable QJL</label>
+                        </div>
+                    </div>
+
+                    <div id="trellis-settings"
+                        style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
+                        <div class="settings-group">
+                            <label for="trellis-bits"
+                                title="Nominal bits per weight before scale overhead. TCQ uses path constraints, so the effective quality can beat plain scalar quantization at the same rate.">
+                                Trellis Rate (Bits/Weight)
+                            </label>
+                            <input type="number" id="trellis-bits" value="4" min="1" max="8">
+                        </div>
+
+                        <div class="settings-group">
+                            <label for="trellis-block-size"
+                                title="How many weights share one RMS scale and one trellis traceback. Bigger blocks usually compress better but adapt more slowly.">
+                                Viterbi Block Size
+                            </label>
+                            <select id="trellis-block-size">
+                                <option value="16">16</option>
+                                <option value="32">32</option>
+                                <option value="64" selected>64</option>
+                                <option value="128">128</option>
+                                <option value="256">256</option>
+                            </select>
+                        </div>
+
+                        <div class="settings-group">
+                            <label for="trellis-states"
+                                title="How much path memory the search keeps. More states means more candidate paths and usually lower error, but more compute.">
+                                Trellis Complexity
+                            </label>
+                            <select id="trellis-states">
+                                <option value="1">1-State (Greedy Baseline)</option>
+                                <option value="4" selected>4-State (Standard)</option>
+                                <option value="8">8-State (High Precision)</option>
+                                <option value="16">16-State (Extreme)</option>
+                            </select>
+                        </div>
+
+                        <div class="settings-group">
+                            <label for="trellis-cb-type"
+                                title="How the codebook levels are spaced. Uniform is evenly spaced; Lloyd-Max matches Gaussian-like values better.">
+                                Codebook Distribution
+                            </label>
+                            <select id="trellis-cb-type">
+                                <option value="lloyd" selected>Lloyd-Max (Gaussian)</option>
+                                <option value="uniform">Uniform (Linear)</option>
+                            </select>
+                        </div>
+
+                        <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
+                            title="Diagonal sign flip plus Walsh-Hadamard transform before TCQ. This reshapes the coefficient distribution so the codebook fit is often better.">
+                            <input type="checkbox" id="trellis-wht" style="width: auto; margin: 0; cursor: pointer;">
+                            <label for="trellis-wht" style="margin: 0; cursor: pointer;">Enable SRHT
+                                (Pre-Transform)</label>
                         </div>
                     </div>
 

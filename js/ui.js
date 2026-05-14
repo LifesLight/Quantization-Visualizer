@@ -79,7 +79,7 @@ export function populateDynamicSelectors() {
 
     const presetSelect = elements.presetEl;
     presetSelect.innerHTML = '<option value="custom">-- Custom --</option>';
-    
+
     presetGroups.forEach(group => {
         const optGroup = document.createElement('optgroup');
         optGroup.label = group.label;
@@ -96,6 +96,7 @@ export function populateDynamicSelectors() {
 export function applyPreset(presetId) {
     const p = getPresetById(presetId);
     if (!p) return;
+
     for (const [id, val] of Object.entries(p)) {
         if (id === 'label') continue;
         const el = document.getElementById(id);
@@ -105,13 +106,21 @@ export function applyPreset(presetId) {
     }
 }
 
+function safeDisplay(el, show) {
+    if (!el) return;
+    el.style.display = show ? 'flex' : 'none';
+}
+
 export const uiHelpers = {
-    showBlockSettings: (show) => elements.blockSettings.style.display = show ? 'flex' : 'none',
-    showKQuantSettings: (show) => elements.kquantSettings.style.display = show ? 'flex' : 'none',
-    showTurboSettings: (show) => elements.turboSettings.style.display = show ? 'flex' : 'none',
-    showTrellisSettings: (show) => elements.trellisSettings.style.display = show ? 'flex' : 'none',
-    showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
-    showSuperBlockCard: (show) => elements.cardSuper.style.display = show ? 'flex' : 'none',
+    showBlockSettings: (show) => safeDisplay(elements.blockSettings, show),
+    showKQuantSettings: (show) => safeDisplay(elements.kquantSettings, show),
+    showTurboSettings: (show) => safeDisplay(elements.turboSettings, show),
+    showTrellisSettings: (show) => safeDisplay(elements.trellisSettings, show),
+    showQuantBits: (show) => {
+        if (!elements.qBitsEl || !elements.qBitsEl.parentElement) return;
+        elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none';
+    },
+    showSuperBlockCard: (show) => safeDisplay(elements.cardSuper, show),
 };
 
 export function getSettings() {
@@ -149,7 +158,7 @@ export function initUIListeners() {
         elements.wrapperLeft.classList.toggle('collapsed');
         elements.toggleLeft.querySelector('svg').style.transform = elements.wrapperLeft.classList.contains('collapsed') ? 'rotate(180deg)' : 'rotate(0deg)';
     });
-    
+
     elements.toggleRight.addEventListener('click', () => {
         elements.wrapperRight.classList.toggle('collapsed');
         elements.toggleRight.querySelector('svg').style.transform = elements.wrapperRight.classList.contains('collapsed') ? 'rotate(180deg)' : 'rotate(0deg)';
