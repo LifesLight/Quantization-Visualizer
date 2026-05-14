@@ -6,7 +6,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Float Quantization Visualizer</title>
+    <title>Quantization Visualizer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -35,7 +35,6 @@
 
         <header>
             <h1 id="title">Quantization Visualizer</h1>
-            <p>Interactive Float Quantization Error Visualizer</p>
         </header>
 
         <main>
@@ -176,40 +175,12 @@
                         <label for="preset-select">Presets</label>
                         <select id="preset-select">
                             <option value="custom">-- Custom --</option>
-                            <optgroup label="Symmetric (_0)">
-                                <option value="Q2_0">Q2_0</option>
-                                <option value="Q4_0" selected>Q4_0</option>
-                                <option value="Q5_0">Q5_0</option>
-                                <option value="Q8_0">Q8_0</option>
-                            </optgroup>
-                            <optgroup label="Asymmetric (_1)">
-                                <option value="Q2_1">Q2_1</option>
-                                <option value="Q4_1">Q4_1</option>
-                                <option value="Q5_1">Q5_1</option>
-                            </optgroup>
-                            <optgroup label="K-Quants (_K)">
-                                <option value="Q2_K">Q2_K</option>
-                                <option value="Q3_K">Q3_K</option>
-                                <option value="Q4_K">Q4_K</option>
-                                <option value="Q5_K">Q5_K</option>
-                                <option value="Q6_K">Q6_K</option>
-                            </optgroup>
-                            <optgroup label="TurboQuant (KV)">
-                                <option value="turbo2">Turbo2 (2-bit)</option>
-                                <option value="turbo3">Turbo3 (3-bit)</option>
-                                <option value="turbo4">Turbo4 (4-bit)</option>
-                            </optgroup>
                         </select>
                     </div>
 
                     <div class="settings-group">
                         <label for="quant-type">Quantization Scheme</label>
                         <select id="quant-type">
-                            <option value="none">None (FP32 baseline)</option>
-                            <option value="sym" selected>Symmetric (Q4_0 style)</option>
-                            <option value="asym">Asymmetric (Q4_1 style)</option>
-                            <option value="kquant">Superblock (Q4_K style)</option>
-                            <option value="turbo">TurboQuant (Polar+SRHT)</option>
                         </select>
                     </div>
                     <div class="settings-group">
@@ -301,7 +272,7 @@
             Copyright &copy; Alexander Kurtz 2026
         </footer>
     </div>
-    <script src="script.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 
 </html>
