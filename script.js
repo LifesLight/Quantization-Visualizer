@@ -6,12 +6,10 @@ function getLloydMaxCentroids(bits) {
     const levels = Math.pow(2, bits);
     const centroids = new Float64Array(levels);
 
-    // Initial uniform distribution across effective +/- 3 std devs
     for (let i = 0; i < levels; i++) centroids[i] = -3 + (6 * (i + 0.5)) / levels;
 
-    const pdf = (x) => Math.exp(-x * x / 2); // Constant drops out in fraction
+    const pdf = (x) => Math.exp(-x * x / 2);
 
-    // Iterative k-means integration solver
     for (let iter = 0; iter < 100; iter++) {
         const thresholds = new Float64Array(levels + 1);
         thresholds[0] = -10;
@@ -38,8 +36,6 @@ function getLloydMaxCentroids(bits) {
     return lloydMaxCache[bits];
 }
 
-// 2. Fast Walsh-Hadamard Transform (FWHT)
-// Mathematically orthogonal structured rotation (self-inverse). 
 function fwht(data) {
     let n = data.length;
     let p2 = 1; while (p2 < n) p2 *= 2;
@@ -57,19 +53,15 @@ function fwht(data) {
         }
     }
 
-    // Normalization maintains perfect isometry.
     let scale = 1 / Math.sqrt(p2);
     for (let i = 0; i < p2; i++) res[i] *= scale;
     return Array.from(res).slice(0, n);
 }
 
-// 3. Deterministic Pseudo-Random Sign generator for SRHT Diagonal
 function getSignFlip(index) {
     let h = Math.sin(index * 12.9898 + 1) * 43758.5453;
     return (h - Math.floor(h)) >= 0.5 ? 1 : -1;
 }
-
-// --- MAIN VISUALIZER LOGIC ---
 
 document.addEventListener('DOMContentLoaded', () => {
     const toggleLeft = document.getElementById('toggle-left');
@@ -97,6 +89,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const advToggleBtn = document.getElementById('gen-adv-toggle');
     const advPanel = document.getElementById('gen-adv-panel');
     const genCountEl = document.getElementById('gen-count');
+
+    const insWData = document.getElementById('ins-w-data'), insBData = document.getElementById('ins-b-data'), insSBData = document.getElementById('ins-sb-data');
+    const iWIdx = document.getElementById('ins-w-idx'), iBIdx = document.getElementById('ins-b-idx'), iSBIdx = document.getElementById('ins-sb-idx');
+
+    let lastHoveredIdx = 0;
+    let currentUpdateStats = null;
+
+    chartArea.addEventListener('mouseover', (e) => {
+        const bar = e.target.closest('.bar');
+        if (!bar) return;
+        lastHoveredIdx = parseInt(bar.dataset.idx);
+        if (currentUpdateStats) currentUpdateStats(lastHoveredIdx);
+    });
 
     genCountEl.addEventListener('keydown', (e) => {
         let val = parseInt(genCountEl.value) || 1;
@@ -313,12 +318,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             qFloats[i + j] = qVal;
                         }
                     } else {
-                        const nlevels = Math.pow(2, weightBits);
-                        scale = (2 * maxAbs) / (nlevels - 1);
+                        // llama.cpp reference symmetric formulation
+                        const maxQ = Math.pow(2, weightBits - 1);
+                        scale = maxAbs / maxQ;
                         if (scale === 0) scale = 1e-9;
                         for (let j = 0; j < chunk.length; j++) {
-                            const q = Math.max(0, Math.min(nlevels - 1, Math.round((chunk[j] + maxAbs) / scale)));
-                            const qVal = q * scale - maxAbs;
+                            const q = Math.max(0, Math.min((maxQ * 2) - 1, Math.round(chunk[j] / scale + maxQ)));
+                            const qVal = (q - maxQ) * scale;
                             chunkQ.push(qVal);
                             qFloats[i + j] = qVal;
                         }
@@ -331,10 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const useWht = document.getElementById('turbo-wht').checked;
             const useQjl = document.getElementById('turbo-qjl').checked;
 
-            // Generate exact optimal centroids for standard normal distribution using Lloyd-Max algorithm
             const centroids = getLloydMaxCentroids(tBits);
-
-            // Base precision used for the uniform RMS scaler. QJL provides +1 extra bias-correction bit.
             bpw = tBits + (useQjl ? 1 : 0) + (basePrecision / blockSize);
 
             for (let i = 0; i < floats.length; i += blockSize) {
@@ -344,16 +347,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 let chunkPadded = [...chunk];
                 while (chunkPadded.length < padLen) chunkPadded.push(0);
 
-                // Stage 1: SRHT (Subsampled Randomized Hadamard Transform) 
-                // Deterministic diagonal sign flip guarantees Johnson-Lindenstrauss applicability
                 if (useWht) {
                     for (let j = 0; j < padLen; j++) chunkPadded[j] *= getSignFlip(j);
                 }
 
-                // Rotational Kernel spreads energy perfectly, causing coordinates to obey Normal Distribution
                 let chunkW = useWht ? fwht(chunkPadded) : [...chunkPadded];
 
-                // Scale factor calculation: RMS Std-dev formulation over transformed space
                 let sumSq = 0;
                 for (let j = 0; j < padLen; j++) sumSq += chunkW[j] * chunkW[j];
                 let rms = Math.sqrt(sumSq / padLen) || 1e-9;
@@ -361,7 +360,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 let chunkQ = [];
                 let residuals = [];
 
-                // Stage 2: Scalar quantization onto the normalized block using Lloyd-Max centroids
                 for (let j = 0; j < padLen; j++) {
                     let normVal = chunkW[j] / rms;
                     let bestC = centroids[0];
@@ -378,21 +376,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     residuals.push(chunkW[j] - qv);
                 }
 
-                // Stage 3: Optional QJL 1-bit bias correction to neutralize inner-product decay
                 let meanAbsRes = 0;
                 if (useQjl) {
                     let absResSum = residuals.reduce((s, v) => s + Math.abs(v), 0);
                     meanAbsRes = absResSum / padLen;
                     for (let j = 0; j < padLen; j++) {
-                        // 1-bit logic: mathematically symmetric representation of the residual
                         chunkQ[j] += (residuals[j] >= 0 ? 1 : -1) * meanAbsRes;
                     }
                 }
 
-                // Reconstruct to original coordinates using identical FWHT Inverse
                 let chunkOut = useWht ? fwht(chunkQ) : chunkQ;
 
-                // Re-apply diagonal sign flip to completely invert rotation back to original axes
                 if (useWht) {
                     for (let j = 0; j < padLen; j++) chunkOut[j] *= getSignFlip(j);
                 }
@@ -410,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         } else if (qType === 'kquant') {
-            bpw = weightBits + ((hasOffset ? 2 : 1) * subBits / subSize) + ((hasOffset ? 3 : 1) * basePrecision / sbSize);
+            bpw = weightBits + ((hasOffset ? 2 : 1) * subBits / subSize) + ((hasOffset ? 2 : 1) * basePrecision / sbSize);
 
             for (let s = 0; s < floats.length; s += sbSize) {
                 const superChunk = floats.slice(s, s + sbSize);
@@ -420,36 +414,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 const superChunkQ = [];
 
                 if (hasOffset) {
-                    // Asymmetric kquant: full 2^bits range, all codes used
                     const qmaxWeight = Math.pow(2, weightBits) - 1;
                     for (let i = 0; i < superChunk.length; i += subSize) {
                         const chunk = superChunk.slice(i, i + subSize);
-                        const min = Math.min(...chunk), max = Math.max(...chunk);
+                        const max = Math.max(...chunk);
+                        const min = Math.min(0, Math.min(...chunk)); // llama.cpp strictly clamps offset <= 0
                         subScales.push((max - min) / qmaxWeight || 1e-9);
                         subMins.push(min);
                     }
+
                     const qmaxSub = Math.pow(2, subBits) - 1;
                     const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
-                    const superMinScale = (Math.max(...subMins) - Math.min(...subMins)) / qmaxSub || 1e-9;
-                    const superMinOffset = Math.min(...subMins);
+                    const superMinScale = Math.max(...subMins.map(m => -m)) / qmaxSub || 1e-9;
+
                     for (let k = 0; k < subScales.length; k++) {
                         const intScale = Math.max(0, Math.min(qmaxSub, Math.round(subScales[k] / superScale)));
-                        const intMin = Math.max(0, Math.min(qmaxSub, Math.round((subMins[k] - superMinOffset) / superMinScale)));
+                        const intMin = Math.max(0, Math.min(qmaxSub, Math.round(-subMins[k] / superMinScale)));
+
                         qSubScales.push(intScale * superScale);
-                        qSubMins.push(intMin * superMinScale + superMinOffset);
-                        subMetaTmp.push({ intScale, intMin, qScale: intScale * superScale, qMin: intMin * superMinScale + superMinOffset });
+                        qSubMins.push(intMin * superMinScale);
+                        subMetaTmp.push({ intScale, intMin, qScale: intScale * superScale, qMin: intMin * superMinScale });
                     }
                     for (let i = 0; i < superChunk.length; i++) {
                         const subIdx = Math.floor(i / subSize);
-                        const q = Math.max(0, Math.min(qmaxWeight, Math.round((superChunk[i] - qSubMins[subIdx]) / qSubScales[subIdx])));
-                        const qV = q * qSubScales[subIdx] + qSubMins[subIdx];
+                        const q = Math.max(0, Math.min(qmaxWeight, Math.round((superChunk[i] + qSubMins[subIdx]) / (qSubScales[subIdx] || 1e-9))));
+                        const qV = q * qSubScales[subIdx] - qSubMins[subIdx]; // d * scale_int * q - dmin * min_int
                         superChunkQ.push(qV);
                         qFloats[s + i] = qV;
                     }
-                    superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, superMinScale, superMinOffset, ...getErrStats(superChunk, superChunkQ) });
+                    superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, superMinScale, ...getErrStats(superChunk, superChunkQ) });
                 } else {
                     if (weightBits === 1) {
-                        // 1-bit sign: both codes always used
                         const qmaxSub = Math.pow(2, subBits) - 1;
                         for (let i = 0; i < superChunk.length; i += subSize) {
                             const chunk = superChunk.slice(i, i + subSize);
@@ -470,13 +465,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, ...getErrStats(superChunk, superChunkQ) });
                     } else {
-                        const qmaxWeightSym = Math.pow(2, weightBits - 1) - 1;
-                        const qminWeightSym = -qmaxWeightSym;
+                        const maxQ = Math.pow(2, weightBits - 1);
                         const qmaxSub = Math.pow(2, subBits) - 1;
                         for (let i = 0; i < superChunk.length; i += subSize) {
                             const chunk = superChunk.slice(i, i + subSize);
                             const maxAbs = Math.max(...chunk.map(Math.abs));
-                            subScales.push(maxAbs / qmaxWeightSym || 1e-9);
+                            subScales.push(maxAbs / maxQ || 1e-9);
                         }
                         const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
                         for (let k = 0; k < subScales.length; k++) {
@@ -486,8 +480,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         for (let i = 0; i < superChunk.length; i++) {
                             const subIdx = Math.floor(i / subSize);
-                            const q = Math.max(qminWeightSym, Math.min(qmaxWeightSym, Math.round(superChunk[i] / qSubScales[subIdx])));
-                            const qV = q * qSubScales[subIdx];
+                            const qs = qSubScales[subIdx] || 1e-9;
+                            const q = Math.max(0, Math.min((maxQ * 2) - 1, Math.round(superChunk[i] / qs + maxQ)));
+                            const qV = (q - maxQ) * qs;
                             superChunkQ.push(qV);
                             qFloats[s + i] = qV;
                         }
@@ -509,7 +504,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (qType === 'none') {
             formulaBox.innerHTML = `No Quantization applied.`;
         } else if (qType === 'sym') {
-            formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span> &minus; MaxAbs</span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one scale. All 2<sup>${weightBits}</sup> codes used; MaxAbs = Scale &times; (2<sup>${weightBits}</sup>&minus;1)/2 is implicit.</span>`;
+            formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one scale.</span>`;
         } else if (qType === 'asym') {
             formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span> + <span class="eq-pill">Min<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one global scale and one offset.</span>`;
         } else if (qType === 'turbo') {
@@ -533,11 +528,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             formulaBox.innerHTML = `<span>Weight = ${srhtStr}[ ( <span class="eq-pill">LloydMax<span class="bits">${tBits}b</span></span> &times; <span class="eq-pill">RMS_Scale<span class="bits">${basePrecision}b</span></span> )${qjlStr} ]</span><br><span style="color:var(--text-muted);font-size:0.8rem;">${footerDesc}</span>`;
         } else if (qType === 'kquant') {
-            const kDesc = `<br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${subSize} weights share a sub-scale, and every ${sbSize} weights share a super-scale.</span>`;
+            const shareText = hasOffset
+                ? `Every ${subSize} weights share a sub-scale and sub-min, every ${sbSize} a super-scale and super-min-scale.`
+                : `Every ${subSize} weights share a sub-scale, every ${sbSize} a super-scale.`;
+
+            const kDesc = `<br><span style="color:var(--text-muted);font-size:0.8rem;">${shareText}</span>`;
+
             if (hasOffset) {
-                formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; ( <span class="eq-pill">SubScale_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperScale<span class="bits">${basePrecision}b</span></span> ) + ( <span class="eq-pill">SubMin_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperMinScale<span class="bits">${basePrecision}b</span></span> + <span class="eq-pill">SuperMin<span class="bits">${basePrecision}b</span></span> )</span>` + kDesc;
+                formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; ( <span class="eq-pill">SubScale_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperScale<span class="bits">${basePrecision}b</span></span> ) - ( <span class="eq-pill">SubMin_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperMinScale<span class="bits">${basePrecision}b</span></span> )</span>` + kDesc;
             } else {
-                formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; ( <span class="eq-pill">SubScale_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperScale<span class="bits">${basePrecision}b</span></span> )</span><br><span style="color:var(--text-muted);font-size:0.8rem;">Symmetric clamp [&minus;${Math.pow(2,weightBits-1)-1}, +${Math.pow(2,weightBits-1)-1}]: all stored codes have a valid dequant level.</span>` + kDesc;
+                formulaBox.innerHTML = `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; ( <span class="eq-pill">SubScale_Int<span class="bits">${subBits}b</span></span> &times; <span class="eq-pill">SuperScale<span class="bits">${basePrecision}b</span></span> )</span>` + kDesc;
             }
         }
 
@@ -631,48 +631,66 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         chartArea.appendChild(frag);
 
-        const insWData = document.getElementById('ins-w-data'), insBData = document.getElementById('ins-b-data'), insSBData = document.getElementById('ins-sb-data');
-        const iWIdx = document.getElementById('ins-w-idx'), iBIdx = document.getElementById('ins-b-idx'), iSBIdx = document.getElementById('ins-sb-idx');
+        currentUpdateStats = (idx) => {
+            if (floats.length === 0) return;
+            if (idx < 0 || idx >= floats.length) idx = 0;
 
-        chartArea.addEventListener('mouseover', (e) => {
-            const bar = e.target.closest('.bar');
-            if (!bar) return;
-            const idx = parseInt(bar.dataset.idx);
             const val = floats[idx], valQ = qFloats[idx];
             iWIdx.textContent = `[${idx}]`;
             insWData.innerHTML = `<div class="data-row"><span>Original:</span> <span class="val-hl">${val.toFixed(5)}</span></div><div class="data-row"><span>Quantized:</span> <span class="val-hl">${valQ.toFixed(5)}</span></div><div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span>${Math.abs(val - valQ).toFixed(6)}</span></div>`;
-            const bGrp = bar.closest('.block-group');
-            if (bGrp && bGrp.dataset.bIdx) {
-                const bm = blockMeta[bGrp.dataset.bIdx];
-                iBIdx.textContent = `[${bm.idx}]`;
-                let htm = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div><div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>`;
-                if (qType === 'sym' || qType === 'asym' || qType === 'turbo') {
+
+            if (qType === 'sym' || qType === 'asym' || qType === 'turbo') {
+                const bIdx = Math.floor(idx / blockSize);
+                const bm = blockMeta[bIdx];
+                if (bm) {
+                    iBIdx.textContent = `[${bm.idx}]`;
+                    let htm = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div><div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>`;
                     htm += `<div class="data-row" style="margin-top:4px"><span>Scale (FP):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
                     if (qType === 'asym') htm += `<div class="data-row"><span>Min (FP):</span> <span>${bm.min.toFixed(5)}</span></div>`;
                     if (qType === 'turbo' && bm.qjlScale > 0) htm += `<div class="data-row"><span>QJL Scale:</span> <span>${bm.qjlScale.toFixed(5)}</span></div>`;
-                } else if (qType === 'kquant') {
+                    insBData.innerHTML = htm;
+                }
+                insSBData.innerHTML = '';
+                iSBIdx.textContent = '';
+            } else if (qType === 'kquant') {
+                const globalSubIdx = Math.floor(idx / subSize);
+                const bm = blockMeta[globalSubIdx];
+                if (bm) {
+                    iBIdx.textContent = `[${bm.idx}]`;
+                    let htm = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div><div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>`;
                     htm += `<div style="margin-top:6px; color:var(--primary-color);">Sub Scale Math:</div><div class="data-row"><span>Int (<span class="val-hl">${bm.intScale}</span>) &times; SuperScale &nbsp;&nbsp;=&nbsp;</span> <span>${bm.qScale.toFixed(5)}</span></div>`;
                     if (bm.intMin !== undefined) {
-                        htm += `<div style="margin-top:6px; color:var(--primary-color);">Sub Min Math:</div><div class="data-row"><span>Int (<span class="val-hl">${bm.intMin}</span>) &times; SMinScale + SMin =&nbsp;</span> <span>${bm.qMin.toFixed(5)}</span></div>`;
+                        htm += `<div style="margin-top:6px; color:var(--primary-color);">Sub Min Math:</div><div class="data-row"><span>Int (<span class="val-hl">${bm.intMin}</span>) &times; SMinScale =&nbsp;</span> <span>${bm.qMin.toFixed(5)}</span></div>`;
                     }
+                    insBData.innerHTML = htm;
                 }
-                insBData.innerHTML = htm;
-            }
-            if (qType === 'kquant') {
-                const sbGrp = bar.closest('.sb-group');
-                if (sbGrp && sbGrp.dataset.sbIdx) {
-                    const sm = superMeta[sbGrp.dataset.sbIdx];
+                const sbIdxMath = Math.floor(idx / sbSize);
+                const sm = superMeta[sbIdxMath];
+                if (sm) {
                     iSBIdx.textContent = `[${sm.idx}]`;
                     let htm = `<div class="data-row"><span>Super MSE:</span> <span class="val-hl">${sm.mse.toFixed(6)}</span></div><div class="data-row"><span>Super MAE:</span> <span>${sm.mae.toFixed(6)}</span></div><div class="data-row" style="margin-top:4px"><span>SuperScale:</span> <span>${sm.superScale.toFixed(6)}</span></div>`;
                     if (sm.superMinScale !== undefined) {
-                        htm += `<div class="data-row"><span>SuperMinScale:</span> <span>${sm.superMinScale.toFixed(6)}</span></div><div class="data-row"><span>SuperMin Offset:</span> <span>${sm.superMinOffset.toFixed(6)}</span></div>`;
+                        htm += `<div class="data-row"><span>SuperMinScale:</span> <span>${sm.superMinScale.toFixed(6)}</span></div>`;
                     }
                     insSBData.innerHTML = htm;
                 }
+            } else {
+                insBData.innerHTML = '';
+                insSBData.innerHTML = '';
+                iBIdx.textContent = '';
+                iSBIdx.textContent = '';
             }
-        });
+        };
+
+        currentUpdateStats(lastHoveredIdx);
     }
 
-    loadPreset('Q4_0');
+    if (presetEl.value && presetEl.value !== 'custom') {
+        loadPreset(presetEl.value);
+    } else {
+        presetEl.value = 'Q4_0';
+        loadPreset('Q4_0');
+    }
+
     generateData();
 });
