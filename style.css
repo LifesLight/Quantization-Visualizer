@@ -502,7 +502,7 @@ button.action-btn:hover:not(.secondary) {
 
 .inspector-panel {
     display: grid;
-    grid-template-columns: 1fr 1.5fr 1.5fr;
+    grid-template-columns: 1.5fr 1.25fr 1.25fr;
     gap: 16px;
     width: 100%;
     margin-top: 10px;

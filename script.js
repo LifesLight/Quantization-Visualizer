@@ -302,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const basePrecision = 16;
 
         let qFloats = [...floats];
+        let qMathStrings = new Array(floats.length).fill('');
         let bpw = 32;
 
         let blockSize = parseInt(document.getElementById('block-size').value) || 32;
@@ -343,6 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const qVal = q * scale + offset;
                         chunkQ.push(qVal);
                         qFloats[i + j] = qVal;
+                        qMathStrings[i + j] = `${q} &times; ${scale.toFixed(4)} + ${offset.toFixed(4)}`;
                     }
                 } else {
                     if (weightBits === 1) {
@@ -351,17 +353,22 @@ document.addEventListener('DOMContentLoaded', () => {
                             const qVal = (chunk[j] >= 0 ? 1 : -1) * scale;
                             chunkQ.push(qVal);
                             qFloats[i + j] = qVal;
+                            qMathStrings[i + j] = `${chunk[j] >= 0 ? 1 : -1} &times; ${scale.toFixed(4)}`;
                         }
                     } else {
-                        // llama.cpp reference symmetric formulation
                         const maxQ = Math.pow(2, weightBits - 1);
-                        scale = maxAbs / maxQ;
+                        let maxVal = chunk[0];
+                        for (let j = 1; j < chunk.length; j++) {
+                            if (Math.abs(chunk[j]) > Math.abs(maxVal)) maxVal = chunk[j];
+                        }
+                        scale = maxVal / -maxQ;
                         if (scale === 0) scale = 1e-9;
                         for (let j = 0; j < chunk.length; j++) {
                             const q = Math.max(0, Math.min((maxQ * 2) - 1, Math.round(chunk[j] / scale + maxQ)));
                             const qVal = (q - maxQ) * scale;
                             chunkQ.push(qVal);
                             qFloats[i + j] = qVal;
+                            qMathStrings[i + j] = `${q - maxQ} &times; ${scale.toFixed(4)}`;
                         }
                     }
                 }
@@ -476,6 +483,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         const qV = q * qSubScales[subIdx] - qSubMins[subIdx]; // d * scale_int * q - dmin * min_int
                         superChunkQ.push(qV);
                         qFloats[s + i] = qV;
+                        const sm = subMetaTmp[subIdx];
+                        qMathStrings[s + i] = `${q} &times; (${sm.intScale} &times; ${superScale.toFixed(4)}) - (${sm.intMin} &times; ${superMinScale.toFixed(4)})`;
                     }
                     superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, superMinScale, ...getErrStats(superChunk, superChunkQ) });
                 } else {
@@ -497,6 +506,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             const qV = (superChunk[i] >= 0 ? 1 : -1) * qSubScales[subIdx];
                             superChunkQ.push(qV);
                             qFloats[s + i] = qV;
+                            const sm = subMetaTmp[subIdx];
+                            qMathStrings[s + i] = `${superChunk[i] >= 0 ? 1 : -1} &times; (${sm.intScale} &times; ${superScale.toFixed(4)})`;
                         }
                         superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, ...getErrStats(superChunk, superChunkQ) });
                     } else {
@@ -505,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         for (let i = 0; i < superChunk.length; i += subSize) {
                             const chunk = superChunk.slice(i, i + subSize);
                             const maxAbs = Math.max(...chunk.map(Math.abs));
-                            subScales.push(maxAbs / maxQ || 1e-9);
+                            subScales.push(maxAbs / (maxQ - 1) || 1e-9);
                         }
                         const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
                         for (let k = 0; k < subScales.length; k++) {
@@ -520,6 +531,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             const qV = (q - maxQ) * qs;
                             superChunkQ.push(qV);
                             qFloats[s + i] = qV;
+                            const sm = subMetaTmp[subIdx];
+                            qMathStrings[s + i] = `${q - maxQ} &times; (${sm.intScale} &times; ${superScale.toFixed(4)})`;
                         }
                         superMeta.push({ idx: s / sbSize, size: superChunk.length, superScale, ...getErrStats(superChunk, superChunkQ) });
                     }
@@ -671,8 +684,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (idx < 0 || idx >= floats.length) idx = 0;
 
             const val = floats[idx], valQ = qFloats[idx];
+            const mathStr = qMathStrings[idx];
             iWIdx.textContent = `[${idx}]`;
-            insWData.innerHTML = `<div class="data-row"><span>Original:</span> <span class="val-hl">${val.toFixed(5)}</span></div><div class="data-row"><span>Quantized:</span> <span class="val-hl">${valQ.toFixed(5)}</span></div><div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span>${Math.abs(val - valQ).toFixed(6)}</span></div>`;
+
+            let mathHtml = mathStr ? `<div class="data-row" style="margin-top:4px; color:var(--text-muted);"><span>Math:</span> <span style="color:var(--text-main);">${mathStr}</span></div>` : '';
+            insWData.innerHTML = `<div class="data-row"><span>Original:</span> <span class="val-hl">${val.toFixed(5)}</span></div><div class="data-row"><span>Quantized:</span> <span class="val-hl">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span>${Math.abs(val - valQ).toFixed(6)}</span></div>`;
 
             if (qType === 'sym' || qType === 'asym' || qType === 'turbo') {
                 const bIdx = Math.floor(idx / blockSize);
@@ -693,9 +709,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (bm) {
                     iBIdx.textContent = `[${bm.idx}]`;
                     let htm = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div><div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>`;
-                    htm += `<div style="margin-top:6px; color:var(--primary-color);">Sub Scale Math:</div><div class="data-row"><span>Int (<span class="val-hl">${bm.intScale}</span>) &times; SuperScale &nbsp;&nbsp;=&nbsp;</span> <span>${bm.qScale.toFixed(5)}</span></div>`;
+                    htm += `<div class="data-row" style="margin-top:4px"><span>Int(<span class="val-hl">${bm.intScale}</span>) &times; SuperScale =</span> <span>${bm.qScale.toFixed(5)}</span></div>`;
                     if (bm.intMin !== undefined) {
-                        htm += `<div style="margin-top:6px; color:var(--primary-color);">Sub Min Math:</div><div class="data-row"><span>Int (<span class="val-hl">${bm.intMin}</span>) &times; SMinScale =&nbsp;</span> <span>${bm.qMin.toFixed(5)}</span></div>`;
+                        htm += `<div class="data-row"><span>Int(<span class="val-hl">${bm.intMin}</span>) &times; SMinScale =</span> <span>${bm.qMin.toFixed(5)}</span></div>`;
                     }
                     insBData.innerHTML = htm;
                 }
