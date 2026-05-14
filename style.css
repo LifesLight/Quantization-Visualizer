@@ -13,6 +13,34 @@
     --error-color: rgba(15, 23, 42, 0.4);
     --highlight-bg: rgba(79, 70, 229, 0.05);
     --highlight-border: rgba(79, 70, 229, 0.3);
+
+    --input-bg: #ffffff;
+    --group-border-main: #0f172a;
+    --group-border-sub: rgba(15, 23, 42, 0.25);
+    --hover-bg: rgba(0, 0, 0, 0.02);
+    --hover-bg-strong: rgba(0, 0, 0, 0.05);
+    --bar-hover: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] {
+    color-scheme: dark;
+    --primary-color: #6366f1;
+    --primary-hover: #818cf8;
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --border-color: #334155;
+    --error-color: rgba(248, 250, 252, 0.4);
+    --highlight-bg: rgba(79, 70, 229, 0.15);
+    --highlight-border: rgba(79, 70, 229, 0.5);
+
+    --input-bg: #0b1120;
+    --group-border-main: #f8fafc;
+    --group-border-sub: rgba(248, 250, 252, 0.25);
+    --hover-bg: rgba(255, 255, 255, 0.02);
+    --hover-bg-strong: rgba(255, 255, 255, 0.05);
+    --bar-hover: rgba(255, 255, 255, 0.1);
 }
 
 body {
@@ -33,6 +61,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    position: relative;
 }
 
 header {
@@ -128,6 +157,8 @@ textarea {
     font-size: 13px;
     resize: vertical;
     box-sizing: border-box;
+    background-color: var(--input-bg);
+    color: var(--text-main);
 }
 
 textarea:focus,
@@ -143,7 +174,8 @@ input[type="number"] {
     padding: 10px;
     border-radius: 8px;
     border: 1px solid var(--border-color);
-    background-color: white;
+    background-color: var(--input-bg);
+    color: var(--text-main);
     font-size: 0.9rem;
     cursor: pointer;
     box-sizing: border-box;
@@ -187,7 +219,7 @@ button.secondary {
 }
 
 button.secondary:hover {
-    background-color: #e2e8f0;
+    background-color: var(--border-color);
 }
 
 button.action-btn:hover:not(.secondary) {
@@ -212,7 +244,7 @@ button.action-btn:hover:not(.secondary) {
 
 .adv-toggle-btn:hover {
     color: var(--text-main);
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--hover-bg-strong);
 }
 
 .adv-toggle-btn svg {
@@ -225,7 +257,7 @@ button.action-btn:hover:not(.secondary) {
 
 .adv-panel {
     padding: 12px;
-    background: rgba(0, 0, 0, 0.02);
+    background: var(--hover-bg);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     margin-top: 4px;
@@ -334,7 +366,7 @@ button.action-btn:hover:not(.secondary) {
     display: flex;
     position: relative;
     height: 100%;
-    border-right: 2px solid #0f172a;
+    border-right: 2px solid var(--group-border-main);
     box-sizing: border-box;
     transition: background-color 0.1s;
 }
@@ -344,14 +376,14 @@ button.action-btn:hover:not(.secondary) {
 }
 
 .sb-group:hover {
-    background-color: rgba(0, 0, 0, 0.02);
+    background-color: var(--hover-bg);
 }
 
 .block-group {
     display: flex;
     position: relative;
     height: 100%;
-    border-right: 1px solid rgba(15, 23, 42, 0.25);
+    border-right: 1px solid var(--group-border-sub);
     box-sizing: border-box;
     transition: background-color 0.1s;
     cursor: crosshair;
@@ -379,7 +411,7 @@ button.action-btn:hover:not(.secondary) {
 }
 
 .bar:hover {
-    background-color: rgba(0, 0, 0, 0.1);
+    background-color: var(--bar-hover);
     z-index: 10;
 }
 
@@ -449,7 +481,7 @@ button.action-btn:hover:not(.secondary) {
 .eq-pill {
     padding: 4px 8px;
     border-radius: 6px;
-    background: white;
+    background: var(--input-bg);
     border: 1px solid var(--border-color);
     font-size: 0.8rem;
     display: inline-flex;
@@ -509,7 +541,7 @@ button.action-btn:hover:not(.secondary) {
 .data-row {
     display: flex;
     justify-content: space-between;
-    border-bottom: 1px dashed rgba(0, 0, 0, 0.05);
+    border-bottom: 1px dashed var(--hover-bg-strong);
     padding-bottom: 2px;
 }
 
@@ -524,6 +556,43 @@ button.action-btn:hover:not(.secondary) {
     text-align: center;
     padding: 20px 0;
     font-family: 'Inter', sans-serif;
+}
+
+.theme-toggle {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 100;
+}
+
+.theme-toggle:hover {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: var(--bg-color);
+}
+
+.theme-toggle svg {
+    width: 18px;
+    height: 18px;
+}
+
+.app-footer {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: -5px;
+    padding-bottom: 10px;
 }
 
 @media (max-width: 1200px) {
