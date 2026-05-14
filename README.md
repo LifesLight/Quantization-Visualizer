@@ -1,5 +1,3 @@
-Got it. Let's strip the fluff and get straight to the info.
-
 ## Quantization-Visualizer
 
 ### Overview
