@@ -37,6 +37,11 @@ export const elements = {
     get turboBlockSizeEl() { return document.getElementById('turbo-block-size'); },
     get turboWhtEl() { return document.getElementById('turbo-wht'); },
     get turboQjlEl() { return document.getElementById('turbo-qjl'); },
+    get trellisBitsEl() { return document.getElementById('trellis-bits'); },
+    get trellisBlockSizeEl() { return document.getElementById('trellis-block-size'); },
+    get trellisStatesEl() { return document.getElementById('trellis-states'); },
+    get trellisCbTypeEl() { return document.getElementById('trellis-cb-type'); },
+    get trellisWhtEl() { return document.getElementById('trellis-wht'); },
     get toggleLeft() { return document.getElementById('toggle-left'); },
     get toggleRight() { return document.getElementById('toggle-right'); },
     get wrapperLeft() { return document.getElementById('panel-left-wrapper'); },
@@ -44,6 +49,7 @@ export const elements = {
     get blockSettings() { return document.getElementById('block-settings'); },
     get kquantSettings() { return document.getElementById('kquant-settings'); },
     get turboSettings() { return document.getElementById('turbo-settings'); },
+    get trellisSettings() { return document.getElementById('trellis-settings'); },
     get cardSuper() { return document.getElementById('card-super'); },
     get quantStats() { return document.getElementById('quant-stats'); },
     get chartMaxLbl() { return document.getElementById('chart-max-lbl'); },
@@ -55,13 +61,14 @@ export const elements = {
             this.subOffsetEl, this.distEl, this.genBiasEl, this.genStdEl,
             this.genScaleEl, this.genBimodalDistEl, this.genBimodalSpreadEl,
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
-            this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl
-        ];
+            this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
+            this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
+            this.trellisWhtEl
+        ].filter(el => el !== null && el !== undefined);
     }
 };
 
 export function populateDynamicSelectors() {
-    // 1. Populate Quant Types
     elements.qTypeEl.innerHTML = '';
     Object.entries(registry).forEach(([id, quant]) => {
         const opt = document.createElement('option');
@@ -70,7 +77,6 @@ export function populateDynamicSelectors() {
         elements.qTypeEl.appendChild(opt);
     });
 
-    // 2. Populate Presets
     const presetSelect = elements.presetEl;
     presetSelect.innerHTML = '<option value="custom">-- Custom --</option>';
     
@@ -103,6 +109,7 @@ export const uiHelpers = {
     showBlockSettings: (show) => elements.blockSettings.style.display = show ? 'flex' : 'none',
     showKQuantSettings: (show) => elements.kquantSettings.style.display = show ? 'flex' : 'none',
     showTurboSettings: (show) => elements.turboSettings.style.display = show ? 'flex' : 'none',
+    showTrellisSettings: (show) => elements.trellisSettings.style.display = show ? 'flex' : 'none',
     showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
     showSuperBlockCard: (show) => elements.cardSuper.style.display = show ? 'flex' : 'none',
 };
@@ -120,6 +127,11 @@ export function getSettings() {
         turboBlockSize: parseInt(elements.turboBlockSizeEl.value) || 128,
         useWht: elements.turboWhtEl.checked,
         useQjl: elements.turboQjlEl.checked,
+        trellisBits: parseInt(elements.trellisBitsEl.value) || 4,
+        trellisBlockSize: parseInt(elements.trellisBlockSizeEl.value) || 64,
+        trellisStates: parseInt(elements.trellisStatesEl.value) || 4,
+        trellisCbType: elements.trellisCbTypeEl.value,
+        trellisUseWht: elements.trellisWhtEl ? elements.trellisWhtEl.checked : false,
         centeringMode: elements.modeEl.value
     };
 }

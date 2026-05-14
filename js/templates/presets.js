@@ -31,6 +31,14 @@ export const presetGroups = [
             'turbo3': { label: 'Turbo3 (3-bit)', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': true },
             'turbo4': { label: 'Turbo4 (4-bit)', 'quant-type': 'turbo', 'turbo-bits': 4, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': true }
         }
+    },
+    {
+        label: "Trellis (TCQ)",
+        presets: {
+            'tcq2': { label: 'TCQ 2-bit', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 64, 'trellis-states': 4, 'trellis-cb-type': 'lloyd' },
+            'tcq3': { label: 'TCQ 3-bit', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 64, 'trellis-states': 4, 'trellis-cb-type': 'lloyd' },
+            'tcq4': { label: 'TCQ 4-bit', 'quant-type': 'trellis', 'trellis-bits': 4, 'trellis-block-size': 64, 'trellis-states': 4, 'trellis-cb-type': 'lloyd' }
+        }
     }
 ];
 
