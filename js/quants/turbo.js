@@ -22,9 +22,9 @@ export default {
         for (let i = 0; i < floats.length; i += turboBlockSize) {
             const chunk = floats.slice(i, i + turboBlockSize);
             let actualLen = chunk.length;
-            let padLen = 1; 
+            let padLen = 1;
             while (padLen < actualLen) padLen *= 2;
-            
+
             let chunkPadded = [...chunk];
             while (chunkPadded.length < padLen) chunkPadded.push(0);
 
@@ -40,6 +40,7 @@ export default {
 
             let chunkQ = [];
             let residuals = [];
+            let bestCs = [];
 
             for (let j = 0; j < padLen; j++) {
                 let normVal = chunkW[j] / rms;
@@ -53,16 +54,20 @@ export default {
                     }
                 }
                 let qv = bestC * rms;
+                bestCs.push(bestC);
                 chunkQ.push(qv);
                 residuals.push(chunkW[j] - qv);
             }
 
             let meanAbsRes = 0;
+            let qjlSigns = [];
             if (useQjl) {
                 let absResSum = residuals.reduce((s, v) => s + Math.abs(v), 0);
                 meanAbsRes = absResSum / padLen;
                 for (let j = 0; j < padLen; j++) {
-                    chunkQ[j] += (residuals[j] >= 0 ? 1 : -1) * meanAbsRes;
+                    let sgn = residuals[j] >= 0 ? 1 : -1;
+                    qjlSigns.push(sgn);
+                    chunkQ[j] += sgn * meanAbsRes;
                 }
             }
 
@@ -74,6 +79,18 @@ export default {
 
             for (let j = 0; j < actualLen; j++) {
                 qFloats[i + j] = chunkOut[j];
+
+                let mathStr = `C(${bestCs[j].toFixed(2)}) &times; ${rms.toFixed(2)}`;
+                if (useQjl) {
+                    mathStr += ` ${qjlSigns[j] > 0 ? '+' : '-'} QJL`;
+                }
+
+                if (useWht) {
+                    const signStr = getSignFlip(j) > 0 ? '+1' : '-1';
+                    qMathStrings[i + j] = `D(${signStr}) &times; FWHT( ${mathStr} )[${j}]`;
+                } else {
+                    qMathStrings[i + j] = mathStr;
+                }
             }
 
             blockMeta.push({
@@ -87,7 +104,7 @@ export default {
 
         let qjlStr = useQjl ? ` + <span class="eq-pill">QJL_1bit<span class="bits">1b</span></span>` : ``;
         let srhtStr = useWht ? `<span class="eq-pill" title="Diagonal Random Sign Array">D</span> &times; <span class="eq-pill" title="Orthogonal Fast Walsh-Hadamard Transform">FWHT</span> &times; ` : ``;
-        
+
         let footerDesc = `Every ${turboBlockSize} weights share one RMS scale.`;
         if (useWht && useQjl) {
             footerDesc += ` SRHT forces Gaussian distribution; QJL adds 1-bit bias correction.`;

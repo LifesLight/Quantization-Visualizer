@@ -37,6 +37,7 @@ export const elements = {
     get turboBlockSizeEl() { return document.getElementById('turbo-block-size'); },
     get turboWhtEl() { return document.getElementById('turbo-wht'); },
     get turboQjlEl() { return document.getElementById('turbo-qjl'); },
+    get trellisSettings() { return document.getElementById('trellis-settings'); },
     get trellisBitsEl() { return document.getElementById('trellis-bits'); },
     get trellisBlockSizeEl() { return document.getElementById('trellis-block-size'); },
     get trellisStatesEl() { return document.getElementById('trellis-states'); },
@@ -49,7 +50,6 @@ export const elements = {
     get blockSettings() { return document.getElementById('block-settings'); },
     get kquantSettings() { return document.getElementById('kquant-settings'); },
     get turboSettings() { return document.getElementById('turbo-settings'); },
-    get trellisSettings() { return document.getElementById('trellis-settings'); },
     get cardSuper() { return document.getElementById('card-super'); },
     get quantStats() { return document.getElementById('quant-stats'); },
     get chartMaxLbl() { return document.getElementById('chart-max-lbl'); },
@@ -96,7 +96,6 @@ export function populateDynamicSelectors() {
 export function applyPreset(presetId) {
     const p = getPresetById(presetId);
     if (!p) return;
-
     for (const [id, val] of Object.entries(p)) {
         if (id === 'label') continue;
         const el = document.getElementById(id);
@@ -106,21 +105,19 @@ export function applyPreset(presetId) {
     }
 }
 
-function safeDisplay(el, show) {
-    if (!el) return;
-    el.style.display = show ? 'flex' : 'none';
-}
-
 export const uiHelpers = {
-    showBlockSettings: (show) => safeDisplay(elements.blockSettings, show),
-    showKQuantSettings: (show) => safeDisplay(elements.kquantSettings, show),
-    showTurboSettings: (show) => safeDisplay(elements.turboSettings, show),
-    showTrellisSettings: (show) => safeDisplay(elements.trellisSettings, show),
-    showQuantBits: (show) => {
-        if (!elements.qBitsEl || !elements.qBitsEl.parentElement) return;
-        elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none';
+    showBlockSettings: (show) => elements.blockSettings.style.display = show ? 'flex' : 'none',
+    showKQuantSettings: (show) => elements.kquantSettings.style.display = show ? 'flex' : 'none',
+    showTurboSettings: (show) => elements.turboSettings.style.display = show ? 'flex' : 'none',
+    showTrellisSettings: (show) => { if (elements.trellisSettings) elements.trellisSettings.style.display = show ? 'flex' : 'none'; },
+    showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
+    showSuperBlockCard: (show, title = 'Super-Block stats') => {
+        elements.cardSuper.style.display = show ? 'flex' : 'none';
+        const h4 = elements.cardSuper.querySelector('h4');
+        if (h4 && h4.childNodes.length > 0) {
+            h4.childNodes[0].nodeValue = title + ' ';
+        }
     },
-    showSuperBlockCard: (show) => safeDisplay(elements.cardSuper, show),
 };
 
 export function getSettings() {
@@ -148,6 +145,10 @@ export function getSettings() {
 export function updateUI() {
     const qType = elements.qTypeEl.value;
     const quant = registry[qType];
+
+    // Auto-hide Trellis to prevent layout breaks when navigating to other schemes
+    if (elements.trellisSettings) elements.trellisSettings.style.display = 'none';
+
     if (quant && quant.setupUI) {
         quant.setupUI(uiHelpers);
     }

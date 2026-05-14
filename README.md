@@ -12,6 +12,10 @@ A visualizer for floating-point quantization. It shows how different schemes map
     *   **SRHT:** Applies a random sign flip + Fast Walsh-Hadamard Transform to normalize the distribution.
     *   **Lloyd-Max:** Uses an MSE-optimal non-uniform scalar quantizer per coordinate, adapted to the post-rotation distribution.
     *   **QJL:** Adds a 1-bit residual correction step to remove inner-product bias from the MSE quantizer.
+*   **Trellis Quantization (TCQ):** Trellis-coded quantization that minimizes error over a sequence rather than independently per value.
+    *   **Viterbi Path:** Uses a multi-state trellis (up to 16 states) to calculate the MSE-optimal path of quantized values.
+    *   **Set Partitioning:** Splits the codebook into Ungerboeck-style subsets to increase the effective resolution of the quantizer.
+    *   **SRHT:** Can apply the Fast Walsh-Hadamard Transform to normalize the weight distribution prior to quantization.
 
 ### Interface
 
