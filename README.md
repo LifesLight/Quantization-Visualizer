@@ -5,17 +5,11 @@ A visualizer for floating-point quantization. It shows how different schemes map
 
 ### Supported Quants
 
-*   **Symmetric (Q_0 style):** Standard block-wise quantization. Weights in a block share a single scale factor.
-*   **Asymmetric (Q_1 style):** Block-wise quantization with both a scale and a minimum offset.
-*   **K-Quants (Q_K style):** Uses a superblock structure. Sub-blocks have their own small scales/mins which are themselves quantized by a "super" scale/min.
-*   **TurboQuant:** High-performance KV-cache optimized quantization. 
-    *   **SRHT:** Applies a random sign flip + Fast Walsh-Hadamard Transform to normalize the distribution.
-    *   **Lloyd-Max:** Uses an MSE-optimal non-uniform scalar quantizer per coordinate, adapted to the post-rotation distribution.
-    *   **QJL:** Adds a 1-bit residual correction step to remove inner-product bias from the MSE quantizer.
-*   **Trellis Quantization (TCQ):** Trellis-coded quantization that minimizes error over a sequence rather than independently per value.
-    *   **Viterbi Path:** Uses a multi-state trellis (up to 16 states) to calculate the MSE-optimal path of quantized values.
-    *   **Set Partitioning:** Splits the codebook into Ungerboeck-style subsets to increase the effective resolution of the quantizer.
-    *   **SRHT:** Can apply the Fast Walsh-Hadamard Transform to normalize the weight distribution prior to quantization.
+*   **Symmetric (Block Scale):** Block-wise quantization where weights share a single scale factor per block.
+*   **Asymmetric (Block Scale + Zero):** Block-wise quantization with both a scale and a minimum offset per block.
+*   **K-Quant (Nested Scales):** Superblock structure where sub-block scales are themselves quantized by a shared super-scale.
+*   **TurboQuant (Scalar WHT):** SRHT rotation normalizes the coefficient distribution, then a precomputed Lloyd-Max codebook quantizes each coordinate independently. Optional QJL adds a 1-bit residual correction to remove inner-product bias.
+*   **Trellis (Viterbi WHT):** SRHT rotation followed by a multi-state Viterbi search that minimizes MSE over the full sequence rather than per value independently, using Ungerboeck set partitioning to increase effective codebook resolution.
 
 ### Interface
 

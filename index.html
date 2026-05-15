@@ -200,11 +200,7 @@
                     <div id="turbo-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">
                             <label for="turbo-bits">Lloyd-Max Centroids (Bits)</label>
-                            <select id="turbo-bits">
-                                <option value="2">2-bit (4 centroids)</option>
-                                <option value="3">3-bit (8 centroids)</option>
-                                <option value="4" selected>4-bit (16 centroids)</option>
-                            </select>
+                            <input type="number" id="turbo-bits" value="4" min="1" max="8">
                         </div>
                         <div class="settings-group">
                             <label for="turbo-block-size">WHT Block Size</label>

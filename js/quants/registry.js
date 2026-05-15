@@ -6,11 +6,11 @@ import turboQuant from './turbo.js';
 import trellisQuant from './trellis.js';
 
 noneQuant.label = "None (FP32 baseline)";
-symQuant.label = "Symmetric (Q4_0 style)";
-asymQuant.label = "Asymmetric (Q4_1 style)";
-kquantQuant.label = "Superblock (Q4_K style)";
-turboQuant.label = "TurboQuant (Polar+SRHT)";
-trellisQuant.label = "Trellis Quantization (TCQ)";
+symQuant.label  = "Symmetric (Block Scale)";
+asymQuant.label = "Asymmetric (Block Scale + Zero)";
+kquantQuant.label = "K-Quant (Nested Scales)";
+turboQuant.label  = "TurboQuant (Scalar WHT)";
+trellisQuant.label = "Trellis (Viterbi WHT)";
 
 const registry = {
     'none': noneQuant,

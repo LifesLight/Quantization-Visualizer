@@ -25,19 +25,27 @@ export const presetGroups = [
         }
     },
     {
-        label: "TurboQuant (KV)",
+        label: "TurboQuant / Llama.cpp",
         presets: {
-            'turbo2': { label: 'Turbo2 (2-bit)', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': true },
-            'turbo3': { label: 'Turbo3 (3-bit)', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': true },
-            'turbo4': { label: 'Turbo4 (4-bit)', 'quant-type': 'turbo', 'turbo-bits': 4, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': true }
+            'turbo2': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false },
+            'turbo3': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false },
+            'turbo4': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 4, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false },
+        }
+    },
+    {
+        label: "TurboQuant / Paper",
+        presets: {
+            'turbo2_qjl': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 1, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true },
+            'turbo3_qjl': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true },
+            'turbo4_qjl': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true },
         }
     },
     {
         label: "Trellis (TCQ)",
         presets: {
-            'tcq2': { label: 'TCQ 2-bit', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true },
-            'tcq3': { label: 'TCQ 3-bit', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true },
-            'tcq4': { label: 'TCQ 4-bit', 'quant-type': 'trellis', 'trellis-bits': 4, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true }
+            'tcq2': { label: 'TCQ2', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true },
+            'tcq3': { label: 'TCQ3', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true },
+            'tcq4': { label: 'TCQ4', 'quant-type': 'trellis', 'trellis-bits': 4, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true }
         }
     }
 ];
