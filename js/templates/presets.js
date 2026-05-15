@@ -1,6 +1,6 @@
 export const presetGroups = [
     {
-        label: "Symmetric (_0)",
+        label: "Symmetric",
         presets: {
             'Q2_0': { label: 'Q2_0', 'quant-type': 'sym', 'quant-bits': 2, 'block-size': 32 },
             'Q4_0': { label: 'Q4_0', 'quant-type': 'sym', 'quant-bits': 4, 'block-size': 32 },
@@ -8,14 +8,14 @@ export const presetGroups = [
         }
     },
     {
-        label: "Asymmetric (_1)",
+        label: "Asymmetric",
         presets: {
             'Q2_1': { label: 'Q2_1', 'quant-type': 'asym', 'quant-bits': 2, 'block-size': 32 },
             'Q4_1': { label: 'Q4_1', 'quant-type': 'asym', 'quant-bits': 4, 'block-size': 32 },
         }
     },
     {
-        label: "K-Quants (_K)",
+        label: "K-Quant",
         presets: {
             'Q2_K': { label: 'Q2_K', 'quant-type': 'kquant', 'quant-bits': 2, 'block-size': 16, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 4, 'subblock-offset': true },
             'Q3_K': { label: 'Q3_K', 'quant-type': 'kquant', 'quant-bits': 3, 'block-size': 16, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 6, 'subblock-offset': false },
@@ -41,7 +41,7 @@ export const presetGroups = [
         }
     },
     {
-        label: "Trellis (TCQ)",
+        label: "Trellis",
         presets: {
             'tcq2': { label: 'TCQ2', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true },
             'tcq3': { label: 'TCQ3', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true },
