@@ -16,6 +16,8 @@ export default {
         const bpw = turboBits + (useQjl ? 1 : 0) + (basePrecision / turboBlockSize);
 
         const qFloats = [...floats];
+        const tFloats = new Float64Array(floats.length);
+        const tQFloats = new Float64Array(floats.length);
         const qMathStrings = new Array(floats.length).fill('');
         const blockMeta = [];
 
@@ -79,6 +81,8 @@ export default {
 
             for (let j = 0; j < actualLen; j++) {
                 qFloats[i + j] = chunkOut[j];
+                tFloats[i + j] = chunkW[j];
+                tQFloats[i + j] = chunkQ[j];
 
                 let mathStr = `C(${bestCs[j].toFixed(2)}) &times; ${rms.toFixed(2)}`;
                 if (useQjl) {
@@ -122,7 +126,9 @@ export default {
             bpw,
             blockMeta,
             superMeta: [],
-            formulaHTML: `<span>Weight = ${srhtStr}[ ( <span class="eq-pill">LloydMax<span class="bits">${turboBits}b</span></span> &times; <span class="eq-pill">RMS_Scale<span class="bits">${basePrecision}b</span></span> )${qjlStr} ]</span><br><span style="color:var(--text-muted);font-size:0.8rem;">${footerDesc}</span>`
+            formulaHTML: `<span>Weight = ${srhtStr}[ ( <span class="eq-pill">LloydMax<span class="bits">${turboBits}b</span></span> &times; <span class="eq-pill">RMS_Scale<span class="bits">${basePrecision}b</span></span> )${qjlStr} ]</span><br><span style="color:var(--text-muted);font-size:0.8rem;">${footerDesc}</span>`,
+            tFloats: useWht ? Array.from(tFloats) : null,
+            tQFloats: useWht ? Array.from(tQFloats) : null
         };
     },
     buildElements(floats, qFloats, settings, createBar) {

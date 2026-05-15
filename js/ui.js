@@ -54,6 +54,8 @@ export const elements = {
     get quantStats() { return document.getElementById('quant-stats'); },
     get chartMaxLbl() { return document.getElementById('chart-max-lbl'); },
     get chartMinLbl() { return document.getElementById('chart-min-lbl'); },
+    get btnResetZoom() { return document.getElementById('btn-reset-zoom'); },
+    get btnToggleSRHT() { return document.getElementById('btn-toggle-srht'); },
     get autoUpdateElements() {
         return [
             this.modeEl, this.qTypeEl, this.qBitsEl,

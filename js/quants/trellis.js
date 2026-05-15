@@ -263,6 +263,8 @@ export default {
         }
 
         const qFloats = new Float64Array(floats.length);
+        const tFloats = new Float64Array(floats.length);
+        const tQFloats = new Float64Array(floats.length);
         const qMathStrings = new Array(floats.length);
         const blockMeta = [];
 
@@ -337,6 +339,8 @@ export default {
 
             for (let t = 0; t < actualLen; t++) {
                 qFloats[i + t] = chunkOut[t];
+                tFloats[i + t] = chunkW[t];
+                tQFloats[i + t] = chunkQ[t];
                 const p = pathData[t];
 
                 let baseEq = states === 1 ? `CW[${p.cbIdx}]` : `S${p.prevState} &rarr; S${p.state} D${p.subset}[${p.cbIdx}]`;
@@ -376,7 +380,16 @@ export default {
             <span>Weight = ${srhtStr}[ ( ${tcqStr} &times; <span class="eq-pill">RMS_Scale<span class="bits">16b</span></span> ) ]</span>
             <br><span style="color:var(--text-muted);font-size:0.8rem;">Block size ${safeBlockSize}. ${transformDesc}${stateDesc}</span>`;
 
-        return { qFloats, qMathStrings, bpw, blockMeta, superMeta: [], formulaHTML };
+        return { 
+            qFloats, 
+            qMathStrings, 
+            bpw, 
+            blockMeta, 
+            superMeta: [], 
+            formulaHTML,
+            tFloats: trellisUseWht ? Array.from(tFloats) : null,
+            tQFloats: trellisUseWht ? Array.from(tQFloats) : null
+        };
     },
 
     buildElements(floats, qFloats, settings, createBar) {

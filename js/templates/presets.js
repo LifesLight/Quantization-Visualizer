@@ -1,6 +1,6 @@
 export const presetGroups = [
     {
-        label: "Symmetric",
+        label: "LLama.cpp: Symmetric",
         presets: {
             'Q2_0': { label: 'Q2_0', 'quant-type': 'sym', 'quant-bits': 2, 'block-size': 32 },
             'Q4_0': { label: 'Q4_0', 'quant-type': 'sym', 'quant-bits': 4, 'block-size': 32 },
@@ -8,14 +8,14 @@ export const presetGroups = [
         }
     },
     {
-        label: "Asymmetric",
+        label: "LLama.cpp: Asymmetric",
         presets: {
             'Q2_1': { label: 'Q2_1', 'quant-type': 'asym', 'quant-bits': 2, 'block-size': 32 },
             'Q4_1': { label: 'Q4_1', 'quant-type': 'asym', 'quant-bits': 4, 'block-size': 32 },
         }
     },
     {
-        label: "K-Quant",
+        label: "Llama.cpp: K-Quant",
         presets: {
             'Q2_K': { label: 'Q2_K', 'quant-type': 'kquant', 'quant-bits': 2, 'block-size': 16, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 4, 'subblock-offset': true },
             'Q3_K': { label: 'Q3_K', 'quant-type': 'kquant', 'quant-bits': 3, 'block-size': 16, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 6, 'subblock-offset': false },
@@ -25,7 +25,7 @@ export const presetGroups = [
         }
     },
     {
-        label: "TurboQuant / Llama.cpp",
+        label: "Llama.cpp: TurboQuant",
         presets: {
             'turbo2': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false },
             'turbo3': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false },
@@ -33,7 +33,7 @@ export const presetGroups = [
         }
     },
     {
-        label: "TurboQuant / Paper",
+        label: "Paper: TurboQuant",
         presets: {
             'turbo2_qjl': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 1, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true },
             'turbo3_qjl': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true },

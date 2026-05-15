@@ -336,9 +336,53 @@ button.action-btn:hover:not(.secondary) {
     gap: 16px;
 }
 
+.icon-btn {
+    position: absolute;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 100;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.icon-btn:hover {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: var(--bg-color);
+}
+
+.icon-btn.active {
+    color: white;
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.icon-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.icon-btn.top-left {
+    top: 10px;
+    left: 10px;
+}
+
+.icon-btn.top-right {
+    top: 10px;
+    right: 10px;
+}
+
 .chart-area {
     flex: 1 1 0%;
-    min-height: 250px;
     width: 100%;
     border-left: 2px solid var(--border-color);
     border-right: 2px solid var(--border-color);
@@ -347,6 +391,19 @@ button.action-btn:hover:not(.secondary) {
     align-items: flex-end;
     justify-content: flex-start;
     padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.zoom-box {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(79, 70, 229, 0.15);
+    border: 1px solid rgba(79, 70, 229, 0.5);
+    z-index: 50;
+    pointer-events: none;
     box-sizing: border-box;
 }
 
