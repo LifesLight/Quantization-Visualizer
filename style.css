@@ -43,6 +43,10 @@
     --bar-hover: rgba(255, 255, 255, 0.1);
 }
 
+html {
+    background-color: var(--bg-color);
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background-color: var(--bg-color);
