@@ -43,6 +43,8 @@ export const elements = {
     get trellisStatesEl() { return document.getElementById('trellis-states'); },
     get trellisCbTypeEl() { return document.getElementById('trellis-cb-type'); },
     get trellisWhtEl() { return document.getElementById('trellis-wht'); },
+    get nvfp4Settings() { return document.getElementById('nvfp4-settings'); },
+    get nvfp4TensorSizeEl() { return document.getElementById('nvfp4-tensor-size'); },
     get toggleLeft() { return document.getElementById('toggle-left'); },
     get toggleRight() { return document.getElementById('toggle-right'); },
     get wrapperLeft() { return document.getElementById('panel-left-wrapper'); },
@@ -65,7 +67,7 @@ export const elements = {
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
             this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
-            this.trellisWhtEl
+            this.trellisWhtEl, this.nvfp4TensorSizeEl
         ].filter(el => el !== null && el !== undefined);
     }
 };
@@ -112,6 +114,7 @@ export const uiHelpers = {
     showKQuantSettings: (show) => elements.kquantSettings.style.display = show ? 'flex' : 'none',
     showTurboSettings: (show) => elements.turboSettings.style.display = show ? 'flex' : 'none',
     showTrellisSettings: (show) => { if (elements.trellisSettings) elements.trellisSettings.style.display = show ? 'flex' : 'none'; },
+    showNvfp4Settings: (show) => { if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = show ? 'flex' : 'none'; },
     showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
     showSuperBlockCard: (show, title = 'Super-Block stats') => {
         elements.cardSuper.style.display = show ? 'flex' : 'none';
@@ -140,6 +143,7 @@ export function getSettings() {
         trellisStates: parseInt(elements.trellisStatesEl.value) || 4,
         trellisCbType: elements.trellisCbTypeEl.value,
         trellisUseWht: elements.trellisWhtEl ? elements.trellisWhtEl.checked : false,
+        nvfp4TensorSize: parseInt(elements.nvfp4TensorSizeEl?.value) || 256,
         centeringMode: elements.modeEl.value
     };
 }
@@ -148,8 +152,9 @@ export function updateUI() {
     const qType = elements.qTypeEl.value;
     const quant = registry[qType];
 
-    // Auto-hide Trellis to prevent layout breaks when navigating to other schemes
+    // Auto-hide specific panels to prevent layout breaks when navigating to other schemes
     if (elements.trellisSettings) elements.trellisSettings.style.display = 'none';
+    if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = 'none';
 
     if (quant && quant.setupUI) {
         quant.setupUI(uiHelpers);

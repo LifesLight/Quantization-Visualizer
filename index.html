@@ -224,6 +224,20 @@
                         </select>
                     </div>
 
+                    <div id="nvfp4-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
+                        <div class="settings-group">
+                            <label for="nvfp4-tensor-size" title="Number of weights grouped into a single tensor sharing a global FP32 scale.">Simulated Tensor Size</label>
+                            <select id="nvfp4-tensor-size">
+                                <option value="64">64</option>
+                                <option value="128">128</option>
+                                <option value="256" selected>256</option>
+                                <option value="512">512</option>
+                                <option value="1024">1024</option>
+                                <option value="2048">2048</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div id="turbo-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">
                             <label for="turbo-bits">Lloyd-Max Centroids (Bits)</label>

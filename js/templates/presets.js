@@ -1,5 +1,11 @@
 export const presetGroups = [
     {
+        label: "Hardware: NVIDIA",
+        presets: {
+            'nvfp4': { label: 'Blackwell NVFP4', 'quant-type': 'nvfp4', 'nvfp4-tensor-size': 256 }
+        }
+    },
+    {
         label: "LLama.cpp: Symmetric",
         presets: {
             'Q2_0': { label: 'Q2_0', 'quant-type': 'sym', 'quant-bits': 2, 'block-size': 32 },

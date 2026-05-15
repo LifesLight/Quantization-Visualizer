@@ -47,7 +47,23 @@ export function render() {
     let vQFloats = showSRHT ? tQFloats : qFloats;
 
     const glbErr = getErrStats(floats, qFloats);
-    elements.quantStats.textContent = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${glbErr.mse.toFixed(6)}`;
+
+    // Calculate extra invariant metrics
+    let sigPower = 0;
+    let sumAbsOrig = 0;
+    for (let i = 0; i < floats.length; i++) {
+        sigPower += floats[i] * floats[i];
+        sumAbsOrig += Math.abs(floats[i]);
+    }
+    const sigVar = floats.length > 0 ? sigPower / floats.length : 0;
+
+    // SQNR (Signal-to-Quantization-Noise Ratio) in dB
+    const sqnr = (glbErr.mse === 0 || sigVar === 0) ? Infinity : 10 * Math.log10(sigVar / glbErr.mse);
+
+    // Relative Error (Relative MAE Mapping)
+    const relError = sumAbsOrig === 0 ? 0 : ((glbErr.mae * floats.length) / sumAbsOrig) * 100;
+
+    elements.quantStats.textContent = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${glbErr.mse.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
 
     elements.formulaBox.innerHTML = formulaHTML;
 
