@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (elements.presetEl.value !== 'custom') {
             applyPreset(elements.presetEl.value);
             updateUI();
-            resetZoom();
+            render();
         }
     });
 
@@ -47,7 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
         resetZoom();
     });
 
-    elements.inputEl.addEventListener('input', () => resetZoom());
+    elements.inputEl.addEventListener('input', () => {
+        render();
+    });
 
     elements.chartArea.addEventListener('mouseover', (e) => {
         const bar = e.target.closest('.bar');
@@ -56,13 +58,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!Number.isNaN(idx)) updateInspector(idx);
     });
 
-    elements.btnResetZoom.addEventListener('click', () => {
-        resetZoom();
-    });
-
-    elements.btnToggleSRHT.addEventListener('click', () => {
-        toggleSRHT();
-    });
+    elements.btnResetZoom.addEventListener('click', () => resetZoom());
+    elements.btnToggleSRHT.addEventListener('click', () => toggleSRHT());
 
     let dragStartIdx = null;
 

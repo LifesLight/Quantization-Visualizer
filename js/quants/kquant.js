@@ -97,7 +97,7 @@ export default {
                     }
                     for (let i = 0; i < superChunk.length; i++) {
                         const subIdx = Math.floor(i / subSize);
-                        const qs = qSubScales[sid] || 1e-5;
+                        const qs = qSubScales[subIdx] || 1e-5;
                         const q = Math.max(0, Math.min((maxQ * 2) - 1, Math.round(superChunk[i] / qs + maxQ)));
                         const qV = (q - maxQ) * qs;
                         superChunkQ.push(qV);
