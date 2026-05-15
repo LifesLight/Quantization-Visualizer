@@ -1,4 +1,4 @@
-import { getErrStats } from '../mathUtils.js';
+import { getErrStats, fp16 } from '../mathUtils.js';
 
 export default {
     id: 'sym',
@@ -25,7 +25,7 @@ export default {
 
             if (weightBits === 1) {
                 const maxAbs = Math.max(...chunk.map(Math.abs));
-                scale = maxAbs || 1e-9;
+                scale = fp16(maxAbs || 1e-5);
                 for (let j = 0; j < chunk.length; j++) {
                     const qVal = (chunk[j] >= 0 ? 1 : -1) * scale;
                     chunkQ.push(qVal);
@@ -38,8 +38,8 @@ export default {
                 for (let j = 1; j < chunk.length; j++) {
                     if (Math.abs(chunk[j]) > Math.abs(maxVal)) maxVal = chunk[j];
                 }
-                scale = maxVal / -maxQ;
-                if (scale === 0) scale = 1e-9;
+                scale = fp16(maxVal / -maxQ);
+                if (scale === 0) scale = 1e-5;
                 for (let j = 0; j < chunk.length; j++) {
                     const q = Math.max(0, Math.min((maxQ * 2) - 1, Math.round(chunk[j] / scale + maxQ)));
                     const qVal = (q - maxQ) * scale;
@@ -62,7 +62,7 @@ export default {
             bpw,
             blockMeta,
             superMeta: [],
-            formulaHTML: `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one scale.</span>`
+            formulaHTML: `<span>Weight = <span class="eq-pill">Q_Weight<span class="bits">${weightBits}b</span></span> &times; <span class="eq-pill">Scale<span class="bits">${basePrecision}b</span></span></span><br><span style="color:var(--text-muted);font-size:0.8rem;">Every ${blockSize} weights share one FP16 scale.</span>`
         };
     },
     buildElements(floats, qFloats, settings, createBar) {
@@ -90,7 +90,7 @@ export default {
             blockIdxStr = `[${bm.idx}]`;
             blockHtml = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div>
                          <div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>
-                         <div class="data-row" style="margin-top:4px"><span>Scale (FP):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
+                         <div class="data-row" style="margin-top:4px"><span>Scale (FP16):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
         }
         return { blockHtml, blockIdxStr, superHtml: '', superIdxStr: '' };
     }

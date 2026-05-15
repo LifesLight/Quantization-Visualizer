@@ -1,4 +1,4 @@
-import { getErrStats, getLloydMaxCentroids, fwht, getSignFlip } from '../mathUtils.js';
+import { getErrStats, getLloydMaxCentroids, fwht, getSignFlip, fp16 } from '../mathUtils.js';
 
 const TRELLIS_TRANSITIONS = {
     4: [
@@ -288,7 +288,7 @@ export default {
 
             let sumSq = 0;
             for (let j = 0; j < padLen; j++) sumSq += chunkW[j] * chunkW[j];
-            const rms = Math.sqrt(sumSq / padLen) || 1e-9;
+            const rms = fp16(Math.sqrt(sumSq / padLen) || 1e-5);
 
             const scaledLevels = baseLevels.map(c => c * rms);
 
@@ -378,14 +378,14 @@ export default {
 
         const formulaHTML = `
             <span>Weight = ${srhtStr}[ ( ${tcqStr} &times; <span class="eq-pill">RMS_Scale<span class="bits">16b</span></span> ) ]</span>
-            <br><span style="color:var(--text-muted);font-size:0.8rem;">Block size ${safeBlockSize}. ${transformDesc}${stateDesc}</span>`;
+            <br><span style="color:var(--text-muted);font-size:0.8rem;">Block size ${safeBlockSize}. ${transformDesc}Every ${safeBlockSize} weights share one FP16 RMS scale.</span>`;
 
-        return { 
-            qFloats, 
-            qMathStrings, 
-            bpw, 
-            blockMeta, 
-            superMeta: [], 
+        return {
+            qFloats,
+            qMathStrings,
+            bpw,
+            blockMeta,
+            superMeta: [],
             formulaHTML,
             tFloats: trellisUseWht ? Array.from(tFloats) : null,
             tQFloats: trellisUseWht ? Array.from(tQFloats) : null
@@ -423,7 +423,7 @@ export default {
         blockIdxStr = `[${bm.idx}]`;
         blockHtml = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div>
                      <div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>
-                     <div class="data-row" style="margin-top:4px"><span>Scale (RMS):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
+                     <div class="data-row" style="margin-top:4px"><span>Scale (RMS FP16):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
 
         const localIdx = idx % settings.trellisBlockSize;
         const p = bm.pathData?.[localIdx];

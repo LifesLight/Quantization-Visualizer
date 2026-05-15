@@ -1,4 +1,4 @@
-import { getErrStats } from '../mathUtils.js';
+import { getErrStats, fp16 } from '../mathUtils.js';
 
 export default {
     id: 'kquant',
@@ -32,13 +32,13 @@ export default {
                     const chunk = superChunk.slice(i, i + subSize);
                     const max = Math.max(...chunk);
                     const min = Math.min(0, Math.min(...chunk));
-                    subScales.push((max - min) / qmaxWeight || 1e-9);
+                    subScales.push((max - min) / qmaxWeight || 1e-5);
                     subMins.push(min);
                 }
 
                 const qmaxSub = Math.pow(2, subBits) - 1;
-                const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
-                const superMinScale = Math.max(...subMins.map(m => -m)) / qmaxSub || 1e-9;
+                const superScale = fp16(Math.max(...subScales) / qmaxSub || 1e-5);
+                const superMinScale = fp16(Math.max(...subMins.map(m => -m)) / qmaxSub || 1e-5);
 
                 for (let k = 0; k < subScales.length; k++) {
                     const intScale = Math.max(0, Math.min(qmaxSub, Math.round(subScales[k] / superScale)));
@@ -50,7 +50,7 @@ export default {
                 }
                 for (let i = 0; i < superChunk.length; i++) {
                     const subIdx = Math.floor(i / subSize);
-                    const q = Math.max(0, Math.min(qmaxWeight, Math.round((superChunk[i] + qSubMins[subIdx]) / (qSubScales[subIdx] || 1e-9))));
+                    const q = Math.max(0, Math.min(qmaxWeight, Math.round((superChunk[i] + qSubMins[subIdx]) / (qSubScales[subIdx] || 1e-5))));
                     const qV = q * qSubScales[subIdx] - qSubMins[subIdx];
                     superChunkQ.push(qV);
                     qFloats[s + i] = qV;
@@ -64,9 +64,9 @@ export default {
                     for (let i = 0; i < superChunk.length; i += subSize) {
                         const chunk = superChunk.slice(i, i + subSize);
                         const maxAbs = Math.max(...chunk.map(Math.abs));
-                        subScales.push(maxAbs || 1e-9);
+                        subScales.push(maxAbs || 1e-5);
                     }
-                    const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
+                    const superScale = fp16(Math.max(...subScales) / qmaxSub || 1e-5);
                     for (let k = 0; k < subScales.length; k++) {
                         const intScale = Math.max(0, Math.min(qmaxSub, Math.round(subScales[k] / superScale)));
                         qSubScales.push(intScale * superScale);
@@ -87,9 +87,9 @@ export default {
                     for (let i = 0; i < superChunk.length; i += subSize) {
                         const chunk = superChunk.slice(i, i + subSize);
                         const maxAbs = Math.max(...chunk.map(Math.abs));
-                        subScales.push(maxAbs / (maxQ - 1) || 1e-9);
+                        subScales.push(maxAbs / (maxQ - 1) || 1e-5);
                     }
-                    const superScale = Math.max(...subScales) / qmaxSub || 1e-9;
+                    const superScale = fp16(Math.max(...subScales) / qmaxSub || 1e-5);
                     for (let k = 0; k < subScales.length; k++) {
                         const intScale = Math.max(0, Math.min(qmaxSub, Math.round(subScales[k] / superScale)));
                         qSubScales.push(intScale * superScale);
@@ -97,7 +97,7 @@ export default {
                     }
                     for (let i = 0; i < superChunk.length; i++) {
                         const subIdx = Math.floor(i / subSize);
-                        const qs = qSubScales[subIdx] || 1e-9;
+                        const qs = qSubScales[sid] || 1e-5;
                         const q = Math.max(0, Math.min((maxQ * 2) - 1, Math.round(superChunk[i] / qs + maxQ)));
                         const qV = (q - maxQ) * qs;
                         superChunkQ.push(qV);
@@ -165,29 +165,29 @@ export default {
         const { subSize, sbSize } = settings;
         const globalSubIdx = Math.floor(idx / subSize);
         const bm = blockMeta[globalSubIdx];
-        
+
         let blockHtml = '', blockIdxStr = '';
         if (bm) {
             blockIdxStr = `[${bm.idx}]`;
             blockHtml = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div>
                          <div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>
-                         <div class="data-row" style="margin-top:4px"><span>Int(<span class="val-hl">${bm.intScale}</span>) &times; SuperScale =</span> <span>${bm.qScale.toFixed(5)}</span></div>`;
+                         <div class="data-row" style="margin-top:4px"><span>SubScale (derived):</span> <span>${bm.qScale.toFixed(5)}</span></div>`;
             if (bm.intMin !== undefined) {
-                blockHtml += `<div class="data-row"><span>Int(<span class="val-hl">${bm.intMin}</span>) &times; SMinScale =</span> <span>${bm.qMin.toFixed(5)}</span></div>`;
+                blockHtml += `<div class="data-row"><span>SubMin (derived):</span> <span>${bm.qMin.toFixed(5)}</span></div>`;
             }
         }
 
         const sbIdxMath = Math.floor(idx / sbSize);
         const sm = superMeta[sbIdxMath];
-        
+
         let superHtml = '', superIdxStr = '';
         if (sm) {
             superIdxStr = `[${sm.idx}]`;
             superHtml = `<div class="data-row"><span>Super MSE:</span> <span class="val-hl">${sm.mse.toFixed(6)}</span></div>
                          <div class="data-row"><span>Super MAE:</span> <span>${sm.mae.toFixed(6)}</span></div>
-                         <div class="data-row" style="margin-top:4px"><span>SuperScale:</span> <span>${sm.superScale.toFixed(6)}</span></div>`;
+                         <div class="data-row" style="margin-top:4px"><span>SuperScale (FP16):</span> <span>${sm.superScale.toFixed(6)}</span></div>`;
             if (sm.superMinScale !== undefined) {
-                superHtml += `<div class="data-row"><span>SuperMinScale:</span> <span>${sm.superMinScale.toFixed(6)}</span></div>`;
+                superHtml += `<div class="data-row"><span>SuperMinScale (FP16):</span> <span>${sm.superMinScale.toFixed(6)}</span></div>`;
             }
         }
         return { blockHtml, blockIdxStr, superHtml, superIdxStr };

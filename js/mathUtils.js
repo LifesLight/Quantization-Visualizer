@@ -70,3 +70,30 @@ export function getErrStats(arrO, arrQ) {
     }
     return { mse: se / arrO.length, mae: ae / arrO.length };
 }
+
+export function fp32(val) {
+    return Math.fround(val);
+}
+
+export function fp16(val) {
+    if (val === 0) return 0;
+    let abs = Math.abs(val);
+    if (abs >= 65504) return Math.sign(val) * 65504; 
+    if (abs < 5.96046e-8) return 0; 
+    if (abs < 0.000061035) return Math.sign(val) * Math.round(abs / 5.96046e-8) * 5.96046e-8;
+    let exp = Math.floor(Math.log2(abs)), m = Math.round((abs / Math.pow(2, exp) - 1) * 1024);
+    if (m === 1024) { m = 0; exp += 1; }
+    if (exp > 15) return Math.sign(val) * 65504;
+    return Math.sign(val) * Math.pow(2, exp) * (1 + m / 1024);
+}
+
+export function fp8_e4m3(val) {
+    if (val === 0) return 0;
+    let abs = Math.abs(val);
+    if (abs >= 448) return Math.sign(val) * 448; 
+    if (abs < 0.015625) return Math.sign(val) * Math.round(abs / 0.001953) * 0.001953;
+    let exp = Math.floor(Math.log2(abs)), m = Math.round((abs / Math.pow(2, exp) - 1) * 8);
+    if (m === 8) { m = 0; exp += 1; }
+    if (exp > 8 || (exp === 8 && m > 6)) return Math.sign(val) * 448;
+    return Math.sign(val) * Math.pow(2, exp) * (1 + m / 8);
+}

@@ -1,4 +1,4 @@
-import { getErrStats, getLloydMaxCentroids, fwht, getSignFlip } from '../mathUtils.js';
+import { getErrStats, getLloydMaxCentroids, fwht, getSignFlip, fp16 } from '../mathUtils.js';
 
 export default {
     id: 'turbo',
@@ -38,7 +38,7 @@ export default {
 
             let sumSq = 0;
             for (let j = 0; j < padLen; j++) sumSq += chunkW[j] * chunkW[j];
-            let rms = Math.sqrt(sumSq / padLen) || 1e-9;
+            let rms = fp16(Math.sqrt(sumSq / padLen) || 1e-5);
 
             let chunkQ = [];
             let residuals = [];
@@ -65,7 +65,7 @@ export default {
             let qjlSigns = [];
             if (useQjl) {
                 let absResSum = residuals.reduce((s, v) => s + Math.abs(v), 0);
-                meanAbsRes = absResSum / padLen;
+                meanAbsRes = fp16(absResSum / padLen);
                 for (let j = 0; j < padLen; j++) {
                     let sgn = residuals[j] >= 0 ? 1 : -1;
                     qjlSigns.push(sgn);
@@ -109,7 +109,7 @@ export default {
         let qjlStr = useQjl ? ` + <span class="eq-pill">QJL_1bit<span class="bits">1b</span></span>` : ``;
         let srhtStr = useWht ? `<span class="eq-pill" title="Diagonal Random Sign Array">D</span> &times; <span class="eq-pill" title="Orthogonal Fast Walsh-Hadamard Transform">FWHT</span> &times; ` : ``;
 
-        let footerDesc = `Every ${turboBlockSize} weights share one RMS scale.`;
+        let footerDesc = `Every ${turboBlockSize} weights share one FP16 RMS scale.`;
         if (useWht && useQjl) {
             footerDesc += ` SRHT forces Gaussian distribution; QJL adds 1-bit bias correction.`;
         } else if (useWht) {
@@ -155,9 +155,9 @@ export default {
             blockIdxStr = `[${bm.idx}]`;
             blockHtml = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div>
                          <div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>
-                         <div class="data-row" style="margin-top:4px"><span>Scale (FP):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
+                         <div class="data-row" style="margin-top:4px"><span>Scale (FP16):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
             if (settings.useQjl && bm.qjlScale > 0) {
-                blockHtml += `<div class="data-row"><span>QJL Scale:</span> <span>${bm.qjlScale.toFixed(5)}</span></div>`;
+                blockHtml += `<div class="data-row"><span>QJL Scale (FP16):</span> <span>${bm.qjlScale.toFixed(5)}</span></div>`;
             }
         }
         return { blockHtml, blockIdxStr, superHtml: '', superIdxStr: '' };

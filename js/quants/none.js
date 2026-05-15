@@ -1,3 +1,5 @@
+import { fp32 } from '../mathUtils.js';
+
 export default {
     id: 'none',
     setupUI(ui) {
@@ -9,12 +11,12 @@ export default {
     },
     quantize(floats) {
         return {
-            qFloats: [...floats],
+            qFloats: floats.map(v => fp32(v)),
             qMathStrings: new Array(floats.length).fill(''),
             bpw: 32,
             blockMeta: [],
             superMeta: [],
-            formulaHTML: `No Quantization applied.`
+            formulaHTML: `Weights stored at FP32 precision (no quantization).`
         };
     },
     buildElements(floats, qFloats, settings, createBar) {
