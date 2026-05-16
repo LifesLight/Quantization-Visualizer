@@ -5,6 +5,9 @@ A visualizer for floating-point quantization. It shows how different schemes map
 
 ### Supported Quants
 
+*   **Primitive (FP Types):** Standard floating-point formats (FP32, FP16, BF16, FP8) applied element-wise without additional block-level scaling.
+*   **NVFP4 (Blackwell):** NVIDIA’s hardware-native 4-bit format using an E2M1 codebook. Employs hierarchical scaling where blocks of 16 share an FP8 scale, and entire tensors share a global FP32 scale.
+*   **MXFP (OCP Microscaling):** Open standard for micro-granularity scaling. Blocks of 32 weights share an 8-bit exponent-only (E8M0) scale factor, supporting sub-8-bit element formats (MXFP4, MXFP6, and MXFP8).
 *   **Symmetric (Block Scale):** Block-wise quantization where weights share a single scale factor per block.
 *   **Asymmetric (Block Scale + Zero):** Block-wise quantization with both a scale and a minimum offset per block.
 *   **K-Quant (Nested Scales):** Superblock structure where sub-block scales are themselves quantized by a shared super-scale.
