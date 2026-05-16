@@ -45,6 +45,8 @@ export const elements = {
     get trellisWhtEl() { return document.getElementById('trellis-wht'); },
     get nvfp4Settings() { return document.getElementById('nvfp4-settings'); },
     get nvfp4TensorSizeEl() { return document.getElementById('nvfp4-tensor-size'); },
+    get mxfpSettings() { return document.getElementById('mxfp-settings'); },
+    get mxfpFormatEl() { return document.getElementById('mxfp-format'); },
     get primitiveSettings() { return document.getElementById('primitive-settings'); },
     get primitiveFormatEl() { return document.getElementById('primitive-format'); },
     get toggleLeft() { return document.getElementById('toggle-left'); },
@@ -70,7 +72,7 @@ export const elements = {
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
             this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
-            this.trellisWhtEl, this.nvfp4TensorSizeEl, this.primitiveFormatEl
+            this.trellisWhtEl, this.nvfp4TensorSizeEl, this.mxfpFormatEl, this.primitiveFormatEl
         ].filter(el => el !== null && el !== undefined);
     }
 };
@@ -118,6 +120,7 @@ export const uiHelpers = {
     showTurboSettings: (show) => elements.turboSettings.style.display = show ? 'flex' : 'none',
     showTrellisSettings: (show) => { if (elements.trellisSettings) elements.trellisSettings.style.display = show ? 'flex' : 'none'; },
     showNvfp4Settings: (show) => { if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = show ? 'flex' : 'none'; },
+    showMxfpSettings: (show) => { if (elements.mxfpSettings) elements.mxfpSettings.style.display = show ? 'flex' : 'none'; },
     showPrimitiveSettings: (show) => { if (elements.primitiveSettings) elements.primitiveSettings.style.display = show ? 'flex' : 'none'; },
     showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
     showSuperBlockCard: (show, title = 'Super-Block stats') => {
@@ -157,6 +160,7 @@ export function getSettings() {
         trellisCbType: elements.trellisCbTypeEl.value,
         trellisUseWht: elements.trellisWhtEl ? elements.trellisWhtEl.checked : false,
         nvfp4TensorSize: parseInt(elements.nvfp4TensorSizeEl?.value) || 256,
+        mxfpFormat: elements.mxfpFormatEl ? elements.mxfpFormatEl.value : 'mxfp4_e2m1',
         primitiveFormat: elements.primitiveFormatEl ? elements.primitiveFormatEl.value : 'fp32',
         centeringMode: elements.modeEl.value
     };
@@ -169,6 +173,7 @@ export function updateUI() {
     // Auto-hide specific panels to prevent layout breaks when navigating to other schemes
     if (elements.trellisSettings) elements.trellisSettings.style.display = 'none';
     if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = 'none';
+    if (elements.mxfpSettings) elements.mxfpSettings.style.display = 'none';
     if (elements.primitiveSettings) elements.primitiveSettings.style.display = 'none';
 
     // Auto-show standard block layout stats as it maps to the majority of conventional quants

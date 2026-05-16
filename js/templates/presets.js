@@ -6,6 +6,13 @@ export const presetGroups = [
         }
     },
     {
+        label: "Hardware: OCP (Standard)",
+        presets: {
+            'mxfp4': { label: 'MXFP4 (E2M1)', 'quant-type': 'mxfp', 'mxfp-format': 'mxfp4_e2m1' },
+            'mxfp6': { label: 'MXFP6 (E3M2)', 'quant-type': 'mxfp', 'mxfp-format': 'mxfp6_e2m3' },
+        }
+    },
+    {
         label: "LLama.cpp: Symmetric",
         presets: {
             'Q2_0': { label: 'Q2_0', 'quant-type': 'sym', 'quant-bits': 2, 'block-size': 32 },

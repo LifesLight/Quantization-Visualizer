@@ -254,6 +254,21 @@
                         </div>
                     </div>
 
+                    <div id="mxfp-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
+                        <div class="settings-group">
+                            <label for="mxfp-format"
+                                title="OCP Microscaling Formats. Blocks of 32 share an E8M0 scale.">MX Format
+                                Precision</label>
+                            <select id="mxfp-format">
+                                <option value="mxfp4_e2m1" selected>MXFP4 (E2M1)</option>
+                                <option value="mxfp6_e2m3">MXFP6 (E2M3)</option>
+                                <option value="mxfp6_e3m2">MXFP6 (E3M2)</option>
+                                <option value="mxfp8_e4m3">MXFP8 (E4M3)</option>
+                                <option value="mxfp8_e5m2">MXFP8 (E5M2)</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div id="turbo-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">
                             <label for="turbo-bits">Lloyd-Max Centroids (Bits)</label>
