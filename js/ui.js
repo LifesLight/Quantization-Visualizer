@@ -43,8 +43,6 @@ export const elements = {
     get trellisStatesEl() { return document.getElementById('trellis-states'); },
     get trellisCbTypeEl() { return document.getElementById('trellis-cb-type'); },
     get trellisWhtEl() { return document.getElementById('trellis-wht'); },
-    get nvfp4Settings() { return document.getElementById('nvfp4-settings'); },
-    get nvfp4TensorSizeEl() { return document.getElementById('nvfp4-tensor-size'); },
     get mxfpSettings() { return document.getElementById('mxfp-settings'); },
     get mxfpFormatEl() { return document.getElementById('mxfp-format'); },
     get primitiveSettings() { return document.getElementById('primitive-settings'); },
@@ -72,8 +70,8 @@ export const elements = {
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
             this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
-            this.trellisWhtEl, this.nvfp4TensorSizeEl, this.mxfpFormatEl, this.primitiveFormatEl
-        ].filter(el => el !== null && el !== undefined);
+            this.trellisWhtEl, this.mxfpFormatEl, this.primitiveFormatEl
+        ].filter(el => el !== null);
     }
 };
 
@@ -88,7 +86,6 @@ export function populateDynamicSelectors() {
 
     const presetSelect = elements.presetEl;
     presetSelect.innerHTML = '<option value="custom">-- Custom --</option>';
-
     presetGroups.forEach(group => {
         const optGroup = document.createElement('optgroup');
         optGroup.label = group.label;
@@ -119,24 +116,19 @@ export const uiHelpers = {
     showKQuantSettings: (show) => elements.kquantSettings.style.display = show ? 'flex' : 'none',
     showTurboSettings: (show) => elements.turboSettings.style.display = show ? 'flex' : 'none',
     showTrellisSettings: (show) => { if (elements.trellisSettings) elements.trellisSettings.style.display = show ? 'flex' : 'none'; },
-    showNvfp4Settings: (show) => { if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = show ? 'flex' : 'none'; },
     showMxfpSettings: (show) => { if (elements.mxfpSettings) elements.mxfpSettings.style.display = show ? 'flex' : 'none'; },
     showPrimitiveSettings: (show) => { if (elements.primitiveSettings) elements.primitiveSettings.style.display = show ? 'flex' : 'none'; },
     showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
     showSuperBlockCard: (show, title = 'Super-Block stats') => {
         elements.cardSuper.style.display = show ? 'flex' : 'none';
         const h4 = elements.cardSuper.querySelector('h4');
-        if (h4 && h4.childNodes.length > 0) {
-            h4.childNodes[0].nodeValue = title + ' ';
-        }
+        if (h4 && h4.childNodes.length > 0) h4.childNodes[0].nodeValue = title + ' ';
     },
     showBlockCard: (show, title = 'Sub-Block stats') => {
         if (elements.cardBlock) {
             elements.cardBlock.style.display = show ? 'flex' : 'none';
             const h4 = elements.cardBlock.querySelector('h4');
-            if (h4 && h4.childNodes.length > 0) {
-                h4.childNodes[0].nodeValue = title + ' ';
-            }
+            if (h4 && h4.childNodes.length > 0) h4.childNodes[0].nodeValue = title + ' ';
         }
     },
 };
@@ -144,7 +136,7 @@ export const uiHelpers = {
 export function getSettings() {
     return {
         qType: elements.qTypeEl.value,
-        weightBits: Math.max(1, Math.min(8, parseInt(elements.qBitsEl.value) || 4)),
+        weightBits: parseInt(elements.qBitsEl.value) || 4,
         blockSize: parseInt(elements.blockSizeEl.value) || 32,
         sbSize: parseInt(elements.sbSizeEl.value) || 256,
         subSize: parseInt(elements.subSizeEl.value) || 32,
@@ -158,10 +150,9 @@ export function getSettings() {
         trellisBlockSize: parseInt(elements.trellisBlockSizeEl.value) || 64,
         trellisStates: parseInt(elements.trellisStatesEl.value) || 4,
         trellisCbType: elements.trellisCbTypeEl.value,
-        trellisUseWht: elements.trellisWhtEl ? elements.trellisWhtEl.checked : false,
-        nvfp4TensorSize: parseInt(elements.nvfp4TensorSizeEl?.value) || 256,
-        mxfpFormat: elements.mxfpFormatEl ? elements.mxfpFormatEl.value : 'mxfp4_e2m1',
-        primitiveFormat: elements.primitiveFormatEl ? elements.primitiveFormatEl.value : 'fp32',
+        trellisUseWht: elements.trellisWhtEl?.checked || false,
+        mxfpFormat: elements.mxfpFormatEl?.value || 'mxfp4_e2m1',
+        primitiveFormat: elements.primitiveFormatEl?.value || 'fp32',
         centeringMode: elements.modeEl.value
     };
 }
@@ -171,17 +162,10 @@ export function updateUI() {
     const quant = registry[qType];
 
     if (elements.trellisSettings) elements.trellisSettings.style.display = 'none';
-    if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = 'none';
     if (elements.mxfpSettings) elements.mxfpSettings.style.display = 'none';
     if (elements.primitiveSettings) elements.primitiveSettings.style.display = 'none';
 
-    if (elements.cardBlock) {
-        elements.cardBlock.style.display = 'flex';
-        const h4 = elements.cardBlock.querySelector('h4');
-        if (h4 && h4.childNodes.length > 0) {
-            h4.childNodes[0].nodeValue = 'Sub-Block stats ';
-        }
-    }
+    if (elements.cardBlock) elements.cardBlock.style.display = 'flex';
 
     if (quant && quant.setupUI) {
         quant.setupUI(uiHelpers);
@@ -201,13 +185,8 @@ export function initUIListeners() {
 
     elements.genCountEl.addEventListener('keydown', (e) => {
         let val = parseInt(elements.genCountEl.value) || 1;
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            elements.genCountEl.value = val * 2;
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            elements.genCountEl.value = Math.max(1, Math.floor(val / 2));
-        }
+        if (e.key === 'ArrowUp') { e.preventDefault(); elements.genCountEl.value = val * 2; }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); elements.genCountEl.value = Math.max(1, Math.floor(val / 2)); }
     });
 
     elements.advToggleBtn.addEventListener('click', () => {
