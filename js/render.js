@@ -48,7 +48,6 @@ export function render() {
 
     const glbErr = getErrStats(floats, qFloats);
 
-    // Calculate extra invariant metrics
     let sigPower = 0;
     let sumAbsOrig = 0;
     for (let i = 0; i < floats.length; i++) {
@@ -56,41 +55,60 @@ export function render() {
         sumAbsOrig += Math.abs(floats[i]);
     }
     const sigVar = floats.length > 0 ? sigPower / floats.length : 0;
-
-    // SQNR (Signal-to-Quantization-Noise Ratio) in dB
     const sqnr = (glbErr.mse === 0 || sigVar === 0) ? Infinity : 10 * Math.log10(sigVar / glbErr.mse);
-
-    // Relative Error (Relative MAE Mapping)
     const relError = sumAbsOrig === 0 ? 0 : ((glbErr.mae * floats.length) / sumAbsOrig) * 100;
 
     elements.quantStats.textContent = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${glbErr.mse.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
 
     elements.formulaBox.innerHTML = formulaHTML;
 
-    let zFloats = vFloats;
     if (zoomRange) {
-        zFloats = vFloats.slice(zoomRange.start, zoomRange.end + 1);
         elements.btnResetZoom.style.display = 'flex';
     } else {
         elements.btnResetZoom.style.display = 'none';
     }
 
-    let dMax = Math.max(...zFloats);
-    let dMin = Math.min(...zFloats);
+    const zStart = zoomRange ? zoomRange.start : 0;
+    const zEnd = zoomRange ? zoomRange.end : vFloats.length - 1;
+    const zCount = zEnd - zStart + 1;
+
+    let dMax = -Infinity;
+    let dMin = Infinity;
+    let absMax = 0;
+    for (let i = zStart; i <= zEnd; i++) {
+        let v = vFloats[i];
+        if (v > dMax) dMax = v;
+        if (v < dMin) dMin = v;
+        let absV = Math.abs(v);
+        if (absV > absMax) absMax = absV;
+    }
+
     if (dMax === dMin) {
         dMax += 0.1;
         dMin -= 0.1;
     }
     const spread = dMax - dMin;
 
-    const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.1 : Math.max(0.1, ...zFloats.map(Math.abs)) * 1.1;
-    const sMin = settings.centeringMode === 'mid' ? dMin - spread * 0.1 : -sMax;
+    // Adjusted the mid bounds mode to perfectly match the 1.1x scaling distribution used by the zero-centered equivalent
+    const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.05 : Math.max(0.1, absMax) * 1.1;
+    const sMin = settings.centeringMode === 'mid' ? dMin - spread * 0.05 : -sMax;
+
+    let baselineValue = 0;
+    if (settings.centeringMode === 'mid') {
+        if (dMin >= 0) {
+            baselineValue = sMin; // Entirely positive range: Start bars naturally at the visual bottom
+        } else if (dMax <= 0) {
+            baselineValue = sMax; // Entirely negative range: Start bars naturally at the visual top
+        } else {
+            baselineValue = 0; // Natural intersection crosses 0
+        }
+    }
 
     elements.chartMaxLbl.textContent = `Max: ${sMax.toFixed(2)}`;
     elements.chartMinLbl.textContent = `Min: ${sMin.toFixed(2)}`;
 
     elements.chartArea.innerHTML = '<div class="baseline" id="baseline"></div><div class="zoom-box" id="zoom-box" style="display: none;"></div>';
-    const baselineY = ((0 - sMin) / (sMax - sMin)) * 100;
+    const baselineY = ((baselineValue - sMin) / (sMax - sMin)) * 100;
     const baselineEl = document.getElementById('baseline');
 
     if (baselineY >= 0 && baselineY <= 100) {
@@ -107,7 +125,7 @@ export function render() {
         bar.className = 'bar';
         bar.dataset.idx = globalIdx;
 
-        const yCenter = clamp(((0 - sMin) / (sMax - sMin)) * 100);
+        const yCenter = clamp(((baselineValue - sMin) / (sMax - sMin)) * 100);
         const yVQ = clamp(((valQ - sMin) / (sMax - sMin)) * 100);
         const yV = clamp(((val - sMin) / (sMax - sMin)) * 100);
 
@@ -130,26 +148,120 @@ export function render() {
         return bar;
     };
 
-    const frag = quant.buildElements(vFloats, vQFloats, settings, createBar);
+    const clientWidth = elements.chartArea.clientWidth || 800;
+    const pxPerBar = clientWidth / zCount;
 
-    if (zoomRange) {
-        const bars = frag.querySelectorAll('.bar');
-        bars.forEach(bar => {
-            const idx = parseInt(bar.dataset.idx, 10);
-            if (idx < zoomRange.start || idx > zoomRange.end) {
-                bar.style.display = 'none';
+    elements.chartArea.style.gap = '';
+
+    const hasBlocks = blockMeta && blockMeta.length > 0;
+    const hasSupers = superMeta && superMeta.length > 0;
+
+    let frag;
+
+    if (pxPerBar < 1) {
+        elements.chartArea.style.gap = '0px';
+        frag = document.createDocumentFragment();
+
+        const maxBars = clientWidth;
+        const binSize = zCount / maxBars;
+
+        const barsPerBlock = settings.blockSize ? (settings.blockSize / binSize) : 0;
+        const showBlocks = hasBlocks && barsPerBlock >= 8;
+
+        const barsPerSuper = settings.sbSize ? (settings.sbSize / binSize) : 0;
+        const showSupers = hasSupers && barsPerSuper >= 8;
+
+        let currentSbGrp = null;
+        let currentBlkGrp = null;
+        let lastSbIdx = -1;
+        let lastBlkIdx = -1;
+
+        for (let i = 0; i < maxBars; i++) {
+            let binStartIdx = zStart + Math.floor(i * binSize);
+            let binEndIdx = i === maxBars - 1 ? zEnd + 1 : zStart + Math.floor((i + 1) * binSize);
+
+            let maxMag = -1;
+            let bestIdx = binStartIdx;
+
+            for (let j = binStartIdx; j < binEndIdx; j++) {
+                let mag = Math.abs(vFloats[j]);
+                if (mag > maxMag) {
+                    maxMag = mag;
+                    bestIdx = j;
+                }
             }
-        });
+
+            let sbIdx = showSupers ? Math.floor(binStartIdx / settings.sbSize) : -1;
+            let blkIdx = showBlocks ? Math.floor(binStartIdx / settings.blockSize) : -1;
+
+            if (showSupers && sbIdx !== lastSbIdx) {
+                currentSbGrp = document.createElement('div');
+                // Demote the Superblock line visuals strictly to normal limiters if block lines are deactivated
+                currentSbGrp.className = showBlocks ? 'sb-group' : 'block-group';
+                currentSbGrp.style.gap = '0px';
+                frag.appendChild(currentSbGrp);
+                lastSbIdx = sbIdx;
+                lastBlkIdx = -1;
+            }
+
+            if (showBlocks && blkIdx !== lastBlkIdx) {
+                currentBlkGrp = document.createElement('div');
+                currentBlkGrp.className = 'block-group';
+                currentBlkGrp.style.gap = '0px';
+                if (currentSbGrp) {
+                    currentSbGrp.appendChild(currentBlkGrp);
+                } else {
+                    frag.appendChild(currentBlkGrp);
+                }
+                lastBlkIdx = blkIdx;
+            }
+
+            const bar = createBar(vFloats[bestIdx], vQFloats[bestIdx], bestIdx);
+            bar.style.flex = "1";
+
+            if (currentBlkGrp) {
+                currentBlkGrp.appendChild(bar);
+            } else if (currentSbGrp) {
+                currentSbGrp.appendChild(bar);
+            } else {
+                frag.appendChild(bar);
+            }
+        }
 
         const groups = frag.querySelectorAll('.block-group, .sb-group');
         groups.forEach(grp => {
-            const visibleBars = Array.from(grp.querySelectorAll('.bar')).filter(b => b.style.display !== 'none');
-            if (visibleBars.length === 0) {
+            const visibleBars = grp.querySelectorAll('.bar').length;
+            if (visibleBars === 0) {
                 grp.style.display = 'none';
             } else {
-                grp.style.flex = visibleBars.length;
+                grp.style.flex = visibleBars;
             }
         });
+
+    } else {
+        frag = quant.buildElements(vFloats, vQFloats, settings, (val, valQ, globalIdx) => {
+            if (zoomRange && (globalIdx < zoomRange.start || globalIdx > zoomRange.end)) {
+                const dummy = document.createElement('div');
+                dummy.className = 'dummy-bar';
+                return dummy;
+            }
+            return createBar(val, valQ, globalIdx);
+        });
+
+        if (zoomRange) {
+            const dummies = frag.querySelectorAll('.dummy-bar');
+            dummies.forEach(d => d.remove());
+
+            const groups = frag.querySelectorAll('.block-group, .sb-group');
+            groups.forEach(grp => {
+                const visibleBars = grp.querySelectorAll('.bar').length;
+                if (visibleBars === 0) {
+                    grp.style.display = 'none';
+                } else {
+                    grp.style.flex = visibleBars;
+                }
+            });
+        }
     }
 
     elements.chartArea.appendChild(frag);

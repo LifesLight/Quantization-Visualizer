@@ -170,13 +170,11 @@ export function updateUI() {
     const qType = elements.qTypeEl.value;
     const quant = registry[qType];
 
-    // Auto-hide specific panels to prevent layout breaks when navigating to other schemes
     if (elements.trellisSettings) elements.trellisSettings.style.display = 'none';
     if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = 'none';
     if (elements.mxfpSettings) elements.mxfpSettings.style.display = 'none';
     if (elements.primitiveSettings) elements.primitiveSettings.style.display = 'none';
 
-    // Auto-show standard block layout stats as it maps to the majority of conventional quants
     if (elements.cardBlock) {
         elements.cardBlock.style.display = 'flex';
         const h4 = elements.cardBlock.querySelector('h4');
@@ -205,7 +203,7 @@ export function initUIListeners() {
         let val = parseInt(elements.genCountEl.value) || 1;
         if (e.key === 'ArrowUp') {
             e.preventDefault();
-            elements.genCountEl.value = Math.min(8192, val * 2);
+            elements.genCountEl.value = val * 2;
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             elements.genCountEl.value = Math.max(1, Math.floor(val / 2));
