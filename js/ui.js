@@ -45,6 +45,8 @@ export const elements = {
     get trellisWhtEl() { return document.getElementById('trellis-wht'); },
     get nvfp4Settings() { return document.getElementById('nvfp4-settings'); },
     get nvfp4TensorSizeEl() { return document.getElementById('nvfp4-tensor-size'); },
+    get primitiveSettings() { return document.getElementById('primitive-settings'); },
+    get primitiveFormatEl() { return document.getElementById('primitive-format'); },
     get toggleLeft() { return document.getElementById('toggle-left'); },
     get toggleRight() { return document.getElementById('toggle-right'); },
     get wrapperLeft() { return document.getElementById('panel-left-wrapper'); },
@@ -52,6 +54,7 @@ export const elements = {
     get blockSettings() { return document.getElementById('block-settings'); },
     get kquantSettings() { return document.getElementById('kquant-settings'); },
     get turboSettings() { return document.getElementById('turbo-settings'); },
+    get cardBlock() { return document.getElementById('card-block'); },
     get cardSuper() { return document.getElementById('card-super'); },
     get quantStats() { return document.getElementById('quant-stats'); },
     get chartMaxLbl() { return document.getElementById('chart-max-lbl'); },
@@ -67,7 +70,7 @@ export const elements = {
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
             this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
-            this.trellisWhtEl, this.nvfp4TensorSizeEl
+            this.trellisWhtEl, this.nvfp4TensorSizeEl, this.primitiveFormatEl
         ].filter(el => el !== null && el !== undefined);
     }
 };
@@ -115,12 +118,22 @@ export const uiHelpers = {
     showTurboSettings: (show) => elements.turboSettings.style.display = show ? 'flex' : 'none',
     showTrellisSettings: (show) => { if (elements.trellisSettings) elements.trellisSettings.style.display = show ? 'flex' : 'none'; },
     showNvfp4Settings: (show) => { if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = show ? 'flex' : 'none'; },
+    showPrimitiveSettings: (show) => { if (elements.primitiveSettings) elements.primitiveSettings.style.display = show ? 'flex' : 'none'; },
     showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
     showSuperBlockCard: (show, title = 'Super-Block stats') => {
         elements.cardSuper.style.display = show ? 'flex' : 'none';
         const h4 = elements.cardSuper.querySelector('h4');
         if (h4 && h4.childNodes.length > 0) {
             h4.childNodes[0].nodeValue = title + ' ';
+        }
+    },
+    showBlockCard: (show, title = 'Sub-Block stats') => {
+        if (elements.cardBlock) {
+            elements.cardBlock.style.display = show ? 'flex' : 'none';
+            const h4 = elements.cardBlock.querySelector('h4');
+            if (h4 && h4.childNodes.length > 0) {
+                h4.childNodes[0].nodeValue = title + ' ';
+            }
         }
     },
 };
@@ -144,6 +157,7 @@ export function getSettings() {
         trellisCbType: elements.trellisCbTypeEl.value,
         trellisUseWht: elements.trellisWhtEl ? elements.trellisWhtEl.checked : false,
         nvfp4TensorSize: parseInt(elements.nvfp4TensorSizeEl?.value) || 256,
+        primitiveFormat: elements.primitiveFormatEl ? elements.primitiveFormatEl.value : 'fp32',
         centeringMode: elements.modeEl.value
     };
 }
@@ -155,6 +169,16 @@ export function updateUI() {
     // Auto-hide specific panels to prevent layout breaks when navigating to other schemes
     if (elements.trellisSettings) elements.trellisSettings.style.display = 'none';
     if (elements.nvfp4Settings) elements.nvfp4Settings.style.display = 'none';
+    if (elements.primitiveSettings) elements.primitiveSettings.style.display = 'none';
+
+    // Auto-show standard block layout stats as it maps to the majority of conventional quants
+    if (elements.cardBlock) {
+        elements.cardBlock.style.display = 'flex';
+        const h4 = elements.cardBlock.querySelector('h4');
+        if (h4 && h4.childNodes.length > 0) {
+            h4.childNodes[0].nodeValue = 'Sub-Block stats ';
+        }
+    }
 
     if (quant && quant.setupUI) {
         quant.setupUI(uiHelpers);

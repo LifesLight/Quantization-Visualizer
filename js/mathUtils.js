@@ -87,6 +87,32 @@ export function fp16(val) {
     return Math.sign(val) * Math.pow(2, exp) * (1 + m / 1024);
 }
 
+export function bf16(val) {
+    if (val === 0) return 0;
+    let abs = Math.abs(val);
+    if (abs >= 3.389531389251535e38) return Math.sign(val) * 3.389531389251535e38;
+    if (abs < 9.18355e-41) return 0;
+    if (abs < 1.1754943508222875e-38) return Math.sign(val) * Math.round(abs / 9.18355e-41) * 9.18355e-41;
+    let exp = Math.floor(Math.log2(abs));
+    let m = Math.round((abs / Math.pow(2, exp) - 1) * 128);
+    if (m === 128) { m = 0; exp += 1; }
+    if (exp > 127) return Math.sign(val) * 3.389531389251535e38;
+    return Math.sign(val) * Math.pow(2, exp) * (1 + m / 128);
+}
+
+export function fp8_e5m2(val) {
+    if (val === 0) return 0;
+    let abs = Math.abs(val);
+    if (abs >= 57344) return Math.sign(val) * 57344;
+    if (abs < 1.5258789e-5) return 0;
+    if (abs < 6.1035156e-5) return Math.sign(val) * Math.round(abs / 1.5258789e-5) * 1.5258789e-5;
+    let exp = Math.floor(Math.log2(abs));
+    let m = Math.round((abs / Math.pow(2, exp) - 1) * 4);
+    if (m === 4) { m = 0; exp += 1; }
+    if (exp > 15) return Math.sign(val) * 57344;
+    return Math.sign(val) * Math.pow(2, exp) * (1 + m / 4);
+}
+
 export function fp8_e4m3(val) {
     if (val === 0) return 0;
     let abs = Math.abs(val);

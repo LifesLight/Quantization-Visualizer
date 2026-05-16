@@ -178,7 +178,7 @@
                                 <div class="empty-state">Hover over a bar to inspect</div>
                             </div>
                         </div>
-                        <div class="inspector-card">
+                        <div class="inspector-card" id="card-block">
                             <h4>Sub-Block stats <span id="ins-b-idx">[-]</span></h4>
                             <div class="inspector-data" id="ins-b-data">
                                 <div class="empty-state">Hover over a block to inspect</div>
@@ -215,6 +215,20 @@
                         <input type="number" id="quant-bits" value="4" min="1" max="8">
                     </div>
 
+                    <div id="primitive-settings"
+                        style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
+                        <div class="settings-group">
+                            <label for="primitive-format">Floating Point Format</label>
+                            <select id="primitive-format">
+                                <option value="fp32" selected>FP32 (Baseline)</option>
+                                <option value="fp16">FP16</option>
+                                <option value="bf16">BF16</option>
+                                <option value="fp8_e4m3">FP8 (E4M3)</option>
+                                <option value="fp8_e5m2">FP8 (E5M2)</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div id="block-settings" class="settings-group" style="display: flex;">
                         <label for="block-size">Block Size</label>
                         <select id="block-size">
@@ -226,7 +240,9 @@
 
                     <div id="nvfp4-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">
-                            <label for="nvfp4-tensor-size" title="Number of weights grouped into a single tensor sharing a global FP32 scale.">Simulated Tensor Size</label>
+                            <label for="nvfp4-tensor-size"
+                                title="Number of weights grouped into a single tensor sharing a global FP32 scale.">Simulated
+                                Tensor Size</label>
                             <select id="nvfp4-tensor-size">
                                 <option value="64">64</option>
                                 <option value="128">128</option>

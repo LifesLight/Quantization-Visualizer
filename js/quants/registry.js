@@ -1,4 +1,4 @@
-import noneQuant from './none.js';
+import primitiveQuant from './primitive.js';
 import symQuant from './sym.js';
 import asymQuant from './asym.js';
 import kquantQuant from './kquant.js';
@@ -6,7 +6,7 @@ import turboQuant from './turbo.js';
 import trellisQuant from './trellis.js';
 import nvfp4Quant from './nvfp4.js';
 
-noneQuant.label = "None (FP32 baseline)";
+primitiveQuant.label = "Primitive (FP Types)";
 
 // Hardware
 nvfp4Quant.label = "NVFP4 (Blackwell)";
@@ -22,14 +22,13 @@ trellisQuant.label = "Trellis (Viterbi WHT)";
 
 
 const registry = {
-    'none': noneQuant,
+    'primitive': primitiveQuant,
     'nvfp4': nvfp4Quant,
     'sym': symQuant,
     'asym': asymQuant,
     'kquant': kquantQuant,
     'turbo': turboQuant,
     'trellis': trellisQuant,
-
 };
 
 export default registry;
