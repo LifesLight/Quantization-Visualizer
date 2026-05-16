@@ -106,6 +106,16 @@
                             <button id="gen-btn" class="action-btn secondary" style="flex: 1;">Generate</button>
                         </div>
                     </div>
+
+                    <div class="settings-group" style="margin-top: 10px;">
+                        <label>Load Data from File</label>
+                        <div id="file-drop-zone"
+                            style="border: 2px dashed var(--border-color, #555); border-radius: 6px; padding: 16px; text-align: center; cursor: pointer; font-size: 0.9em; transition: all 0.2s ease;">
+                            Click or drop (.txt, .json, .csv)
+                        </div>
+                        <input type="file" id="file-input" accept=".txt,.json,.csv,.xml" style="display: none;">
+                    </div>
+
                     <div class="input-group" style="margin-top: 10px;">
                         <label for="float-input">Raw Floats Block</label>
                         <textarea id="float-input" placeholder="e.g. 1.2, -0.5, 3.14, -2.2, 0.1"></textarea>

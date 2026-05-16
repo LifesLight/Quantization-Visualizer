@@ -3,6 +3,8 @@ import registry from './quants/registry.js';
 
 export const elements = {
     get inputEl() { return document.getElementById('float-input'); },
+    get fileDropZone() { return document.getElementById('file-drop-zone'); },
+    get fileInput() { return document.getElementById('file-input'); },
     get modeEl() { return document.getElementById('centering-mode'); },
     get qTypeEl() { return document.getElementById('quant-type'); },
     get qBitsEl() { return document.getElementById('quant-bits'); },

@@ -23,6 +23,52 @@ document.addEventListener('DOMContentLoaded', () => {
     populateDynamicSelectors();
     initUIListeners();
 
+    const processFile = (file) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const content = evt.target.result;
+            const floats = content.match(/-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/g);
+            if (floats && floats.length > 0) {
+                elements.inputEl.value = floats.join(', ');
+                resetZoom();
+            } else {
+                alert("No valid numbers found in the file.");
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    if (elements.fileDropZone && elements.fileInput) {
+        elements.fileDropZone.addEventListener('click', () => elements.fileInput.click());
+
+        elements.fileInput.addEventListener('change', (e) => {
+            processFile(e.target.files[0]);
+            e.target.value = ''; // Reset input
+        });
+
+        elements.fileDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            elements.fileDropZone.style.borderColor = 'var(--accent-color, #007bff)';
+            elements.fileDropZone.style.background = 'rgba(128, 128, 128, 0.1)';
+        });
+
+        elements.fileDropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            elements.fileDropZone.style.borderColor = 'var(--border-color, #555)';
+            elements.fileDropZone.style.background = 'transparent';
+        });
+
+        elements.fileDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            elements.fileDropZone.style.borderColor = 'var(--border-color, #555)';
+            elements.fileDropZone.style.background = 'transparent';
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                processFile(e.dataTransfer.files[0]);
+            }
+        });
+    }
+
     elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
         if (e.target.id.startsWith('gen-')) {
             generateData();
