@@ -89,18 +89,17 @@ export function render() {
     }
     const spread = dMax - dMin;
 
-    // Adjusted the mid bounds mode to perfectly match the 1.1x scaling distribution used by the zero-centered equivalent
     const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.05 : Math.max(0.1, absMax) * 1.1;
     const sMin = settings.centeringMode === 'mid' ? dMin - spread * 0.05 : -sMax;
 
     let baselineValue = 0;
     if (settings.centeringMode === 'mid') {
         if (dMin >= 0) {
-            baselineValue = sMin; // Entirely positive range: Start bars naturally at the visual bottom
+            baselineValue = sMin; 
         } else if (dMax <= 0) {
-            baselineValue = sMax; // Entirely negative range: Start bars naturally at the visual top
+            baselineValue = sMax; 
         } else {
-            baselineValue = 0; // Natural intersection crosses 0
+            baselineValue = 0; 
         }
     }
 
@@ -150,7 +149,7 @@ export function render() {
 
     const clientWidth = elements.chartArea.clientWidth || 800;
     const pxPerBar = clientWidth / zCount;
-
+    
     elements.chartArea.style.gap = '';
 
     const hasBlocks = blockMeta && blockMeta.length > 0;
@@ -158,11 +157,11 @@ export function render() {
 
     let frag;
 
-    if (pxPerBar < 1) {
+    if (pxPerBar < 1) { 
         elements.chartArea.style.gap = '0px';
         frag = document.createDocumentFragment();
-
-        const maxBars = clientWidth;
+        
+        const maxBars = clientWidth; 
         const binSize = zCount / maxBars;
 
         const barsPerBlock = settings.blockSize ? (settings.blockSize / binSize) : 0;
@@ -179,7 +178,7 @@ export function render() {
         for (let i = 0; i < maxBars; i++) {
             let binStartIdx = zStart + Math.floor(i * binSize);
             let binEndIdx = i === maxBars - 1 ? zEnd + 1 : zStart + Math.floor((i + 1) * binSize);
-
+            
             let maxMag = -1;
             let bestIdx = binStartIdx;
 
@@ -196,12 +195,11 @@ export function render() {
 
             if (showSupers && sbIdx !== lastSbIdx) {
                 currentSbGrp = document.createElement('div');
-                // Demote the Superblock line visuals strictly to normal limiters if block lines are deactivated
                 currentSbGrp.className = showBlocks ? 'sb-group' : 'block-group';
                 currentSbGrp.style.gap = '0px';
                 frag.appendChild(currentSbGrp);
                 lastSbIdx = sbIdx;
-                lastBlkIdx = -1;
+                lastBlkIdx = -1; 
             }
 
             if (showBlocks && blkIdx !== lastBlkIdx) {
@@ -217,7 +215,7 @@ export function render() {
             }
 
             const bar = createBar(vFloats[bestIdx], vQFloats[bestIdx], bestIdx);
-            bar.style.flex = "1";
+            bar.style.flex = "1"; 
 
             if (currentBlkGrp) {
                 currentBlkGrp.appendChild(bar);
@@ -261,6 +259,29 @@ export function render() {
                     grp.style.flex = visibleBars;
                 }
             });
+        }
+    }
+
+    const visibleTopGroups = Array.from(frag.childNodes).filter(el => el.nodeType === 1 && el.style.display !== 'none');
+    if (visibleTopGroups.length > 0) {
+        // Strip trailing right edge
+        let rightEdge = visibleTopGroups[visibleTopGroups.length - 1];
+        while (rightEdge) {
+            if (rightEdge.classList && (rightEdge.classList.contains('sb-group') || rightEdge.classList.contains('block-group'))) {
+                rightEdge.style.borderRight = 'none';
+            }
+            const visChildren = Array.from(rightEdge.childNodes).filter(el => el.nodeType === 1 && el.style.display !== 'none');
+            rightEdge = visChildren.length > 0 ? visChildren[visChildren.length - 1] : null;
+        }
+
+        // Strip trailing left edge
+        let leftEdge = visibleTopGroups[0];
+        while (leftEdge) {
+            if (leftEdge.classList && (leftEdge.classList.contains('sb-group') || leftEdge.classList.contains('block-group'))) {
+                leftEdge.style.borderLeft = 'none';
+            }
+            const visChildren = Array.from(leftEdge.childNodes).filter(el => el.nodeType === 1 && el.style.display !== 'none');
+            leftEdge = visChildren.length > 0 ? visChildren[0] : null;
         }
     }
 
