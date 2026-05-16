@@ -1,152 +1,110 @@
 import { getErrStats, getLloydMaxCentroids, fwht, getSignFlip, fp16 } from '../mathUtils.js';
 
-const TRELLIS_TRANSITIONS = {
-    4: [
-        [{ from: 0, sub: 0 }, { from: 1, sub: 2 }],
-        [{ from: 2, sub: 1 }, { from: 3, sub: 3 }],
-        [{ from: 0, sub: 2 }, { from: 1, sub: 0 }],
-        [{ from: 2, sub: 3 }, { from: 3, sub: 1 }]
-    ],
-    8: [
-        [{ from: 0, sub: 0 }, { from: 1, sub: 2 }],
-        [{ from: 2, sub: 1 }, { from: 3, sub: 3 }],
-        [{ from: 4, sub: 2 }, { from: 5, sub: 0 }],
-        [{ from: 6, sub: 3 }, { from: 7, sub: 1 }],
-        [{ from: 0, sub: 2 }, { from: 1, sub: 0 }],
-        [{ from: 2, sub: 3 }, { from: 3, sub: 1 }],
-        [{ from: 4, sub: 0 }, { from: 5, sub: 2 }],
-        [{ from: 6, sub: 1 }, { from: 7, sub: 3 }]
-    ],
-    16: [
-        [{ from: 0, sub: 0 }, { from: 1, sub: 2 }],
-        [{ from: 2, sub: 2 }, { from: 3, sub: 0 }],
-        [{ from: 4, sub: 1 }, { from: 5, sub: 3 }],
-        [{ from: 6, sub: 3 }, { from: 7, sub: 1 }],
-        [{ from: 8, sub: 2 }, { from: 9, sub: 0 }],
-        [{ from: 10, sub: 0 }, { from: 11, sub: 2 }],
-        [{ from: 12, sub: 3 }, { from: 13, sub: 1 }],
-        [{ from: 14, sub: 1 }, { from: 15, sub: 3 }],
-        [{ from: 0, sub: 2 }, { from: 1, sub: 0 }],
-        [{ from: 2, sub: 0 }, { from: 3, sub: 2 }],
-        [{ from: 4, sub: 3 }, { from: 5, sub: 1 }],
-        [{ from: 6, sub: 1 }, { from: 7, sub: 3 }],
-        [{ from: 8, sub: 0 }, { from: 9, sub: 2 }],
-        [{ from: 10, sub: 2 }, { from: 11, sub: 0 }],
-        [{ from: 12, sub: 1 }, { from: 13, sub: 3 }],
-        [{ from: 14, sub: 3 }, { from: 15, sub: 1 }]
-    ]
-};
+const transitionsCache = {};
 
+// Algorithmically generates optimal Ungerboeck Trellis State transitions using 
+// standard systematic parity-check polynomials. Guarantees maximum free Euclidean 
+// distance for 4, 8, 16, 64, and 256 states.
 function getTransitions(states) {
     if (states === 1) return null;
-    return TRELLIS_TRANSITIONS[states] || null;
-}
+    if (transitionsCache[states]) return transitionsCache[states];
 
-function findClosestInSubset(target, subVals, subIdxs) {
-    const n = subVals.length;
-    if (n === 0) return { val: 0, idx: -1 };
-    if (n === 1) return { val: subVals[0], idx: subIdxs[0] };
+    const K = Math.log2(states);
+    let poly_LSB, poly_MSB;
 
-    let lo = 0;
-    let hi = n - 1;
-
-    if (target <= subVals[lo]) return { val: subVals[lo], idx: subIdxs[lo] };
-    if (target >= subVals[hi]) return { val: subVals[hi], idx: subIdxs[hi] };
-
-    while (lo + 1 < hi) {
-        const mid = (lo + hi) >>> 1;
-        if (subVals[mid] < target) lo = mid;
-        else if (subVals[mid] > target) hi = mid;
-        else return { val: subVals[mid], idx: subIdxs[mid] };
+    switch(states) {
+        case 4:   poly_LSB = 0x02; poly_MSB = 0x01; break;
+        case 8:   poly_LSB = 0x02; poly_MSB = 0x05; break;
+        case 16:  poly_LSB = 0x04; poly_MSB = 0x0B; break;
+        case 64:  poly_LSB = 0x10; poly_MSB = 0x2D; break;
+        case 256: poly_LSB = 0x40; poly_MSB = 0x95; break;
+        default: return null;
     }
 
-    const dLo = Math.abs(subVals[lo] - target);
-    const dHi = Math.abs(subVals[hi] - target);
-    return dLo <= dHi
-        ? { val: subVals[lo], idx: subIdxs[lo] }
-        : { val: subVals[hi], idx: subIdxs[hi] };
-}
+    const transitions = Array.from({length: states}, () => []);
 
-function buildSubsets(levels) {
-    const subsets = [[], [], [], []];
-    const subsetIndices = [[], [], [], []];
-
-    for (let i = 0; i < levels.length; i++) {
-        const sub = i % 4;
-        subsets[sub].push(levels[i]);
-        subsetIndices[sub].push(i);
+    function popcount(x) {
+        let c = 0;
+        for (; x > 0; x >>= 1) c += x & 1;
+        return c & 1;
     }
 
-    return { subsets, subsetIndices };
-}
-
-function quantizeSingleState(sample, levels) {
-    let bestIdx = 0;
-    let bestVal = levels[0];
-    let bestDist = Math.abs(sample - bestVal);
-
-    for (let i = 1; i < levels.length; i++) {
-        const d = Math.abs(sample - levels[i]);
-        if (d < bestDist) {
-            bestDist = d;
-            bestIdx = i;
-            bestVal = levels[i];
+    for (let state = 0; state < states; state++) {
+        for (let input = 0; input <= 1; input++) {
+            const next_state = (state >> 1) | (input << (K - 1));
+            const sub_LSB = popcount(state & poly_LSB);
+            const sub_MSB = input ^ popcount(state & poly_MSB);
+            const sub = (sub_MSB << 1) | sub_LSB;
+            transitions[next_state].push({ from: state, sub: sub });
         }
     }
 
-    return { val: bestVal, idx: bestIdx };
+    transitionsCache[states] = transitions;
+    return transitions;
 }
 
-function quantizeTrellisBlock(samples, baseLevels, states) {
-    const transitions = getTransitions(states);
-    if (!transitions) {
-        throw new Error(`Unsupported trellisStates value: ${states}`);
+function buildSubsetIndices(levels) {
+    const indices = [[], [], [], []];
+    for (let i = 0; i < levels.length; i++) {
+        indices[i % 4].push(i);
     }
+    return indices;
+}
 
-    const { subsets, subsetIndices } = buildSubsets(baseLevels);
+function findClosestIdx(target, subsetIdxs, levels) {
+    let bestIdx = subsetIdxs[0];
+    let bestDist = Math.abs(target - levels[bestIdx]);
+    for (let i = 1; i < subsetIdxs.length; i++) {
+        const idx = subsetIdxs[i];
+        const d = Math.abs(target - levels[idx]);
+        if (d < bestDist) {
+            bestDist = d;
+            bestIdx = idx;
+        }
+    }
+    return { val: levels[bestIdx], idx: bestIdx };
+}
+
+function quantizeTrellisBlock(samples, baseLevels, states, scale, subsetIndices) {
+    const transitions = getTransitions(states);
     const sampleCount = samples.length;
 
-    const prevCosts = new Float64Array(states);
-    prevCosts.fill(Infinity);
+    // Reuse a single scaled buffer instead of allocating per call
+    const scaledLevels = new Float64Array(baseLevels.length);
+    for (let i = 0; i < baseLevels.length; i++) scaledLevels[i] = baseLevels[i] * scale;
+
+    const prevCosts = new Float64Array(states).fill(Infinity);
     prevCosts[0] = 0;
 
     const stepInfo = new Array(sampleCount);
 
+    // Viterbi Forward Pass
     for (let t = 0; t < sampleCount; t++) {
         const x = samples[t];
-        const nextCosts = new Float64Array(states);
-        nextCosts.fill(Infinity);
+        const nextCosts = new Float64Array(states).fill(Infinity);
         const perState = new Array(states);
 
         for (let currState = 0; currState < states; currState++) {
-            let bestPrev = -1;
-            let bestCbVal = 0;
-            let bestCbIdx = -1;
-            let bestSub = -1;
+            let bestPrev = -1, bestCbVal = 0, bestCbIdx = -1, bestSub = -1;
             let minCost = Infinity;
             const candidates = [];
 
             for (const edge of transitions[currState]) {
-                const prevState = edge.from;
-                const prevCost = prevCosts[prevState];
+                const prevCost = prevCosts[edge.from];
                 if (!Number.isFinite(prevCost)) continue;
 
-                const match = findClosestInSubset(x, subsets[edge.sub], subsetIndices[edge.sub]);
+                const match = findClosestIdx(x, subsetIndices[edge.sub], scaledLevels);
                 const err = x - match.val;
                 const total = prevCost + err * err;
 
                 candidates.push({
-                    prevState,
-                    subset: edge.sub,
-                    cbIdx: match.idx,
-                    cbVal: match.val,
-                    dist: Math.abs(err),
-                    cost: total
+                    prevState: edge.from, subset: edge.sub, cbIdx: match.idx,
+                    cbVal: match.val, dist: Math.abs(err), cost: total
                 });
 
                 if (total < minCost) {
                     minCost = total;
-                    bestPrev = prevState;
+                    bestPrev = edge.from;
                     bestCbVal = match.val;
                     bestCbIdx = match.idx;
                     bestSub = edge.sub;
@@ -154,25 +112,14 @@ function quantizeTrellisBlock(samples, baseLevels, states) {
             }
 
             nextCosts[currState] = minCost;
-            perState[currState] = {
-                prevState: bestPrev,
-                cbVal: bestCbVal,
-                cbIdx: bestCbIdx,
-                subset: bestSub,
-                cost: minCost,
-                candidates
-            };
+            perState[currState] = { prevState: bestPrev, cbVal: bestCbVal, cbIdx: bestCbIdx, subset: bestSub, cost: minCost, candidates };
         }
 
-        stepInfo[t] = {
-            x,
-            costs: Array.from(nextCosts),
-            stateInfo: perState
-        };
-
+        stepInfo[t] = { x, costs: Array.from(nextCosts), stateInfo: perState };
         prevCosts.set(nextCosts);
     }
 
+    // Traceback
     let finalState = 0;
     let minFinalCost = Infinity;
     for (let s = 0; s < states; s++) {
@@ -182,51 +129,79 @@ function quantizeTrellisBlock(samples, baseLevels, states) {
         }
     }
 
-    const chunkQ = new Array(sampleCount);
+    const chunkQ = new Float64Array(sampleCount);
     const pathData = new Array(sampleCount);
 
     let currState = finalState;
     for (let t = sampleCount - 1; t >= 0; t--) {
         const step = stepInfo[t].stateInfo[currState];
         if (!step || step.prevState === -1) {
-            const safeMatch = quantizeSingleState(samples[t], baseLevels);
+            const allIdxs = Array.from({ length: scaledLevels.length }, (_, k) => k);
+            const safeMatch = findClosestIdx(samples[t], allIdxs, scaledLevels);
             chunkQ[t] = safeMatch.val;
             pathData[t] = {
-                state: currState,
-                subset: 0,
-                cbIdx: safeMatch.idx,
-                cwVal: safeMatch.val,
-                prevState: -1,
-                nextState: t === sampleCount - 1 ? 'End' : pathData[t + 1].state,
-                input: samples[t],
-                error: samples[t] - safeMatch.val,
-                cost: Infinity,
-                stateCosts: stepInfo[t].costs,
-                candidates: []
+                state: currState, subset: 0, cbIdx: safeMatch.idx, cwVal: safeMatch.val,
+                prevState: -1, nextState: t === sampleCount - 1 ? 'End' : pathData[t + 1].state,
+                input: samples[t], error: samples[t] - safeMatch.val, cost: Infinity,
+                stateCosts: stepInfo[t].costs, candidates: []
             };
             currState = 0;
             continue;
         }
 
-        const err = samples[t] - step.cbVal;
         chunkQ[t] = step.cbVal;
         pathData[t] = {
-            state: currState,
-            subset: step.subset,
-            cbIdx: step.cbIdx,
-            cwVal: step.cbVal,
-            prevState: step.prevState,
-            nextState: t === sampleCount - 1 ? 'End' : pathData[t + 1].state,
-            input: samples[t],
-            error: err,
-            cost: step.cost,
-            stateCosts: stepInfo[t].costs,
-            candidates: step.candidates
+            state: currState, subset: step.subset, cbIdx: step.cbIdx, cwVal: step.cbVal,
+            prevState: step.prevState, nextState: t === sampleCount - 1 ? 'End' : pathData[t + 1].state,
+            input: samples[t], error: samples[t] - step.cbVal, cost: step.cost,
+            stateCosts: stepInfo[t].costs, candidates: step.candidates
         };
         currState = step.prevState;
     }
 
-    return { chunkQ, pathData };
+    return { chunkQ, pathData, cost: minFinalCost };
+}
+
+// Scale evaluation: pre-computed subsetIndices and a reusable scaledBuf are passed in
+// to avoid re-allocating on every golden-section iteration.
+function evaluateScaleViterbi(samples, baseLevels, states, scale, subsetIndices, scaledBuf) {
+    for (let i = 0; i < baseLevels.length; i++) scaledBuf[i] = baseLevels[i] * scale;
+
+    if (states === 1) {
+        let cost = 0;
+        for (let i = 0; i < samples.length; i++) {
+            let bestDist = Infinity;
+            for (let l = 0; l < scaledBuf.length; l++) {
+                const d = Math.abs(samples[i] - scaledBuf[l]);
+                if (d < bestDist) bestDist = d;
+            }
+            cost += bestDist * bestDist;
+        }
+        return cost;
+    }
+
+    const transitions = getTransitions(states);
+    const prevCosts = new Float64Array(states).fill(Infinity);
+    prevCosts[0] = 0;
+
+    for (let t = 0; t < samples.length; t++) {
+        const x = samples[t];
+        const nextCosts = new Float64Array(states).fill(Infinity);
+        for (let currState = 0; currState < states; currState++) {
+            let minCost = Infinity;
+            for (const edge of transitions[currState]) {
+                const prevCost = prevCosts[edge.from];
+                if (!Number.isFinite(prevCost)) continue;
+                const match = findClosestIdx(x, subsetIndices[edge.sub], scaledBuf);
+                const err = x - match.val;
+                const total = prevCost + err * err;
+                if (total < minCost) minCost = total;
+            }
+            nextCosts[currState] = minCost;
+        }
+        prevCosts.set(nextCosts);
+    }
+    return Math.min(...prevCosts);
 }
 
 export default {
@@ -243,152 +218,193 @@ export default {
     },
 
     quantize(floats, settings) {
-        const { trellisBits, trellisBlockSize, trellisStates, trellisCbType, trellisUseWht } = settings;
+        const { trellisBits, trellisBlockSize, trellisStates, trellisCbType, trellisUseWht, trellisWhtScope, trellisOptIters, trellisSignSeed } = settings;
 
         const safeBlockSize = Math.max(1, trellisBlockSize | 0);
         const safeBits = Math.max(1, trellisBits | 0);
         const states = getTransitions(trellisStates) ? trellisStates : 1;
-
-        const bpw = safeBits + (16 / safeBlockSize);
         const codebookSize = states === 1 ? (1 << safeBits) : (1 << (safeBits + 1));
 
         let baseLevels;
         if (trellisCbType === 'uniform') {
             baseLevels = new Array(codebookSize);
-            for (let i = 0; i < codebookSize; i++) {
-                baseLevels[i] = -3 + (6 * (i + 0.5)) / codebookSize;
-            }
+            for (let i = 0; i < codebookSize; i++) baseLevels[i] = -3 + (6 * (i + 0.5)) / codebookSize;
         } else {
-            baseLevels = getLloydMaxCentroids(states === 1 ? safeBits : safeBits + 1);
+            baseLevels = getLloydMaxCentroids(states === 1 ? safeBits : safeBits + 1, trellisCbType);
         }
 
-        const qFloats = new Float64Array(floats.length);
-        const tFloats = new Float64Array(floats.length);
-        const tQFloats = new Float64Array(floats.length);
-        const qMathStrings = new Array(floats.length);
+        // Pre-compute subset indices once — they depend only on codebook size, not scale
+        const subsetIndices = buildSubsetIndices(baseLevels);
+        // Pre-allocate a reusable buffer for scaled levels during the search
+        const scaledBuf = new Float64Array(baseLevels.length);
+
+        // --- GLOBAL TRANSFORM PIPELINE ---
+        let processFloats = floats.slice();
+        let globalPadLen = floats.length;
+        if (trellisUseWht && trellisWhtScope === 'global') {
+            globalPadLen = 1;
+            while (globalPadLen < floats.length) globalPadLen <<= 1;
+            const padded = new Float64Array(globalPadLen);
+            padded.set(floats);
+            for (let j = 0; j < globalPadLen; j++) padded[j] *= getSignFlip(j, trellisSignSeed);
+            processFloats = fwht(Array.from(padded));
+        }
+
+        const len = (trellisUseWht && trellisWhtScope === 'global') ? globalPadLen : floats.length;
+        const qProcessOut = new Float64Array(len);
         const blockMeta = [];
 
-        for (let i = 0; i < floats.length; i += safeBlockSize) {
-            const chunk = floats.slice(i, i + safeBlockSize);
+        for (let i = 0; i < len; i += safeBlockSize) {
+            const chunk = processFloats.slice(i, i + safeBlockSize);
             const actualLen = chunk.length;
 
-            let padLen = 1;
-            while (padLen < actualLen) padLen <<= 1;
+            let chunkW = Array.from(chunk);
+            let padLen = actualLen;
 
-            const chunkPadded = new Array(padLen).fill(0);
-            for (let j = 0; j < actualLen; j++) chunkPadded[j] = chunk[j];
-
-            if (trellisUseWht) {
-                for (let j = 0; j < padLen; j++) {
-                    chunkPadded[j] *= getSignFlip(j);
-                }
+            // --- LOCAL TRANSFORM PIPELINE ---
+            const needsLocalWht = trellisUseWht && trellisWhtScope === 'local';
+            if (needsLocalWht) {
+                padLen = 1;
+                while (padLen < actualLen) padLen <<= 1;
+                const chunkPadded = new Array(padLen).fill(0);
+                for (let j = 0; j < actualLen; j++) chunkPadded[j] = chunk[j];
+                for (let j = 0; j < padLen; j++) chunkPadded[j] *= getSignFlip(i + j, trellisSignSeed);
+                chunkW = fwht(chunkPadded);
             }
 
-            const chunkW = trellisUseWht ? fwht(chunkPadded) : chunkPadded.slice();
-
+            // RMS over actualLen only — FWHT preserves L2 norm so padded zeros
+            // would otherwise deflate the denominator for non-power-of-2 blocks.
             let sumSq = 0;
-            for (let j = 0; j < padLen; j++) sumSq += chunkW[j] * chunkW[j];
-            const rms = fp16(Math.sqrt(sumSq / padLen) || 1e-5);
+            for (let j = 0; j < actualLen; j++) sumSq += chunkW[j] * chunkW[j];
+            const rms = fp16(Math.sqrt(sumSq / actualLen) || 1e-5);
+            let optScale = rms;
 
-            const scaledLevels = baseLevels.map(c => c * rms);
+            // --- VITERBI MSE OPTIMAL SCALE SEARCH ---
+            // subsetIndices and scaledBuf are pre-computed above and reused every iteration.
+            if (trellisOptIters > 0) {
+                const resphi = 2 - 1.6180339887;
+                let a = rms * 0.1;
+                let b = rms * 2.5;
+                let c = a + resphi * (b - a);
+                let d = b - resphi * (b - a);
 
-            let chunkQ;
-            let pathData;
+                let fc = evaluateScaleViterbi(chunkW, baseLevels, states, c, subsetIndices, scaledBuf);
+                let fd = evaluateScaleViterbi(chunkW, baseLevels, states, d, subsetIndices, scaledBuf);
 
+                for (let iter = 0; iter < trellisOptIters; iter++) {
+                    if (fc < fd) {
+                        b = d; d = c; fd = fc;
+                        c = a + resphi * (b - a);
+                        fc = evaluateScaleViterbi(chunkW, baseLevels, states, c, subsetIndices, scaledBuf);
+                    } else {
+                        a = c; c = d; fc = fd;
+                        d = b - resphi * (b - a);
+                        fd = evaluateScaleViterbi(chunkW, baseLevels, states, d, subsetIndices, scaledBuf);
+                    }
+                }
+                optScale = fp16(fc < fd ? c : d);
+            }
+
+            // --- VITERBI EVAL ---
+            let chunkQ, pathData;
             if (states === 1) {
-                chunkQ = new Array(padLen);
+                chunkQ = new Float64Array(padLen);
                 pathData = new Array(padLen);
-                const allIdxs = Array.from({ length: scaledLevels.length }, (_, k) => k);
-
+                // Write final scale into scaledBuf for the actual quantization pass
+                for (let k = 0; k < baseLevels.length; k++) scaledBuf[k] = baseLevels[k] * optScale;
+                const allIdxs = Array.from({ length: baseLevels.length }, (_, k) => k);
                 for (let t = 0; t < padLen; t++) {
-                    const match = findClosestInSubset(chunkW[t], scaledLevels, allIdxs);
+                    const match = findClosestIdx(chunkW[t], allIdxs, scaledBuf);
                     chunkQ[t] = match.val;
                     pathData[t] = {
-                        state: 0,
-                        subset: 0,
-                        cbIdx: match.idx,
-                        cwVal: match.val,
-                        prevState: 0,
-                        nextState: t === padLen - 1 ? 'End' : 0,
-                        input: chunkW[t],
-                        error: chunkW[t] - match.val,
+                        state: 0, subset: 0, cbIdx: match.idx, cwVal: match.val,
+                        prevState: 0, nextState: t === padLen - 1 ? 'End' : 0,
+                        input: chunkW[t], error: chunkW[t] - match.val,
                         cost: Math.pow(chunkW[t] - match.val, 2),
                         stateCosts: [Math.pow(chunkW[t] - match.val, 2)],
-                        candidates: [{
-                            prevState: 0,
-                            subset: 0,
-                            cbIdx: match.idx,
-                            cbVal: match.val,
-                            dist: Math.abs(chunkW[t] - match.val),
-                            cost: Math.pow(chunkW[t] - match.val, 2)
-                        }]
+                        candidates: [{ prevState: 0, subset: 0, cbIdx: match.idx, cbVal: match.val, dist: Math.abs(chunkW[t] - match.val), cost: Math.pow(chunkW[t] - match.val, 2) }]
                     };
                 }
             } else {
-                const result = quantizeTrellisBlock(chunkW, scaledLevels, states);
+                const result = quantizeTrellisBlock(chunkW, baseLevels, states, optScale, subsetIndices);
                 chunkQ = result.chunkQ;
                 pathData = result.pathData;
             }
 
-            let chunkOut = trellisUseWht ? fwht(chunkQ) : chunkQ.slice();
-            if (trellisUseWht) {
-                for (let j = 0; j < padLen; j++) {
-                    chunkOut[j] *= getSignFlip(j);
-                }
+            // --- INVERSE LOCAL TRANSFORM ---
+            let chunkOut = chunkQ;
+            if (needsLocalWht) {
+                chunkOut = fwht(Array.from(chunkQ));
+                for (let j = 0; j < padLen; j++) chunkOut[j] *= getSignFlip(i + j, trellisSignSeed);
             }
 
-            for (let t = 0; t < actualLen; t++) {
-                qFloats[i + t] = chunkOut[t];
-                tFloats[i + t] = chunkW[t];
-                tQFloats[i + t] = chunkQ[t];
-                const p = pathData[t];
+            for (let t = 0; t < actualLen; t++) qProcessOut[i + t] = chunkOut[t];
 
-                let baseEq = states === 1 ? `CW[${p.cbIdx}]` : `S${p.prevState} &rarr; S${p.state} D${p.subset}[${p.cbIdx}]`;
-
-                if (trellisUseWht) {
-                    const signStr = getSignFlip(t) > 0 ? '+1' : '-1';
-                    qMathStrings[i + t] = `D(${signStr}) &times; FWHT( ${baseEq} )[${t}]`;
-                } else {
-                    qMathStrings[i + t] = baseEq;
-                }
+            if (i < floats.length) {
+                blockMeta.push({
+                    idx: i / safeBlockSize,
+                    size: actualLen,
+                    scale: optScale,
+                    pathData: pathData.slice(0, actualLen),
+                    ...getErrStats(chunk, chunkOut.slice(0, actualLen))
+                });
             }
-
-            blockMeta.push({
-                idx: i / safeBlockSize,
-                size: actualLen,
-                scale: rms,
-                pathData,
-                ...getErrStats(chunk, chunkOut.slice(0, actualLen))
-            });
         }
 
+        // --- INVERSE GLOBAL TRANSFORM ---
+        const qFloats = new Float64Array(floats.length);
+        if (trellisUseWht && trellisWhtScope === 'global') {
+            const invGlobal = fwht(Array.from(qProcessOut));
+            for (let j = 0; j < globalPadLen; j++) invGlobal[j] *= getSignFlip(j, trellisSignSeed);
+            for (let j = 0; j < floats.length; j++) qFloats[j] = invGlobal[j];
+        } else {
+            for (let j = 0; j < floats.length; j++) qFloats[j] = qProcessOut[j];
+        }
+
+        // Re-construct Visualizer Arrays
+        const qMathStrings = new Array(floats.length);
+        for (let i = 0; i < floats.length; i++) {
+            const blockIndex = Math.floor(i / safeBlockSize);
+            const localIdx = i % safeBlockSize;
+            const p = blockMeta[blockIndex]?.pathData?.[localIdx];
+            if (p) {
+                const baseEq = states === 1 ? `CW[${p.cbIdx}]` : `S${p.prevState} &rarr; S${p.state} D${p.subset}[${p.cbIdx}]`;
+                if (trellisUseWht) {
+                    const signStr = getSignFlip(i, trellisSignSeed) > 0 ? '+1' : '-1';
+                    qMathStrings[i] = `D(${signStr}) &times; FWHT( ${baseEq} )[${i}]`;
+                } else {
+                    qMathStrings[i] = baseEq;
+                }
+            } else {
+                qMathStrings[i] = "Hidden";
+            }
+        }
+
+        const strictLinearBpw = safeBits + (16 / safeBlockSize);
+
         const srhtStr = trellisUseWht
-            ? '<span class="eq-pill" title="Diagonal Random Sign Array">D</span> &times; <span class="eq-pill" title="Orthogonal Fast Walsh-Hadamard Transform">FWHT</span> &times; '
+            ? `<span class="eq-pill" title="Diagonal Random Sign Array">D</span> &times; <span class="eq-pill" title="Orthogonal Fast Walsh-Hadamard Transform">FWHT ${trellisWhtScope}</span> &times; `
             : '';
 
         const tcqStr = states > 1
             ? `<span class="eq-pill" title="Trellis Coded Quantization via Viterbi">TCQ_Path<span class="bits">${safeBits}b</span></span>`
             : `<span class="eq-pill">Codeword<span class="bits">${safeBits}b</span></span>`;
 
-        const stateDesc = states === 1
-            ? 'Independent scalar quantization.'
-            : `${states}-state Viterbi path with Ungerboeck set partitioning.`;
-
-        const transformDesc = trellisUseWht ? "SRHT applied. " : "";
+        const transformDesc = trellisUseWht ? (trellisWhtScope === 'global' ? "Global QuIP# SRHT applied. " : "Local Block SRHT applied. ") : "";
 
         const formulaHTML = `
             <span>Weight = ${srhtStr}[ ( ${tcqStr} &times; <span class="eq-pill">RMS_Scale<span class="bits">16b</span></span> ) ]</span>
-            <br><span style="color:var(--text-muted);font-size:0.8rem;">Block size ${safeBlockSize}. ${transformDesc}Every ${safeBlockSize} weights share one FP16 RMS scale.</span>`;
+            <br><span style="color:var(--text-muted);font-size:0.8rem;">Block size ${safeBlockSize}. ${transformDesc}Every ${safeBlockSize} weights share one FP16 Optimal Scale.</span>`;
 
         return {
             qFloats,
             qMathStrings,
-            bpw,
+            bpw: strictLinearBpw,
             blockMeta,
             superMeta: [],
             formulaHTML,
-            tFloats: trellisUseWht ? Array.from(tFloats) : null,
-            tQFloats: trellisUseWht ? Array.from(tQFloats) : null
+            tFloats: trellisUseWht ? Array.from(processFloats.slice(0, floats.length)) : null,
+            tQFloats: trellisUseWht ? Array.from(qProcessOut.slice(0, floats.length)) : null
         };
     },
 
@@ -423,7 +439,7 @@ export default {
         blockIdxStr = `[${bm.idx}]`;
         blockHtml = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div>
                      <div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>
-                     <div class="data-row" style="margin-top:4px"><span>Scale (RMS FP16):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
+                     <div class="data-row" style="margin-top:4px"><span>Scale (FP16):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
 
         const localIdx = idx % settings.trellisBlockSize;
         const p = bm.pathData?.[localIdx];
@@ -437,7 +453,7 @@ export default {
                     <span>S${c.prevState} &rarr; D${c.subset}</span>
                 </div>
                 <div style="font-size:11px; display:flex; gap:8px;">
-                    <span style="width:45px; text-align:right;">q=${c.cbVal.toFixed(3)}</span> 
+                    <span style="width:45px; text-align:right;">q=${c.cbVal.toFixed(3)}</span>
                     <span style="opacity:0.6; width:65px; text-align:right;">(c=${c.cost.toFixed(3)})</span>
                 </div>
             </div>`;

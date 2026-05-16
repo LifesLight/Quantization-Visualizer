@@ -1,13 +1,16 @@
 const lloydMaxCache = {};
 
-export function getLloydMaxCentroids(bits) {
-    if (lloydMaxCache[bits]) return lloydMaxCache[bits];
+export function getLloydMaxCentroids(bits, dist = 'normal') {
+    const cacheKey = `${bits}_${dist}`;
+    if (lloydMaxCache[cacheKey]) return lloydMaxCache[cacheKey];
     const levels = Math.pow(2, bits);
     const centroids = new Float64Array(levels);
 
     for (let i = 0; i < levels; i++) centroids[i] = -3 + (6 * (i + 0.5)) / levels;
 
-    const pdf = (x) => Math.exp(-x * x / 2);
+    const pdf = dist === 'laplace' ?
+        (x) => 0.5 * Math.exp(-Math.abs(x)) :
+        (x) => Math.exp(-x * x / 2);
 
     for (let iter = 0; iter < 100; iter++) {
         const thresholds = new Float64Array(levels + 1);
@@ -31,8 +34,8 @@ export function getLloydMaxCentroids(bits) {
             if (den > 1e-9) centroids[i] = num / den;
         }
     }
-    lloydMaxCache[bits] = Array.from(centroids);
-    return lloydMaxCache[bits];
+    lloydMaxCache[cacheKey] = Array.from(centroids);
+    return lloydMaxCache[cacheKey];
 }
 
 export function fwht(data) {
@@ -57,8 +60,8 @@ export function fwht(data) {
     return Array.from(res).slice(0, n);
 }
 
-export function getSignFlip(index) {
-    let h = Math.sin(index * 12.9898 + 1) * 43758.5453;
+export function getSignFlip(index, seed = 0) {
+    let h = Math.sin(index * 12.9898 + seed * 78.233 + 1) * 43758.5453;
     return (h - Math.floor(h)) >= 0.5 ? 1 : -1;
 }
 

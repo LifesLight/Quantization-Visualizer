@@ -330,24 +330,55 @@
                                 <option value="1">1-State (Greedy Baseline)</option>
                                 <option value="4" selected>4-State (Standard)</option>
                                 <option value="8">8-State (High Precision)</option>
-                                <option value="16">16-State (Extreme)</option>
+                                <option value="16">16-State (Heavy)</option>
+                                <option value="64">64-State (Research)</option>
+                                <option value="256">256-State (Extreme)</option>
                             </select>
                         </div>
                         <div class="settings-group">
                             <label for="trellis-cb-type"
-                                title="How the codebook levels are spaced. Uniform is evenly spaced; Lloyd-Max matches Gaussian-like values better.">
+                                title="How the codebook levels are spaced. Uniform is evenly spaced; Lloyd-Max matches underlying values better.">
                                 Codebook Distribution
                             </label>
                             <select id="trellis-cb-type">
                                 <option value="lloyd" selected>Lloyd-Max (Gaussian)</option>
+                                <option value="laplace">Lloyd-Max (Laplacian)</option>
                                 <option value="uniform">Uniform (Linear)</option>
                             </select>
                         </div>
                         <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
-                            title="Diagonal sign flip plus Walsh-Hadamard transform before TCQ. This reshapes the coefficient distribution so the codebook fit is often better.">
+                            title="Subsampled Randomized Hadamard Transform to suppress outliers.">
                             <input type="checkbox" id="trellis-wht" style="width: auto; margin: 0; cursor: pointer;">
                             <label for="trellis-wht" style="margin: 0; cursor: pointer;">Enable SRHT</label>
                         </div>
+                        
+                        <!-- Advanced Trellis Settings Wrapper -->
+                        <div class="trellis-advanced-wrapper" style="margin-top: 4px;">
+                            <button id="trellis-adv-toggle" class="adv-toggle-btn">
+                                <span>Advanced Parameters</span>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path d="M7 10l5 5 5-5z" />
+                                </svg>
+                            </button>
+                            <div id="trellis-adv-panel" class="adv-panel" style="display: none; padding-top: 8px;">
+                                <div class="settings-group">
+                                    <label for="trellis-wht-scope" title="Global WHT handles sequence outliers like QuIP#. Local confines it to Viterbi blocks.">SRHT Scope</label>
+                                    <select id="trellis-wht-scope">
+                                        <option value="global" selected>Global (QuIP# Style)</option>
+                                        <option value="local">Local (Per-Block)</option>
+                                    </select>
+                                </div>
+                                <div class="settings-group">
+                                    <label for="trellis-opt-iters" title="Grid-searches optimal scale utilizing Viterbi forward pass (MSE reduction). Set > 0 to enable.">Scale Opt Iters</label>
+                                    <input type="number" id="trellis-opt-iters" value="0" min="0" max="25">
+                                </div>
+                                <div class="settings-group">
+                                    <label for="trellis-sign-seed" title="Seed for deterministic pseudo-random SRHT column permutation.">SRHT Sign Seed</label>
+                                    <input type="number" id="trellis-sign-seed" value="42">
+                                </div>
+                            </div>
+                        </div>
+                        
                     </div>
 
                     <div id="kquant-settings"

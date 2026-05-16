@@ -45,6 +45,11 @@ export const elements = {
     get trellisStatesEl() { return document.getElementById('trellis-states'); },
     get trellisCbTypeEl() { return document.getElementById('trellis-cb-type'); },
     get trellisWhtEl() { return document.getElementById('trellis-wht'); },
+    get trellisWhtScopeEl() { return document.getElementById('trellis-wht-scope'); },
+    get trellisOptItersEl() { return document.getElementById('trellis-opt-iters'); },
+    get trellisSignSeedEl() { return document.getElementById('trellis-sign-seed'); },
+    get trellisAdvToggle() { return document.getElementById('trellis-adv-toggle'); },
+    get trellisAdvPanel() { return document.getElementById('trellis-adv-panel'); },
     get mxfpSettings() { return document.getElementById('mxfp-settings'); },
     get mxfpFormatEl() { return document.getElementById('mxfp-format'); },
     get primitiveSettings() { return document.getElementById('primitive-settings'); },
@@ -72,7 +77,8 @@ export const elements = {
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
             this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
-            this.trellisWhtEl, this.mxfpFormatEl, this.primitiveFormatEl
+            this.trellisWhtEl, this.trellisWhtScopeEl, this.trellisOptItersEl, this.trellisSignSeedEl, 
+            this.mxfpFormatEl, this.primitiveFormatEl
         ].filter(el => el !== null);
     }
 };
@@ -153,6 +159,9 @@ export function getSettings() {
         trellisStates: parseInt(elements.trellisStatesEl.value) || 4,
         trellisCbType: elements.trellisCbTypeEl.value,
         trellisUseWht: elements.trellisWhtEl?.checked || false,
+        trellisWhtScope: elements.trellisWhtScopeEl?.value || 'global',
+        trellisOptIters: parseInt(elements.trellisOptItersEl?.value) || 0,
+        trellisSignSeed: parseInt(elements.trellisSignSeedEl?.value) || 42,
         mxfpFormat: elements.mxfpFormatEl?.value || 'mxfp4_e2m1',
         primitiveFormat: elements.primitiveFormatEl?.value || 'fp32',
         centeringMode: elements.modeEl.value
@@ -195,6 +204,12 @@ export function initUIListeners() {
         const isHidden = elements.advPanel.style.display === 'none';
         elements.advPanel.style.display = isHidden ? 'flex' : 'none';
         elements.advToggleBtn.classList.toggle('open', isHidden);
+    });
+
+    elements.trellisAdvToggle?.addEventListener('click', () => {
+        const isHidden = elements.trellisAdvPanel.style.display === 'none';
+        elements.trellisAdvPanel.style.display = isHidden ? 'flex' : 'none';
+        elements.trellisAdvToggle.classList.toggle('open', isHidden);
     });
 
     elements.distEl.addEventListener('change', (e) => {
