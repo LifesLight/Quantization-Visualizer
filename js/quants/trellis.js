@@ -12,16 +12,16 @@ function getTransitions(states) {
     const K = Math.log2(states);
     let poly_LSB, poly_MSB;
 
-    switch(states) {
-        case 4:   poly_LSB = 0x02; poly_MSB = 0x01; break;
-        case 8:   poly_LSB = 0x02; poly_MSB = 0x05; break;
-        case 16:  poly_LSB = 0x04; poly_MSB = 0x0B; break;
-        case 64:  poly_LSB = 0x10; poly_MSB = 0x2D; break;
+    switch (states) {
+        case 4: poly_LSB = 0x02; poly_MSB = 0x01; break;
+        case 8: poly_LSB = 0x02; poly_MSB = 0x05; break;
+        case 16: poly_LSB = 0x04; poly_MSB = 0x0B; break;
+        case 64: poly_LSB = 0x10; poly_MSB = 0x2D; break;
         case 256: poly_LSB = 0x40; poly_MSB = 0x95; break;
         default: return null;
     }
 
-    const transitions = Array.from({length: states}, () => []);
+    const transitions = Array.from({ length: states }, () => []);
 
     function popcount(x) {
         let c = 0;
@@ -238,19 +238,69 @@ export default {
         // Pre-allocate a reusable buffer for scaled levels during the search
         const scaledBuf = new Float64Array(baseLevels.length);
 
+        const isGlobalWht = trellisUseWht && trellisWhtScope === 'global';
+        const needsLocalWht = trellisUseWht && trellisWhtScope === 'local';
+
+        const tFloatsOut = trellisUseWht ? new Float64Array(floats.length) : null;
+        const tQFloatsOut = trellisUseWht ? new Float64Array(floats.length) : null;
+
         // --- GLOBAL TRANSFORM PIPELINE ---
         let processFloats = floats.slice();
         let globalPadLen = floats.length;
-        if (trellisUseWht && trellisWhtScope === 'global') {
+        let globalRms = 1e-5;
+
+        if (isGlobalWht) {
             globalPadLen = 1;
             while (globalPadLen < floats.length) globalPadLen <<= 1;
             const padded = new Float64Array(globalPadLen);
             padded.set(floats);
             for (let j = 0; j < globalPadLen; j++) padded[j] *= getSignFlip(j, trellisSignSeed);
             processFloats = fwht(Array.from(padded));
+
+            // Calculate the initial Global RMS scale
+            let globalSumSq = 0;
+            for (let i = 0; i < globalPadLen; i++) {
+                globalSumSq += processFloats[i] * processFloats[i];
+            }
+            globalRms = fp16(Math.sqrt(globalSumSq / globalPadLen) || 1e-5);
+
+            // --- GLOBAL SCALE OPTIMIZATION ---
+            // Evaluate total Viterbi cost across all blocks for each candidate scale
+            if (trellisOptIters > 0) {
+                const evalGlobalCost = (scale) => {
+                    let totalCost = 0;
+                    for (let i = 0; i < globalPadLen; i += safeBlockSize) {
+                        const chunk = processFloats.slice(i, i + safeBlockSize);
+                        totalCost += evaluateScaleViterbi(chunk, baseLevels, states, scale, subsetIndices, scaledBuf);
+                    }
+                    return totalCost;
+                };
+
+                const resphi = 2 - 1.6180339887;
+                let a = globalRms * 0.1;
+                let b = globalRms * 2.5;
+                let c = a + resphi * (b - a);
+                let d = b - resphi * (b - a);
+
+                let fc = evalGlobalCost(c);
+                let fd = evalGlobalCost(d);
+
+                for (let iter = 0; iter < trellisOptIters; iter++) {
+                    if (fc < fd) {
+                        b = d; d = c; fd = fc;
+                        c = a + resphi * (b - a);
+                        fc = evalGlobalCost(c);
+                    } else {
+                        a = c; c = d; fc = fd;
+                        d = b - resphi * (b - a);
+                        fd = evalGlobalCost(d);
+                    }
+                }
+                globalRms = fp16(fc < fd ? c : d);
+            }
         }
 
-        const len = (trellisUseWht && trellisWhtScope === 'global') ? globalPadLen : floats.length;
+        const len = isGlobalWht ? globalPadLen : floats.length;
         const qProcessOut = new Float64Array(len);
         const blockMeta = [];
 
@@ -262,7 +312,6 @@ export default {
             let padLen = actualLen;
 
             // --- LOCAL TRANSFORM PIPELINE ---
-            const needsLocalWht = trellisUseWht && trellisWhtScope === 'local';
             if (needsLocalWht) {
                 padLen = 1;
                 while (padLen < actualLen) padLen <<= 1;
@@ -272,37 +321,43 @@ export default {
                 chunkW = fwht(chunkPadded);
             }
 
-            // RMS over actualLen only — FWHT preserves L2 norm so padded zeros
-            // would otherwise deflate the denominator for non-power-of-2 blocks.
-            let sumSq = 0;
-            for (let j = 0; j < actualLen; j++) sumSq += chunkW[j] * chunkW[j];
-            const rms = fp16(Math.sqrt(sumSq / actualLen) || 1e-5);
-            let optScale = rms;
+            let optScale;
 
-            // --- VITERBI MSE OPTIMAL SCALE SEARCH ---
-            // subsetIndices and scaledBuf are pre-computed above and reused every iteration.
-            if (trellisOptIters > 0) {
-                const resphi = 2 - 1.6180339887;
-                let a = rms * 0.1;
-                let b = rms * 2.5;
-                let c = a + resphi * (b - a);
-                let d = b - resphi * (b - a);
+            if (isGlobalWht) {
+                // Use the single (possibly optimized) global scale
+                optScale = globalRms;
+            } else {
+                // RMS over actualLen only — FWHT preserves L2 norm so padded zeros
+                // would otherwise deflate the denominator for non-power-of-2 blocks.
+                let sumSq = 0;
+                for (let j = 0; j < actualLen; j++) sumSq += chunkW[j] * chunkW[j];
+                const rms = fp16(Math.sqrt(sumSq / actualLen) || 1e-5);
+                optScale = rms;
 
-                let fc = evaluateScaleViterbi(chunkW, baseLevels, states, c, subsetIndices, scaledBuf);
-                let fd = evaluateScaleViterbi(chunkW, baseLevels, states, d, subsetIndices, scaledBuf);
+                // --- VITERBI MSE OPTIMAL SCALE SEARCH (Per-Block) ---
+                if (trellisOptIters > 0) {
+                    const resphi = 2 - 1.6180339887;
+                    let a = rms * 0.1;
+                    let b = rms * 2.5;
+                    let c = a + resphi * (b - a);
+                    let d = b - resphi * (b - a);
 
-                for (let iter = 0; iter < trellisOptIters; iter++) {
-                    if (fc < fd) {
-                        b = d; d = c; fd = fc;
-                        c = a + resphi * (b - a);
-                        fc = evaluateScaleViterbi(chunkW, baseLevels, states, c, subsetIndices, scaledBuf);
-                    } else {
-                        a = c; c = d; fc = fd;
-                        d = b - resphi * (b - a);
-                        fd = evaluateScaleViterbi(chunkW, baseLevels, states, d, subsetIndices, scaledBuf);
+                    let fc = evaluateScaleViterbi(chunkW, baseLevels, states, c, subsetIndices, scaledBuf);
+                    let fd = evaluateScaleViterbi(chunkW, baseLevels, states, d, subsetIndices, scaledBuf);
+
+                    for (let iter = 0; iter < trellisOptIters; iter++) {
+                        if (fc < fd) {
+                            b = d; d = c; fd = fc;
+                            c = a + resphi * (b - a);
+                            fc = evaluateScaleViterbi(chunkW, baseLevels, states, c, subsetIndices, scaledBuf);
+                        } else {
+                            a = c; c = d; fc = fd;
+                            d = b - resphi * (b - a);
+                            fd = evaluateScaleViterbi(chunkW, baseLevels, states, d, subsetIndices, scaledBuf);
+                        }
                     }
+                    optScale = fp16(fc < fd ? c : d);
                 }
-                optScale = fp16(fc < fd ? c : d);
             }
 
             // --- VITERBI EVAL ---
@@ -331,6 +386,16 @@ export default {
                 pathData = result.pathData;
             }
 
+            // Export local transformed values BEFORE inverse transform
+            if (needsLocalWht) {
+                for (let t = 0; t < actualLen; t++) {
+                    if (i + t < floats.length) {
+                        tFloatsOut[i + t] = chunkW[t];
+                        tQFloatsOut[i + t] = chunkQ[t];
+                    }
+                }
+            }
+
             // --- INVERSE LOCAL TRANSFORM ---
             let chunkOut = chunkQ;
             if (needsLocalWht) {
@@ -353,10 +418,14 @@ export default {
 
         // --- INVERSE GLOBAL TRANSFORM ---
         const qFloats = new Float64Array(floats.length);
-        if (trellisUseWht && trellisWhtScope === 'global') {
+        if (isGlobalWht) {
             const invGlobal = fwht(Array.from(qProcessOut));
             for (let j = 0; j < globalPadLen; j++) invGlobal[j] *= getSignFlip(j, trellisSignSeed);
-            for (let j = 0; j < floats.length; j++) qFloats[j] = invGlobal[j];
+            for (let j = 0; j < floats.length; j++) {
+                qFloats[j] = invGlobal[j];
+                tFloatsOut[j] = processFloats[j];
+                tQFloatsOut[j] = qProcessOut[j];
+            }
         } else {
             for (let j = 0; j < floats.length; j++) qFloats[j] = qProcessOut[j];
         }
@@ -380,21 +449,30 @@ export default {
             }
         }
 
-        const strictLinearBpw = safeBits + (16 / safeBlockSize);
+        // --- BPW CALCULATION ---
+        const strictLinearBpw = isGlobalWht
+            ? safeBits + (16 / floats.length)
+            : safeBits + (16 / safeBlockSize);
 
         const srhtStr = trellisUseWht
-            ? `<span class="eq-pill" title="Diagonal Random Sign Array">D</span> &times; <span class="eq-pill" title="Orthogonal Fast Walsh-Hadamard Transform">FWHT ${trellisWhtScope}</span> &times; `
+            ? `<span class="eq-pill" title="Diagonal Random Sign Array">D</span> &times; <span class="eq-pill" title="Orthogonal Fast Walsh-Hadamard Transform">FWHT</span> &times; `
             : '';
 
         const tcqStr = states > 1
             ? `<span class="eq-pill" title="Trellis Coded Quantization via Viterbi">TCQ_Path<span class="bits">${safeBits}b</span></span>`
             : `<span class="eq-pill">Codeword<span class="bits">${safeBits}b</span></span>`;
 
-        const transformDesc = trellisUseWht ? (trellisWhtScope === 'global' ? "Global QuIP# SRHT applied. " : "Local Block SRHT applied. ") : "";
+        const scalePill = isGlobalWht ? 'Global_Scale' : 'RMS_Scale';
+
+        const transformDesc = trellisUseWht
+            ? (isGlobalWht
+                ? `Global QuIP# SRHT applied. All ${floats.length} weights share a single FP16 Global Scale.`
+                : `Local Block SRHT applied. Every ${safeBlockSize} weights share one FP16 Optimal Scale.`)
+            : `Every ${safeBlockSize} weights share one FP16 Optimal Scale.`;
 
         const formulaHTML = `
-            <span>Weight = ${srhtStr}[ ( ${tcqStr} &times; <span class="eq-pill">RMS_Scale<span class="bits">16b</span></span> ) ]</span>
-            <br><span style="color:var(--text-muted);font-size:0.8rem;">Block size ${safeBlockSize}. ${transformDesc}Every ${safeBlockSize} weights share one FP16 Optimal Scale.</span>`;
+            <span>Weight = ${srhtStr}[ ( ${tcqStr} &times; <span class="eq-pill">${scalePill}<span class="bits">16b</span></span> ) ]</span>
+            <br><span style="color:var(--text-muted);font-size:0.8rem;">Block size ${safeBlockSize}. ${transformDesc}</span>`;
 
         return {
             qFloats,
@@ -403,8 +481,8 @@ export default {
             blockMeta,
             superMeta: [],
             formulaHTML,
-            tFloats: trellisUseWht ? Array.from(processFloats.slice(0, floats.length)) : null,
-            tQFloats: trellisUseWht ? Array.from(qProcessOut.slice(0, floats.length)) : null
+            tFloats: tFloatsOut ? Array.from(tFloatsOut) : null,
+            tQFloats: tQFloatsOut ? Array.from(tQFloatsOut) : null
         };
     },
 
@@ -436,10 +514,12 @@ export default {
 
         if (!bm) return { blockHtml, blockIdxStr, superHtml, superIdxStr };
 
+        const isGlobal = settings.trellisUseWht && settings.trellisWhtScope === 'global';
+
         blockIdxStr = `[${bm.idx}]`;
         blockHtml = `<div class="data-row"><span>MSE:</span> <span class="val-hl">${bm.mse.toFixed(6)}</span></div>
                      <div class="data-row"><span>MAE:</span> <span>${bm.mae.toFixed(6)}</span></div>
-                     <div class="data-row" style="margin-top:4px"><span>Scale (FP16):</span> <span>${bm.scale.toFixed(5)}</span></div>`;
+                     <div class="data-row" style="margin-top:4px"><span>${isGlobal ? 'Global Scale (FP16)' : 'Scale (FP16)'}:</span> <span>${bm.scale.toFixed(5)}</span></div>`;
 
         const localIdx = idx % settings.trellisBlockSize;
         const p = bm.pathData?.[localIdx];

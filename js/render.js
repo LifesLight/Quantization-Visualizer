@@ -7,14 +7,27 @@ let lastHoveredIdx = 0;
 export let zoomRange = null;
 export let showSRHT = false;
 
+// Cache DOM templates. .cloneNode(false) is vastly faster than document.createElement()
+const tplBar = document.createElement('div');
+tplBar.className = 'bar';
+
+const tplBarFill = document.createElement('div');
+tplBarFill.className = 'bar-fill';
+
+const tplErrFill = document.createElement('div');
+tplErrFill.className = 'error-fill';
+
+const tplDummy = document.createElement('div');
+tplDummy.className = 'dummy-bar';
+
 export function setZoomRange(start, end) {
     zoomRange = { start, end };
     render();
 }
 
-export function resetZoom() {
+export function resetZoom(doRender = true) {
     zoomRange = null;
-    render();
+    if (doRender) render();
 }
 
 export function toggleSRHT() {
@@ -22,16 +35,37 @@ export function toggleSRHT() {
     render();
 }
 
-export function render() {
+export function requantize() {
     const floats = elements.inputEl.value.split(/[, \n\t]+/).map(s => s.trim()).filter(s => s !== '' && !isNaN(s)).map(Number);
-    if (floats.length === 0) return;
+    if (floats.length === 0) {
+        currentRenderData = null;
+        return;
+    }
 
     const settings = getSettings();
     const quant = registry[settings.qType];
 
+    // Offloads Heavy Algorithmic computations to a single execution
     const {
         qFloats, qMathStrings, bpw, blockMeta, superMeta, formulaHTML, tFloats, tQFloats
     } = quant.quantize(floats, settings);
+
+    currentRenderData = {
+        floats, qFloats, qMathStrings, blockMeta, superMeta, settings,
+        quant, tFloats, tQFloats, bpw, formulaHTML
+    };
+
+    // Trigger visual build
+    render();
+}
+
+export function render() {
+    if (!currentRenderData) return;
+
+    const {
+        floats, qFloats, qMathStrings, blockMeta, superMeta, settings,
+        quant, tFloats, tQFloats, bpw, formulaHTML
+    } = currentRenderData;
 
     const hasSRHT = tFloats != null && tQFloats != null;
     if (!hasSRHT) {
@@ -89,17 +123,18 @@ export function render() {
     }
     const spread = dMax - dMin;
 
-    const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.05 : Math.max(0.1, absMax) * 1.1;
+    // FIX: Removed the hardcoded Math.max(0.1, absMax) so that tiny NN weights scale properly.
+    const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.05 : (absMax === 0 ? 0.1 : absMax) * 1.1;
     const sMin = settings.centeringMode === 'mid' ? dMin - spread * 0.05 : -sMax;
 
     let baselineValue = 0;
     if (settings.centeringMode === 'mid') {
         if (dMin >= 0) {
-            baselineValue = sMin; 
+            baselineValue = sMin;
         } else if (dMax <= 0) {
-            baselineValue = sMax; 
+            baselineValue = sMax;
         } else {
-            baselineValue = 0; 
+            baselineValue = 0;
         }
     }
 
@@ -120,16 +155,14 @@ export function render() {
     const clamp = (val) => Math.max(0, Math.min(100, val));
 
     const createBar = (val, valQ, globalIdx) => {
-        const bar = document.createElement('div');
-        bar.className = 'bar';
+        const bar = tplBar.cloneNode(false);
         bar.dataset.idx = globalIdx;
 
         const yCenter = clamp(((baselineValue - sMin) / (sMax - sMin)) * 100);
         const yVQ = clamp(((valQ - sMin) / (sMax - sMin)) * 100);
         const yV = clamp(((val - sMin) / (sMax - sMin)) * 100);
 
-        const qFill = document.createElement('div');
-        qFill.className = 'bar-fill';
+        const qFill = tplBarFill.cloneNode(false);
         qFill.style.bottom = `${Math.min(yCenter, yVQ)}%`;
         qFill.style.height = `${Math.abs(yVQ - yCenter)}%`;
         qFill.style.backgroundColor = valQ >= 0 ? 'var(--accent-color)' : 'var(--negative-color)';
@@ -137,8 +170,7 @@ export function render() {
 
         const errH = Math.abs(yV - yVQ);
         if (errH > 0.05) {
-            const errFill = document.createElement('div');
-            errFill.className = 'error-fill';
+            const errFill = tplErrFill.cloneNode(false);
             errFill.style.bottom = `${Math.min(yV, yVQ)}%`;
             errFill.style.height = `${errH}%`;
             bar.appendChild(errFill);
@@ -149,7 +181,7 @@ export function render() {
 
     const clientWidth = elements.chartArea.clientWidth || 800;
     const pxPerBar = clientWidth / zCount;
-    
+
     elements.chartArea.style.gap = '';
 
     const hasBlocks = blockMeta && blockMeta.length > 0;
@@ -157,11 +189,11 @@ export function render() {
 
     let frag;
 
-    if (pxPerBar < 1) { 
+    if (pxPerBar < 1) {
         elements.chartArea.style.gap = '0px';
         frag = document.createDocumentFragment();
-        
-        const maxBars = clientWidth; 
+
+        const maxBars = clientWidth;
         const binSize = zCount / maxBars;
 
         const barsPerBlock = settings.blockSize ? (settings.blockSize / binSize) : 0;
@@ -178,7 +210,7 @@ export function render() {
         for (let i = 0; i < maxBars; i++) {
             let binStartIdx = zStart + Math.floor(i * binSize);
             let binEndIdx = i === maxBars - 1 ? zEnd + 1 : zStart + Math.floor((i + 1) * binSize);
-            
+
             let maxMag = -1;
             let bestIdx = binStartIdx;
 
@@ -199,7 +231,7 @@ export function render() {
                 currentSbGrp.style.gap = '0px';
                 frag.appendChild(currentSbGrp);
                 lastSbIdx = sbIdx;
-                lastBlkIdx = -1; 
+                lastBlkIdx = -1;
             }
 
             if (showBlocks && blkIdx !== lastBlkIdx) {
@@ -215,7 +247,7 @@ export function render() {
             }
 
             const bar = createBar(vFloats[bestIdx], vQFloats[bestIdx], bestIdx);
-            bar.style.flex = "1"; 
+            bar.style.flex = "1";
 
             if (currentBlkGrp) {
                 currentBlkGrp.appendChild(bar);
@@ -227,44 +259,43 @@ export function render() {
         }
 
         const groups = frag.querySelectorAll('.block-group, .sb-group');
-        groups.forEach(grp => {
+        for (let i = 0; i < groups.length; i++) {
+            const grp = groups[i];
             const visibleBars = grp.querySelectorAll('.bar').length;
             if (visibleBars === 0) {
                 grp.style.display = 'none';
             } else {
                 grp.style.flex = visibleBars;
             }
-        });
+        }
 
     } else {
         frag = quant.buildElements(vFloats, vQFloats, settings, (val, valQ, globalIdx) => {
             if (zoomRange && (globalIdx < zoomRange.start || globalIdx > zoomRange.end)) {
-                const dummy = document.createElement('div');
-                dummy.className = 'dummy-bar';
-                return dummy;
+                return tplDummy.cloneNode(false);
             }
             return createBar(val, valQ, globalIdx);
         });
 
         if (zoomRange) {
             const dummies = frag.querySelectorAll('.dummy-bar');
-            dummies.forEach(d => d.remove());
+            for (let i = 0; i < dummies.length; i++) dummies[i].remove();
 
             const groups = frag.querySelectorAll('.block-group, .sb-group');
-            groups.forEach(grp => {
+            for (let i = 0; i < groups.length; i++) {
+                const grp = groups[i];
                 const visibleBars = grp.querySelectorAll('.bar').length;
                 if (visibleBars === 0) {
                     grp.style.display = 'none';
                 } else {
                     grp.style.flex = visibleBars;
                 }
-            });
+            }
         }
     }
 
     const visibleTopGroups = Array.from(frag.childNodes).filter(el => el.nodeType === 1 && el.style.display !== 'none');
     if (visibleTopGroups.length > 0) {
-        // Strip trailing right edge
         let rightEdge = visibleTopGroups[visibleTopGroups.length - 1];
         while (rightEdge) {
             if (rightEdge.classList && (rightEdge.classList.contains('sb-group') || rightEdge.classList.contains('block-group'))) {
@@ -274,7 +305,6 @@ export function render() {
             rightEdge = visChildren.length > 0 ? visChildren[visChildren.length - 1] : null;
         }
 
-        // Strip trailing left edge
         let leftEdge = visibleTopGroups[0];
         while (leftEdge) {
             if (leftEdge.classList && (leftEdge.classList.contains('sb-group') || leftEdge.classList.contains('block-group'))) {
@@ -286,8 +316,6 @@ export function render() {
     }
 
     elements.chartArea.appendChild(frag);
-
-    currentRenderData = { floats, qFloats, qMathStrings, blockMeta, superMeta, settings, quant, tFloats, tQFloats };
     updateInspector(lastHoveredIdx);
 }
 

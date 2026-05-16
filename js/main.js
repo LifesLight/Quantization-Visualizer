@@ -1,7 +1,7 @@
 import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
-import { render, updateInspector, setZoomRange, resetZoom, toggleSRHT } from './render.js';
+import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT } from './render.js';
 
 function getNearestBarIdx(clientX) {
     const bars = Array.from(elements.chartArea.querySelectorAll('.bar')).filter(b => b.style.display !== 'none');
@@ -31,7 +31,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const floats = content.match(/-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/g);
             if (floats && floats.length > 0) {
                 elements.inputEl.value = floats.join(', ');
-                resetZoom();
+                resetZoom(false);
+                requantize();
             } else {
                 alert("No valid numbers found in the file.");
             }
@@ -72,11 +73,12 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
         if (e.target.id.startsWith('gen-')) {
             generateData();
-            resetZoom();
+            resetZoom(false);
+            requantize();
         } else {
             elements.presetEl.value = 'custom';
             updateUI();
-            render();
+            requantize();
         }
     }));
 
@@ -84,17 +86,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (elements.presetEl.value !== 'custom') {
             applyPreset(elements.presetEl.value);
             updateUI();
-            render();
+            requantize();
         }
     });
 
     elements.genBtn.addEventListener('click', () => {
         generateData();
-        resetZoom();
+        resetZoom(false);
+        requantize();
     });
 
     elements.inputEl.addEventListener('input', () => {
-        render();
+        requantize();
     });
 
     elements.chartArea.addEventListener('mouseover', (e) => {
@@ -163,5 +166,5 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.presetEl.value = 'Q4_0';
     updateUI();
     generateData();
-    render();
+    requantize();
 });

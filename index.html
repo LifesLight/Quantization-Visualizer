@@ -327,12 +327,12 @@
                                 Trellis Complexity
                             </label>
                             <select id="trellis-states">
-                                <option value="1">1-State (Greedy Baseline)</option>
-                                <option value="4" selected>4-State (Standard)</option>
-                                <option value="8">8-State (High Precision)</option>
-                                <option value="16">16-State (Heavy)</option>
-                                <option value="64">64-State (Research)</option>
-                                <option value="256">256-State (Extreme)</option>
+                                <option value="1">1-State (Scalar)</option>
+                                <option value="4" selected>4-State (Baseline TCQ)</option>
+                                <option value="8">8-State (Better)</option>
+                                <option value="16">16-State (High)</option>
+                                <option value="64">64-State (Very High)</option>
+                                <option value="256">256-State (Research)</option>
                             </select>
                         </div>
                         <div class="settings-group">
@@ -351,7 +351,7 @@
                             <input type="checkbox" id="trellis-wht" style="width: auto; margin: 0; cursor: pointer;">
                             <label for="trellis-wht" style="margin: 0; cursor: pointer;">Enable SRHT</label>
                         </div>
-                        
+
                         <!-- Advanced Trellis Settings Wrapper -->
                         <div class="trellis-advanced-wrapper" style="margin-top: 4px;">
                             <button id="trellis-adv-toggle" class="adv-toggle-btn">
@@ -362,23 +362,30 @@
                             </button>
                             <div id="trellis-adv-panel" class="adv-panel" style="display: none; padding-top: 8px;">
                                 <div class="settings-group">
-                                    <label for="trellis-wht-scope" title="Global WHT handles sequence outliers like QuIP#. Local confines it to Viterbi blocks.">SRHT Scope</label>
+                                    <label for="trellis-wht-scope"
+                                        title="Global WHT perfectly smears outliers across the entire weight matrix. This allows for one global block scale saving memory/BPW, but raises the global noise floor. Local WHT confines outliers to small blocks, yielding lower MSE but requiring a 16-bit scale per block.">SRHT
+                                        Scope / Scale Strategy</label>
                                     <select id="trellis-wht-scope">
-                                        <option value="global" selected>Global (QuIP# Style)</option>
-                                        <option value="local">Local (Per-Block)</option>
+                                        <option value="global" selected>Global (QuIP# Style: 1 Scale Total)
+                                        </option>
+                                        <option value="local">Local (Per-Block: 1 Scale per Block)</option>
                                     </select>
                                 </div>
                                 <div class="settings-group">
-                                    <label for="trellis-opt-iters" title="Grid-searches optimal scale utilizing Viterbi forward pass (MSE reduction). Set > 0 to enable.">Scale Opt Iters</label>
+                                    <label for="trellis-opt-iters"
+                                        title="Grid-searches optimal scale utilizing Viterbi forward pass (MSE reduction). Set > 0 to enable.">Scale
+                                        Opt Iters</label>
                                     <input type="number" id="trellis-opt-iters" value="0" min="0" max="25">
                                 </div>
                                 <div class="settings-group">
-                                    <label for="trellis-sign-seed" title="Seed for deterministic pseudo-random SRHT column permutation.">SRHT Sign Seed</label>
+                                    <label for="trellis-sign-seed"
+                                        title="Seed for deterministic pseudo-random SRHT column permutation.">SRHT Sign
+                                        Seed</label>
                                     <input type="number" id="trellis-sign-seed" value="42">
                                 </div>
                             </div>
                         </div>
-                        
+
                     </div>
 
                     <div id="kquant-settings"

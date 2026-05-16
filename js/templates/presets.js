@@ -13,7 +13,7 @@ export const presetGroups = [
         }
     },
     {
-        label: "LLama.cpp: Symmetric",
+        label: "Llama.cpp: Symmetric",
         presets: {
             'Q2_0': { label: 'Q2_0', 'quant-type': 'sym', 'quant-bits': 2, 'block-size': 32 },
             'Q4_0': { label: 'Q4_0', 'quant-type': 'sym', 'quant-bits': 4, 'block-size': 32 },
@@ -21,7 +21,7 @@ export const presetGroups = [
         }
     },
     {
-        label: "LLama.cpp: Asymmetric",
+        label: "Llama.cpp: Asymmetric",
         presets: {
             'Q2_1': { label: 'Q2_1', 'quant-type': 'asym', 'quant-bits': 2, 'block-size': 32 },
             'Q4_1': { label: 'Q4_1', 'quant-type': 'asym', 'quant-bits': 4, 'block-size': 32 },
@@ -56,9 +56,9 @@ export const presetGroups = [
     {
         label: "Trellis",
         presets: {
-            'tcq2': { label: 'TCQ2', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global' },
-            'tcq3': { label: 'TCQ3', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global' },
-            'tcq4': { label: 'TCQ4', 'quant-type': 'trellis', 'trellis-bits': 4, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global' }
+            'tcq2': { label: 'TCQ2', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'local', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 },
+            'tcq3': { label: 'TCQ3', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'local', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 },
+            'tcq4': { label: 'TCQ4', 'quant-type': 'trellis', 'trellis-bits': 4, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'local', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 }
         }
     }
 ];
