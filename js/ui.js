@@ -3,6 +3,7 @@ import registry from './quants/registry.js';
 import { drawDatasetBar } from './render.js';
 
 export const elements = {
+    // ... (Keep existing getters up to turboQjlEl)
     get inputEl() { return document.getElementById('float-input'); },
     get fileDropZone() { return document.getElementById('file-drop-zone'); },
     get fileInput() { return document.getElementById('file-input'); },
@@ -43,6 +44,13 @@ export const elements = {
     get turboBlockSizeEl() { return document.getElementById('turbo-block-size'); },
     get turboWhtEl() { return document.getElementById('turbo-wht'); },
     get turboQjlEl() { return document.getElementById('turbo-qjl'); },
+
+    // --> NEW TURBO GETTERS
+    get turboSignSeedEl() { return document.getElementById('turbo-sign-seed'); },
+    get turboAdvToggle() { return document.getElementById('turbo-adv-toggle'); },
+    get turboAdvPanel() { return document.getElementById('turbo-adv-panel'); },
+
+    // ... (Keep existing Trellis and other getters)
     get trellisSettings() { return document.getElementById('trellis-settings'); },
     get trellisBitsEl() { return document.getElementById('trellis-bits'); },
     get trellisBlockSizeEl() { return document.getElementById('trellis-block-size'); },
@@ -101,6 +109,7 @@ export const elements = {
             this.genScaleEl, this.genBimodalDistEl, this.genBimodalSpreadEl,
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
             this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
+            this.turboSignSeedEl, // <-- Added here
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
             this.trellisWhtEl, this.trellisWhtScopeEl, this.trellisOptItersEl, this.trellisSignSeedEl,
             this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl
@@ -175,10 +184,13 @@ export function getSettings() {
         subSize: parseInt(elements.subSizeEl.value) || 32,
         subBits: parseInt(elements.subBitsEl.value) || 6,
         hasOffset: elements.subOffsetEl.checked,
+
         turboBits: parseInt(elements.turboBitsEl.value) || 4,
         turboBlockSize: parseInt(elements.turboBlockSizeEl.value) || 128,
         useWht: elements.turboWhtEl.checked,
         useQjl: elements.turboQjlEl.checked,
+        turboSignSeed: parseInt(elements.turboSignSeedEl?.value) || 42, // <-- Added here
+
         trellisBits: parseInt(elements.trellisBitsEl.value) || 4,
         trellisBlockSize: parseInt(elements.trellisBlockSizeEl.value) || 64,
         trellisStates: parseInt(elements.trellisStatesEl.value) || 4,
@@ -238,6 +250,12 @@ export function initUIListeners() {
             elements.rawAdvToggleBtn.classList.toggle('open', isHidden);
         });
     }
+
+    elements.turboAdvToggle?.addEventListener('click', () => {
+        const isHidden = elements.turboAdvPanel.style.display === 'none';
+        elements.turboAdvPanel.style.display = isHidden ? 'flex' : 'none';
+        elements.turboAdvToggle.classList.toggle('open', isHidden);
+    });
 
     elements.trellisAdvToggle?.addEventListener('click', () => {
         const isHidden = elements.trellisAdvPanel.style.display === 'none';

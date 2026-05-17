@@ -10,7 +10,7 @@ export default {
         ui.showSuperBlockCard(false);
     },
     quantize(floats, settings) {
-        const { turboBits, turboBlockSize, useWht, useQjl } = settings;
+        const { turboBits, turboBlockSize, useWht, useQjl, turboSignSeed } = settings;
         const basePrecision = 16;
         const centroids = getLloydMaxCentroids(turboBits);
         const bpw = turboBits + (useQjl ? 1 : 0) + (basePrecision / turboBlockSize);
@@ -31,7 +31,9 @@ export default {
             while (chunkPadded.length < padLen) chunkPadded.push(0);
 
             if (useWht) {
-                for (let j = 0; j < padLen; j++) chunkPadded[j] *= getSignFlip(j);
+                for (let j = 0; j < padLen; j++) {
+                    chunkPadded[j] *= getSignFlip(i + j, turboSignSeed);
+                }
             }
 
             let chunkW = useWht ? fwht(chunkPadded) : [...chunkPadded];
@@ -76,7 +78,9 @@ export default {
             let chunkOut = useWht ? fwht(chunkQ) : chunkQ;
 
             if (useWht) {
-                for (let j = 0; j < padLen; j++) chunkOut[j] *= getSignFlip(j);
+                for (let j = 0; j < padLen; j++) {
+                    chunkOut[j] *= getSignFlip(i + j, turboSignSeed);
+                }
             }
 
             for (let j = 0; j < actualLen; j++) {
@@ -90,7 +94,7 @@ export default {
                 }
 
                 if (useWht) {
-                    const signStr = getSignFlip(j) > 0 ? '+1' : '-1';
+                    const signStr = getSignFlip(i + j, turboSignSeed) > 0 ? '+1' : '-1';
                     qMathStrings[i + j] = `D(${signStr}) &times; FWHT( ${mathStr} )[${j}]`;
                 } else {
                     qMathStrings[i + j] = mathStr;

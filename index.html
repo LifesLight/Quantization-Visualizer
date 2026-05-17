@@ -374,6 +374,24 @@
                                 style="width: auto; margin: 0; cursor: pointer;">
                             <label for="turbo-qjl" style="margin: 0; cursor: pointer;">Enable QJL</label>
                         </div>
+
+                        <!-- Advanced Turbo Settings Wrapper -->
+                        <div class="turbo-advanced-wrapper" style="margin-top: 4px;">
+                            <button id="turbo-adv-toggle" class="adv-toggle-btn">
+                                <span>Advanced Parameters</span>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path d="M7 10l5 5 5-5z" />
+                                </svg>
+                            </button>
+                            <div id="turbo-adv-panel" class="adv-panel" style="display: none; padding-top: 8px;">
+                                <div class="settings-group">
+                                    <label for="turbo-sign-seed"
+                                        title="Seed for the deterministic pseudo-random sign flips (the diagonal matrix 'D' in SRHT). Used to ensure the transform is identically reversible.">SRHT
+                                        Sign Seed</label>
+                                    <input type="number" id="turbo-sign-seed" value="42">
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="trellis-settings"

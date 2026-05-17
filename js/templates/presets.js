@@ -40,17 +40,17 @@ export const presetGroups = [
     {
         label: "Llama.cpp: TurboQuant",
         presets: {
-            'turbo2': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false },
-            'turbo3': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false },
-            'turbo4': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 4, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false },
+            'turbo2': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false, 'turbo-sign-seed': 42 },
+            'turbo3': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false, 'turbo-sign-seed': 42 },
+            'turbo4': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 4, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false, 'turbo-sign-seed': 42 },
         }
     },
     {
         label: "Paper: TurboQuant",
         presets: {
-            'turbo2_qjl': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 1, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true },
-            'turbo3_qjl': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true },
-            'turbo4_qjl': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true },
+            'turbo2_qjl': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 1, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true, 'turbo-sign-seed': 42 },
+            'turbo3_qjl': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true, 'turbo-sign-seed': 42 },
+            'turbo4_qjl': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true, 'turbo-sign-seed': 42 },
         }
     },
     {
