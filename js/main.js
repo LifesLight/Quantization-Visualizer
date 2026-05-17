@@ -2,6 +2,7 @@ import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
 import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility } from './render.js';
+import { initWasm } from './wasmWrapper.js';
 
 function getNearestBarIdx(clientX) {
     const bars = Array.from(elements.chartArea.querySelectorAll('.bar')).filter(b => b.style.display !== 'none');
@@ -19,7 +20,9 @@ function getNearestBarIdx(clientX) {
     return closest ? parseInt(closest.dataset.idx, 10) : null;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await initWasm();
+
     populateDynamicSelectors();
     initUIListeners();
 
@@ -169,8 +172,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const isHidden = elements.dbToolsPanel.style.display === 'none';
             elements.dbToolsPanel.style.display = isHidden ? 'flex' : 'none';
             elements.dbToggleBtn.classList.toggle('open', isHidden);
-
-            // We only enforce dbClipParams internal logic, dbBar logic moved cleanly to updateDbBarVisibility.
         });
     }
 
