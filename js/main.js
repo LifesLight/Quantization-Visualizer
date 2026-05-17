@@ -1,7 +1,7 @@
 import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
-import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility } from './render.js';
+import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility, updateVisualsOnly } from './render.js';
 import { initWasm } from './wasmWrapper.js';
 
 function getNearestBarIdx(clientX) {
@@ -73,11 +73,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
+elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
         if (e.target.id.startsWith('gen-')) {
             generateData();
             resetZoom(false);
             requantize();
+        } else if (e.target.id === 'centering-mode') {
+            updateVisualsOnly();
         } else {
             if (e.target.id !== 'data-scale' && e.target.id !== 'data-offset') {
                 elements.presetEl.value = 'custom';

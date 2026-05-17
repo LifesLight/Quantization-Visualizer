@@ -581,3 +581,10 @@ export function updateInspector(idx) {
         elements.insSBData.innerHTML = '<div class="empty-state">Hover over a superblock</div>';
     }
 }
+
+export function updateVisualsOnly() {
+    if (currentRenderData) {
+        currentRenderData.settings.centeringMode = elements.modeEl.value;
+        render();
+    }
+}
