@@ -10,10 +10,12 @@ export let showSRHT = false;
 export let clipStart = null;
 export let clipEnd = null;
 export let hasWarnedLargeData = false;
+export let userModifiedClip = false;
 
 export function setHasWarnedLargeData(val) { hasWarnedLargeData = val; }
 export function getHasWarnedLargeData() { return hasWarnedLargeData; }
 export function getClipRange() { return { start: clipStart, end: clipEnd }; }
+export function setUserModifiedClip(val) { userModifiedClip = val; }
 
 let rawFloatsCache = [];
 let rawFloatsStr = "";
@@ -41,6 +43,15 @@ export function getBaseFloats() {
     }
 
     return baseFloatsCache;
+}
+
+export function updateDbBarVisibility() {
+    const checked = (elements.dbModeClip && elements.dbModeClip.checked) ||
+        (elements.dbModeMinMax && elements.dbModeMinMax.checked) ||
+        (elements.dbModeHotspots && elements.dbModeHotspots.checked);
+    if (elements.dbContainer) elements.dbContainer.style.display = checked ? 'flex' : 'none';
+    if (elements.dbBar) elements.dbBar.style.display = checked ? 'block' : 'none';
+    if (checked) drawDatasetBar();
 }
 
 export function setClipRange(start, end, previewOnly = false) {
@@ -92,22 +103,35 @@ export function requantize(overrideClipCheck = false) {
     if (elements.dbModeClip && !elements.dbModeClip.checked) {
         clipStart = 0;
         clipEnd = Math.max(0, N - 1);
-    } else if (clipStart === null || clipEnd === null || clipEnd >= N || clipStart >= N) {
-        clipStart = 0;
-        clipEnd = N - 1;
+    } else {
+        if (!userModifiedClip) {
+            clipStart = 0;
+            clipEnd = Math.max(0, N - 1);
+        } else {
+            if (clipStart === null || clipEnd === null) {
+                clipStart = 0;
+                clipEnd = Math.max(0, N - 1);
+            } else {
+                if (clipStart >= N) clipStart = Math.max(0, N - 1);
+                if (clipEnd >= N) clipEnd = Math.max(0, N - 1);
+            }
+        }
     }
 
-    if (!overrideClipCheck && N > 262144 && !hasWarnedLargeData) {
+    const activeCount = clipEnd - clipStart + 1;
+    if (!overrideClipCheck && activeCount > 262144 && !hasWarnedLargeData) {
         clipStart = 0;
         clipEnd = 262143;
+        if (clipEnd >= N) clipEnd = N - 1;
+
         if (elements.dbModeClip) elements.dbModeClip.checked = true;
+        if (elements.dbClipParams) elements.dbClipParams.style.display = 'flex';
+
+        updateDbBarVisibility();
 
         if (elements.dbToggleBtn && !elements.dbToggleBtn.classList.contains('open')) {
             elements.dbToggleBtn.classList.add('open');
             if (elements.dbToolsPanel) elements.dbToolsPanel.style.display = 'flex';
-            if (elements.dbContainer) elements.dbContainer.style.display = 'flex';
-            if (elements.dbBar) elements.dbBar.style.display = 'block';
-            if (elements.dbClipParams) elements.dbClipParams.style.display = 'flex';
         }
     }
 
@@ -513,7 +537,7 @@ export function updateInspector(idx) {
 
     if (useClip && (idx < clipStart || idx > clipEnd)) {
         const val = baseFloats[idx];
-        elements.insWData.innerHTML = `<div class="data-row"><span>Original:</span> <span class="val-hl">${val.toFixed(5)}</span></div><div class="empty-state" style="padding:10px 0;">Inactive Weight</div>`;
+        elements.insWData.innerHTML = `<div class="data-row"><span>Original:</span> <span class="val-hl" title="${val}">${val.toFixed(5)}</span></div><div class="empty-state" style="padding:10px 0;">Inactive Weight</div>`;
         elements.iBIdx.textContent = '[-]';
         elements.insBData.innerHTML = '<div class="empty-state">Inactive</div>';
         elements.iSBIdx.textContent = '[-]';
@@ -530,8 +554,9 @@ export function updateInspector(idx) {
 
     const lblOrig = showSRHT ? "Transformed:" : "Original:";
     const lblQuant = showSRHT ? "Quantized (WHT):" : "Quantized:";
+    const errVal = Math.abs(val - valQ);
 
-    elements.insWData.innerHTML = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span>${Math.abs(val - valQ).toFixed(6)}</span></div>`;
+    elements.insWData.innerHTML = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl" title="${val}">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl" title="${valQ}">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span title="${errVal}">${errVal.toFixed(6)}</span></div>`;
 
     const { blockHtml, blockIdxStr, superHtml, superIdxStr } = quant.formatInspector(sliceIdx, blockMeta, superMeta, settings);
 

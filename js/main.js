@@ -1,7 +1,7 @@
 import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
-import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange } from './render.js';
+import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility } from './render.js';
 
 function getNearestBarIdx(clientX) {
     const bars = Array.from(elements.chartArea.querySelectorAll('.bar')).filter(b => b.style.display !== 'none');
@@ -164,20 +164,13 @@ document.addEventListener('DOMContentLoaded', () => {
         resetZoom();
     });
 
-    // Dataset Bar interaction logic
     if (elements.dbToggleBtn) {
         elements.dbToggleBtn.addEventListener('click', () => {
             const isHidden = elements.dbToolsPanel.style.display === 'none';
             elements.dbToolsPanel.style.display = isHidden ? 'flex' : 'none';
             elements.dbToggleBtn.classList.toggle('open', isHidden);
 
-            if (elements.dbContainer) elements.dbContainer.style.display = isHidden ? 'flex' : 'none';
-            if (elements.dbBar) elements.dbBar.style.display = isHidden ? 'block' : 'none';
-            if (isHidden) drawDatasetBar();
-
-            if (elements.dbClipParams) {
-                elements.dbClipParams.style.display = (elements.dbModeClip && elements.dbModeClip.checked) ? 'flex' : 'none';
-            }
+            // We only enforce dbClipParams internal logic, dbBar logic moved cleanly to updateDbBarVisibility.
         });
     }
 
@@ -197,14 +190,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 pendingAction = { type: 'uncheck_clip' };
                 elements.modalLargeData.style.display = 'flex';
             } else {
-                drawDatasetBar();
+                if (!e.target.checked) setUserModifiedClip(false);
+                updateDbBarVisibility();
                 requantize(true);
             }
         });
     }
 
     [elements.dbModeMinMax, elements.dbModeHotspots].forEach(el => {
-        if (el) el.addEventListener('change', drawDatasetBar);
+        if (el) el.addEventListener('change', updateDbBarVisibility);
     });
 
     const applyClipInputs = () => {
@@ -224,6 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const diff = end - start + 1;
+        setUserModifiedClip(true);
         if (diff > 262144 && !getHasWarnedLargeData()) {
             pendingAction = { type: 'slider', start: start, end: end };
             elements.modalLargeData.style.display = 'flex';
@@ -241,9 +236,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let initialClipStart = 0;
     let initialClipEnd = 0;
     let dragStartXRatio = 0;
+    let hasMoved = false;
+    let initialMouseX = 0;
+    const DRAG_THRESHOLD = 4; // pixels
 
     const onDbMouseMove = (e) => {
         if (!isDraggingLeft && !isDraggingRight && !isDraggingCenter) return;
+
+        if (!hasMoved) {
+            if (Math.abs(e.clientX - initialMouseX) >= DRAG_THRESHOLD) {
+                hasMoved = true;
+            } else {
+                return; // suppress tiny accidental mouse drags
+            }
+        }
+
         const rect = elements.dbBar.getBoundingClientRect();
         const baseFloats = getBaseFloats();
         const N = baseFloats.length;
@@ -293,14 +300,19 @@ document.addEventListener('DOMContentLoaded', () => {
             document.removeEventListener('mousemove', onDbMouseMove);
             document.removeEventListener('mouseup', onDbMouseUp);
 
-            const clip = getClipRange();
-            const diff = clip.end - clip.start + 1;
-            if (diff > 262144 && !getHasWarnedLargeData()) {
-                pendingAction = { type: 'slider', start: clip.start, end: clip.end };
-                setClipRange(initialClipStart, initialClipEnd, true); // revert visually until accepted
-                elements.modalLargeData.style.display = 'flex';
+            if (hasMoved) {
+                setUserModifiedClip(true);
+                const clip = getClipRange();
+                const diff = clip.end - clip.start + 1;
+                if (diff > 262144 && !getHasWarnedLargeData()) {
+                    pendingAction = { type: 'slider', start: clip.start, end: clip.end };
+                    setClipRange(initialClipStart, initialClipEnd, true); // revert visually until accepted
+                    elements.modalLargeData.style.display = 'flex';
+                } else {
+                    requantize(true);
+                }
             } else {
-                requantize(true);
+                setClipRange(initialClipStart, initialClipEnd, true);
             }
         }
     };
@@ -310,6 +322,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target === elements.dbHandleLeft || e.target === elements.dbHandleRight) return;
             e.preventDefault(); e.stopPropagation();
             isDraggingCenter = true;
+            hasMoved = false;
+            initialMouseX = e.clientX;
             const clip = getClipRange();
             initialClipStart = clip.start;
             initialClipEnd = clip.end;
@@ -318,12 +332,22 @@ document.addEventListener('DOMContentLoaded', () => {
             document.addEventListener('mousemove', onDbMouseMove);
             document.addEventListener('mouseup', onDbMouseUp);
         });
+
+        elements.dbActiveRegion.addEventListener('dblclick', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            const clip = getClipRange();
+            if (clip.start !== null && clip.end !== null) {
+                setZoomRange(clip.start, clip.end);
+            }
+        });
     }
 
     if (elements.dbHandleLeft) {
         elements.dbHandleLeft.addEventListener('mousedown', (e) => {
             e.preventDefault(); e.stopPropagation();
             isDraggingLeft = true;
+            hasMoved = false;
+            initialMouseX = e.clientX;
             const clip = getClipRange();
             initialClipStart = clip.start;
             initialClipEnd = clip.end;
@@ -336,6 +360,8 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.dbHandleRight.addEventListener('mousedown', (e) => {
             e.preventDefault(); e.stopPropagation();
             isDraggingRight = true;
+            hasMoved = false;
+            initialMouseX = e.clientX;
             const clip = getClipRange();
             initialClipStart = clip.start;
             initialClipEnd = clip.end;
@@ -362,7 +388,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (pendingAction.type === 'uncheck_clip') {
                     elements.dbModeClip.checked = false;
                     if (elements.dbClipParams) elements.dbClipParams.style.display = 'none';
-                    drawDatasetBar();
+                    setUserModifiedClip(false);
+                    updateDbBarVisibility();
                     requantize(true);
                 }
                 pendingAction = null;
@@ -375,6 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyPreset('Q4_0');
     elements.presetEl.value = 'Q4_0';
     updateUI();
+    updateDbBarVisibility();
     generateData();
     requantize();
 });
