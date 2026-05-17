@@ -443,24 +443,24 @@
                             <div id="trellis-adv-panel" class="adv-panel" style="display: none; padding-top: 8px;">
                                 <div class="settings-group">
                                     <label for="trellis-wht-scope"
-                                        title="Global WHT perfectly smears outliers across the entire weight matrix. This allows for one global block scale saving memory/BPW, but raises the global noise floor. Local WHT confines outliers to small blocks, yielding lower MSE but requiring a 16-bit scale per block.">SRHT
-                                        Scope / Scale Strategy</label>
+                                        title="Global applies FWHT across the entire dataset, perfectly smearing outlier energy so a single Global Scale can be used. Local applies FWHT per-block, which allows fine-tuned scales but forces local scales to spike if an outlier is trapped in that block, destroying precision for surrounding weights.">SRHT
+                                        Transform & Scale Scope</label>
                                     <select id="trellis-wht-scope">
-                                        <option value="global" selected>Global (QuIP# Style: 1 Scale Total)
+                                        <option value="global" selected>Global (Global Tensor Transform + Scale)
                                         </option>
-                                        <option value="local">Local (Per-Block: 1 Scale per Block)</option>
+                                        <option value="local">Local (Per-Block Transform + Scale)</option>
                                     </select>
                                 </div>
                                 <div class="settings-group">
                                     <label for="trellis-opt-iters"
-                                        title="Grid-searches optimal scale utilizing Viterbi forward pass (MSE reduction). Set > 0 to enable.">Scale
-                                        Opt Iters</label>
+                                        title="Uses Golden-Section Search to find the mathematically optimal scale by simulating the Viterbi TCQ path. Set > 0 to enable. Higher values reduce quantization error (MSE).">Scale
+                                        Optimization Iters</label>
                                     <input type="number" id="trellis-opt-iters" value="0" min="0" max="25">
                                 </div>
                                 <div class="settings-group">
                                     <label for="trellis-sign-seed"
-                                        title="Seed for deterministic pseudo-random SRHT column permutation.">SRHT Sign
-                                        Seed</label>
+                                        title="Seed for the deterministic pseudo-random sign flips (the diagonal matrix 'D' in SRHT). Used to ensure the transform is identically reversible.">SRHT
+                                        Sign Seed</label>
                                     <input type="number" id="trellis-sign-seed" value="42">
                                 </div>
                             </div>

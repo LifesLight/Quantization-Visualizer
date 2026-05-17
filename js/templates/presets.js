@@ -56,9 +56,9 @@ export const presetGroups = [
     {
         label: "Trellis",
         presets: {
-            'tcq2': { label: 'TCQ2', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'local', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 },
-            'tcq3': { label: 'TCQ3', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'local', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 },
-            'tcq4': { label: 'TCQ4', 'quant-type': 'trellis', 'trellis-bits': 4, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'local', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 }
+            'tcq2': { label: 'TCQ2', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 },
+            'tcq3': { label: 'TCQ3', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 },
+            'tcq4': { label: 'TCQ4', 'quant-type': 'trellis', 'trellis-bits': 4, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42 }
         }
     }
 ];
