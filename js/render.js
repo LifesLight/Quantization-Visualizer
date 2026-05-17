@@ -286,6 +286,11 @@ export function render() {
     elements.chartArea.style.gap = '';
     const hasBlocks = blockMeta && blockMeta.length > 0;
     const hasSupers = superMeta && superMeta.length > 0;
+
+    // Dynamically fetch lengths matching internal quantizer math structures, overriding UI where needed
+    const actBlockSize = hasBlocks ? blockMeta[0].size : 0;
+    const actSbSize = hasSupers ? superMeta[0].size : 0;
+
     let frag;
 
     const useClip = elements.dbModeClip ? elements.dbModeClip.checked : true;
@@ -296,8 +301,8 @@ export function render() {
 
         const maxBars = clientWidth;
         const binSize = zCount / maxBars;
-        const showBlocks = hasBlocks && (settings.blockSize ? (settings.blockSize / binSize) : 0) >= 8;
-        const showSupers = hasSupers && (settings.sbSize ? (settings.sbSize / binSize) : 0) >= 8;
+        const showBlocks = hasBlocks && actBlockSize > 0 && (actBlockSize / binSize) >= 8;
+        const showSupers = hasSupers && actSbSize > 0 && (actSbSize / binSize) >= 8;
 
         let currentSbGrp = null;
         let currentBlkGrp = null;
@@ -316,8 +321,8 @@ export function render() {
                 if (mag > maxMag) { maxMag = mag; bestIdx = j; }
             }
 
-            let sbIdx = showSupers ? Math.floor(Math.max(0, binStartIdx - clipStart) / settings.sbSize) : -1;
-            let blkIdx = showBlocks ? Math.floor(Math.max(0, binStartIdx - clipStart) / settings.blockSize) : -1;
+            let sbIdx = showSupers ? Math.floor(Math.max(0, binStartIdx - clipStart) / actSbSize) : -1;
+            let blkIdx = showBlocks ? Math.floor(Math.max(0, binStartIdx - clipStart) / actBlockSize) : -1;
 
             if (showSupers && sbIdx !== lastSbIdx) {
                 currentSbGrp = document.createElement('div');
