@@ -107,6 +107,7 @@ export function requantize(overrideClipCheck = false) {
             if (elements.dbToolsPanel) elements.dbToolsPanel.style.display = 'flex';
             if (elements.dbContainer) elements.dbContainer.style.display = 'flex';
             if (elements.dbBar) elements.dbBar.style.display = 'block';
+            if (elements.dbClipParams) elements.dbClipParams.style.display = 'flex';
         }
     }
 
@@ -419,6 +420,9 @@ export function drawDatasetBar() {
         elements.dbActiveRegion.style.borderRight = '1px solid var(--primary-color)';
         if (elements.dbHandleLeft) elements.dbHandleLeft.style.display = 'block';
         if (elements.dbHandleRight) elements.dbHandleRight.style.display = 'block';
+
+        if (elements.dbClipStart && document.activeElement !== elements.dbClipStart) elements.dbClipStart.value = clipStart;
+        if (elements.dbClipWidth && document.activeElement !== elements.dbClipWidth) elements.dbClipWidth.value = (clipEnd - clipStart + 1);
     } else {
         elements.dbActiveRegion.style.left = `0%`;
         elements.dbActiveRegion.style.width = `100%`;

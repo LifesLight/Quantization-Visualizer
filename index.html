@@ -142,10 +142,25 @@
                             </svg>
                         </button>
                         <div id="db-tools-panel" class="adv-panel" style="display: none;">
-                            <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;">
-                                <input type="checkbox" id="db-mode-clip" checked
-                                    style="width: auto; margin: 0; cursor: pointer;">
-                                <label for="db-mode-clip" style="margin: 0; cursor: pointer;">Weight Clip</label>
+                            <div class="settings-group" style="flex-direction: column; gap: 4px;">
+                                <div style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
+                                    <input type="checkbox" id="db-mode-clip" checked
+                                        style="width: auto; margin: 0; cursor: pointer;">
+                                    <label for="db-mode-clip" style="margin: 0; cursor: pointer;">Weight Clip</label>
+                                </div>
+                                <div id="db-clip-params" class="dist-params"
+                                    style="display:flex; flex-direction: row; gap: 8px; margin-top: 2px;">
+                                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                        <label for="db-clip-start" style="font-size: 0.8rem; font-weight:normal;">Start
+                                            Index</label>
+                                        <input type="number" id="db-clip-start" value="0" min="0">
+                                    </div>
+                                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                        <label for="db-clip-width"
+                                            style="font-size: 0.8rem; font-weight:normal;">Width</label>
+                                        <input type="number" id="db-clip-width" value="262144" min="1">
+                                    </div>
+                                </div>
                             </div>
                             <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="db-mode-minmax"

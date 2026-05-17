@@ -749,3 +749,11 @@ button.action-btn:hover:not(.secondary) {
     max-width: 400px;
     text-align: center;
 }
+
+#db-active-region {
+    cursor: grab;
+}
+
+#db-active-region:active {
+    cursor: grabbing;
+}

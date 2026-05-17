@@ -174,6 +174,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (elements.dbContainer) elements.dbContainer.style.display = isHidden ? 'flex' : 'none';
             if (elements.dbBar) elements.dbBar.style.display = isHidden ? 'block' : 'none';
             if (isHidden) drawDatasetBar();
+
+            if (elements.dbClipParams) {
+                elements.dbClipParams.style.display = (elements.dbModeClip && elements.dbModeClip.checked) ? 'flex' : 'none';
+            }
         });
     }
 
@@ -181,10 +185,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (elements.dbModeClip) {
         elements.dbModeClip.addEventListener('change', (e) => {
+            if (elements.dbClipParams) {
+                elements.dbClipParams.style.display = e.target.checked ? 'flex' : 'none';
+            }
+
             const N = getBaseFloats().length;
             if (!e.target.checked && N > 262144 && !getHasWarnedLargeData()) {
                 e.preventDefault();
                 e.target.checked = true; // revert visually
+                if (elements.dbClipParams) elements.dbClipParams.style.display = 'flex';
                 pendingAction = { type: 'uncheck_clip' };
                 elements.modalLargeData.style.display = 'flex';
             } else {
@@ -198,13 +207,43 @@ document.addEventListener('DOMContentLoaded', () => {
         if (el) el.addEventListener('change', drawDatasetBar);
     });
 
+    const applyClipInputs = () => {
+        const baseFloats = getBaseFloats();
+        const N = baseFloats.length;
+        if (N === 0) return;
+
+        let start = parseInt(elements.dbClipStart.value) || 0;
+        let width = parseInt(elements.dbClipWidth.value) || 1;
+
+        start = Math.max(0, Math.min(start, N - 1));
+        width = Math.max(1, width);
+
+        let end = start + width - 1;
+        if (end > N - 1) {
+            end = N - 1;
+        }
+
+        const diff = end - start + 1;
+        if (diff > 262144 && !getHasWarnedLargeData()) {
+            pendingAction = { type: 'slider', start: start, end: end };
+            elements.modalLargeData.style.display = 'flex';
+        } else {
+            setClipRange(start, end, false);
+        }
+    };
+
+    if (elements.dbClipStart) elements.dbClipStart.addEventListener('change', applyClipInputs);
+    if (elements.dbClipWidth) elements.dbClipWidth.addEventListener('change', applyClipInputs);
+
     let isDraggingLeft = false;
     let isDraggingRight = false;
+    let isDraggingCenter = false;
     let initialClipStart = 0;
     let initialClipEnd = 0;
+    let dragStartXRatio = 0;
 
     const onDbMouseMove = (e) => {
-        if (!isDraggingLeft && !isDraggingRight) return;
+        if (!isDraggingLeft && !isDraggingRight && !isDraggingCenter) return;
         const rect = elements.dbBar.getBoundingClientRect();
         const baseFloats = getBaseFloats();
         const N = baseFloats.length;
@@ -215,6 +254,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const zCount = zE - zS + 1;
 
         let pxRatio = (e.clientX - rect.left) / rect.width;
+
+        if (isDraggingCenter) {
+            let deltaRatio = pxRatio - dragStartXRatio;
+            let deltaIdx = Math.round(deltaRatio * (zCount - 1));
+
+            if (initialClipStart + deltaIdx < 0) {
+                deltaIdx = -initialClipStart;
+            }
+            if (initialClipEnd + deltaIdx > N - 1) {
+                deltaIdx = N - 1 - initialClipEnd;
+            }
+
+            let newStart = initialClipStart + deltaIdx;
+            let newEnd = initialClipEnd + deltaIdx;
+            setClipRange(newStart, newEnd, true);
+            return;
+        }
+
         let targetIdx = Math.round(zS + pxRatio * (zCount - 1));
         targetIdx = Math.max(0, Math.min(N - 1, targetIdx));
 
@@ -229,9 +286,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const onDbMouseUp = (e) => {
-        if (isDraggingLeft || isDraggingRight) {
+        if (isDraggingLeft || isDraggingRight || isDraggingCenter) {
             isDraggingLeft = false;
             isDraggingRight = false;
+            isDraggingCenter = false;
             document.removeEventListener('mousemove', onDbMouseMove);
             document.removeEventListener('mouseup', onDbMouseUp);
 
@@ -246,6 +304,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     };
+
+    if (elements.dbActiveRegion) {
+        elements.dbActiveRegion.addEventListener('mousedown', (e) => {
+            if (e.target === elements.dbHandleLeft || e.target === elements.dbHandleRight) return;
+            e.preventDefault(); e.stopPropagation();
+            isDraggingCenter = true;
+            const clip = getClipRange();
+            initialClipStart = clip.start;
+            initialClipEnd = clip.end;
+            const rect = elements.dbBar.getBoundingClientRect();
+            dragStartXRatio = (e.clientX - rect.left) / rect.width;
+            document.addEventListener('mousemove', onDbMouseMove);
+            document.addEventListener('mouseup', onDbMouseUp);
+        });
+    }
 
     if (elements.dbHandleLeft) {
         elements.dbHandleLeft.addEventListener('mousedown', (e) => {
@@ -288,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     setClipRange(pendingAction.start, pendingAction.end, false);
                 } else if (pendingAction.type === 'uncheck_clip') {
                     elements.dbModeClip.checked = false;
+                    if (elements.dbClipParams) elements.dbClipParams.style.display = 'none';
                     drawDatasetBar();
                     requantize(true);
                 }
