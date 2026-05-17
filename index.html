@@ -49,7 +49,7 @@
         <main>
             <div class="panel-wrapper" id="panel-left-wrapper">
                 <div class="panel">
-                    <div class="panel-header">1. Input Data</div>
+                    <div class="panel-header">Data Controls</div>
                     <div class="settings-group">
                         <label>Generate Floats</label>
                         <select id="gen-dist">
@@ -68,11 +68,6 @@
                                 </svg>
                             </button>
                             <div id="gen-adv-panel" class="adv-panel" style="display: none;">
-                                <div class="settings-group">
-                                    <label>Global Bias (Offset)</label>
-                                    <input type="number" id="gen-bias" value="0.0" step="0.5">
-                                </div>
-
                                 <div id="param-normal" class="dist-params" style="display:flex;">
                                     <label>Standard Deviation</label>
                                     <input type="number" id="gen-std" value="1.0" step="0.1" min="0.1">
@@ -116,11 +111,57 @@
                         <input type="file" id="file-input" accept=".txt,.json,.csv,.xml" style="display: none;">
                     </div>
 
-                    <div class="input-group" style="margin-top: 10px;">
-                        <label for="float-input">Raw Floats Block</label>
-                        <textarea id="float-input" placeholder="e.g. 1.2, -0.5, 3.14, -2.2, 0.1"></textarea>
+                    <div class="raw-floats-wrapper settings-group" style="margin-top: 10px;">
+                        <button id="raw-adv-toggle" class="adv-toggle-btn">
+                            <span>Raw Floats Block</span>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
+                        </button>
+                        <div id="raw-adv-panel" class="adv-panel" style="display: none;">
+                            <textarea id="float-input" placeholder="e.g. 1.2, -0.5, 3.14, -2.2, 0.1"></textarea>
+                        </div>
                     </div>
-                    <div class="settings-group">
+
+                    <div class="settings-group" style="flex-direction: row; gap: 8px; margin-top: 10px;">
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                            <label for="data-scale">Scale Data</label>
+                            <input type="number" id="data-scale" value="1.0" step="0.1">
+                        </div>
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                            <label for="data-offset">Offset Data</label>
+                            <input type="number" id="data-offset" value="0.0" step="0.1">
+                        </div>
+                    </div>
+
+                    <div class="settings-group" style="margin-top: 10px;">
+                        <button id="btn-dataset-bar" class="adv-toggle-btn">
+                            <span>Dataset Tools</span>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
+                        </button>
+                        <div id="db-tools-panel" class="adv-panel" style="display: none;">
+                            <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="db-mode-clip" checked
+                                    style="width: auto; margin: 0; cursor: pointer;">
+                                <label for="db-mode-clip" style="margin: 0; cursor: pointer;">Weight Clip</label>
+                            </div>
+                            <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="db-mode-minmax"
+                                    style="width: auto; margin: 0; cursor: pointer;">
+                                <label for="db-mode-minmax" style="margin: 0; cursor: pointer;">Min / Max
+                                    Indicators</label>
+                            </div>
+                            <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="db-mode-hotspots"
+                                    style="width: auto; margin: 0; cursor: pointer;">
+                                <label for="db-mode-hotspots" style="margin: 0; cursor: pointer;">Error Hotspots</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-group" style="margin-top: auto;">
                         <label for="centering-mode">Chart Y-Axis Mode</label>
                         <select id="centering-mode">
                             <option value="zero">Centered around Zero</option>
@@ -179,6 +220,30 @@
                         </div>
                     </div>
 
+                    <div class="dataset-bar-wrapper" id="dataset-bar-wrapper" style="display:none;">
+                        <div id="dataset-bar" class="dataset-bar">
+                            <canvas id="db-canvas"
+                                style="position:absolute; width:100%; height:100%; left:0; top:0; pointer-events:none;"></canvas>
+                            <div id="db-min-arrow"
+                                style="display:none; position:absolute; top:0; bottom:0; width:2px; background:var(--accent-color); z-index:5;">
+                                <div
+                                    style="position:absolute; top:-12px; left:-5px; font-size:10px; color:var(--accent-color);">
+                                    Min</div>
+                            </div>
+                            <div id="db-max-arrow"
+                                style="display:none; position:absolute; top:0; bottom:0; width:2px; background:var(--negative-color); z-index:5;">
+                                <div
+                                    style="position:absolute; top:-12px; left:-5px; font-size:10px; color:var(--negative-color);">
+                                    Max</div>
+                            </div>
+                            <div id="db-active-region"
+                                style="position:absolute; height:100%; background:rgba(79, 70, 229, 0.15); border-left:1px solid var(--primary-color); border-right:1px solid var(--primary-color); box-sizing:border-box;">
+                                <div id="db-handle-left" class="db-handle"></div>
+                                <div id="db-handle-right" class="db-handle"></div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="equation-box" id="equation-box"></div>
 
                     <div class="inspector-panel" id="inspector-panel">
@@ -206,7 +271,7 @@
 
             <div class="panel-wrapper" id="panel-right-wrapper">
                 <div class="panel">
-                    <div class="panel-header">2. Quant Engine</div>
+                    <div class="panel-header">Quant Engine</div>
 
                     <div class="settings-group">
                         <label for="preset-select">Presets</label>
@@ -433,6 +498,21 @@
             Copyright &copy; Alexander Kurtz 2026
         </footer>
     </div>
+
+    <div id="large-data-modal"
+        style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div class="panel modal-panel">
+            <h3 style="margin-top:0;">Performance Warning</h3>
+            <p style="font-size: 0.95rem; line-height: 1.4; color: var(--text-muted);">Selecting more than 262,144
+                active weights might make complex quantization algorithms very slow or non-functional. Do you wish to
+                continue?</p>
+            <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+                <button id="btn-modal-back" class="action-btn secondary">Go Back</button>
+                <button id="btn-modal-okay" class="action-btn">Okay</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="js/main.js"></script>
 </body>
 

@@ -3,7 +3,6 @@ import { elements } from './ui.js';
 export function generateData() {
     const dist = elements.distEl.value;
     const count = parseInt(elements.genCountEl.value) || 256;
-    const bias = parseFloat(elements.genBiasEl.value) || 0.0;
     let arr = [];
 
     for (let i = 0; i < count; i++) {
@@ -33,7 +32,6 @@ export function generateData() {
             val = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v) * std;
         }
 
-        val += bias;
         arr.push(val.toFixed(5));
     }
     elements.inputEl.value = arr.join(', ');

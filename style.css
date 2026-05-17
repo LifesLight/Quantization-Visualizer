@@ -685,3 +685,67 @@ button.action-btn:hover:not(.secondary) {
         grid-template-columns: 1fr;
     }
 }
+
+.dataset-bar-wrapper {
+    width: 100%;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dataset-bar {
+    position: relative;
+    height: 24px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.db-handle {
+    position: absolute;
+    width: 12px;
+    height: 100%;
+    background: var(--primary-color);
+    cursor: ew-resize;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
+}
+
+.db-handle:hover {
+    background: var(--primary-hover);
+}
+
+#db-handle-left {
+    left: -6px;
+}
+
+#db-handle-right {
+    right: -6px;
+}
+
+.bar.inactive .bar-fill {
+    background-color: var(--text-muted) !important;
+    opacity: 0.25;
+}
+
+.bar.inactive .error-fill {
+    display: none;
+}
+
+.bar.inactive {
+    cursor: not-allowed;
+}
+
+#large-data-modal .panel {
+    background: var(--card-bg);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    border-color: var(--border-color);
+    height: auto;
+    min-height: 0;
+    max-width: 400px;
+    text-align: center;
+}

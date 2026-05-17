@@ -1,7 +1,7 @@
 import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
-import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT } from './render.js';
+import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange } from './render.js';
 
 function getNearestBarIdx(clientX) {
     const bars = Array.from(elements.chartArea.querySelectorAll('.bar')).filter(b => b.style.display !== 'none');
@@ -76,8 +76,10 @@ document.addEventListener('DOMContentLoaded', () => {
             resetZoom(false);
             requantize();
         } else {
-            elements.presetEl.value = 'custom';
-            updateUI();
+            if (e.target.id !== 'data-scale' && e.target.id !== 'data-offset') {
+                elements.presetEl.value = 'custom';
+                updateUI();
+            }
             requantize();
         }
     }));
@@ -161,6 +163,140 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         resetZoom();
     });
+
+    // Dataset Bar interaction logic
+    if (elements.dbToggleBtn) {
+        elements.dbToggleBtn.addEventListener('click', () => {
+            const isHidden = elements.dbToolsPanel.style.display === 'none';
+            elements.dbToolsPanel.style.display = isHidden ? 'flex' : 'none';
+            elements.dbToggleBtn.classList.toggle('open', isHidden);
+
+            if (elements.dbContainer) elements.dbContainer.style.display = isHidden ? 'flex' : 'none';
+            if (elements.dbBar) elements.dbBar.style.display = isHidden ? 'block' : 'none';
+            if (isHidden) drawDatasetBar();
+        });
+    }
+
+    let pendingAction = null;
+
+    if (elements.dbModeClip) {
+        elements.dbModeClip.addEventListener('change', (e) => {
+            const N = getBaseFloats().length;
+            if (!e.target.checked && N > 262144 && !getHasWarnedLargeData()) {
+                e.preventDefault();
+                e.target.checked = true; // revert visually
+                pendingAction = { type: 'uncheck_clip' };
+                elements.modalLargeData.style.display = 'flex';
+            } else {
+                drawDatasetBar();
+                requantize(true);
+            }
+        });
+    }
+
+    [elements.dbModeMinMax, elements.dbModeHotspots].forEach(el => {
+        if (el) el.addEventListener('change', drawDatasetBar);
+    });
+
+    let isDraggingLeft = false;
+    let isDraggingRight = false;
+    let initialClipStart = 0;
+    let initialClipEnd = 0;
+
+    const onDbMouseMove = (e) => {
+        if (!isDraggingLeft && !isDraggingRight) return;
+        const rect = elements.dbBar.getBoundingClientRect();
+        const baseFloats = getBaseFloats();
+        const N = baseFloats.length;
+        if (N === 0) return;
+
+        let zS = zoomRange ? zoomRange.start : 0;
+        let zE = zoomRange ? zoomRange.end : N - 1;
+        const zCount = zE - zS + 1;
+
+        let pxRatio = (e.clientX - rect.left) / rect.width;
+        let targetIdx = Math.round(zS + pxRatio * (zCount - 1));
+        targetIdx = Math.max(0, Math.min(N - 1, targetIdx));
+
+        const clip = getClipRange();
+        if (isDraggingLeft) {
+            let newStart = Math.min(targetIdx, clip.end);
+            setClipRange(newStart, clip.end, true);
+        } else if (isDraggingRight) {
+            let newEnd = Math.max(targetIdx, clip.start);
+            setClipRange(clip.start, newEnd, true);
+        }
+    };
+
+    const onDbMouseUp = (e) => {
+        if (isDraggingLeft || isDraggingRight) {
+            isDraggingLeft = false;
+            isDraggingRight = false;
+            document.removeEventListener('mousemove', onDbMouseMove);
+            document.removeEventListener('mouseup', onDbMouseUp);
+
+            const clip = getClipRange();
+            const diff = clip.end - clip.start + 1;
+            if (diff > 262144 && !getHasWarnedLargeData()) {
+                pendingAction = { type: 'slider', start: clip.start, end: clip.end };
+                setClipRange(initialClipStart, initialClipEnd, true); // revert visually until accepted
+                elements.modalLargeData.style.display = 'flex';
+            } else {
+                requantize(true);
+            }
+        }
+    };
+
+    if (elements.dbHandleLeft) {
+        elements.dbHandleLeft.addEventListener('mousedown', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            isDraggingLeft = true;
+            const clip = getClipRange();
+            initialClipStart = clip.start;
+            initialClipEnd = clip.end;
+            document.addEventListener('mousemove', onDbMouseMove);
+            document.addEventListener('mouseup', onDbMouseUp);
+        });
+    }
+
+    if (elements.dbHandleRight) {
+        elements.dbHandleRight.addEventListener('mousedown', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            isDraggingRight = true;
+            const clip = getClipRange();
+            initialClipStart = clip.start;
+            initialClipEnd = clip.end;
+            document.addEventListener('mousemove', onDbMouseMove);
+            document.addEventListener('mouseup', onDbMouseUp);
+        });
+    }
+
+    if (elements.btnModalBack) {
+        elements.btnModalBack.addEventListener('click', () => {
+            elements.modalLargeData.style.display = 'none';
+            pendingAction = null;
+        });
+    }
+
+    if (elements.btnModalOkay) {
+        elements.btnModalOkay.addEventListener('click', () => {
+            elements.modalLargeData.style.display = 'none';
+            setHasWarnedLargeData(true);
+
+            if (pendingAction) {
+                if (pendingAction.type === 'slider') {
+                    setClipRange(pendingAction.start, pendingAction.end, false);
+                } else if (pendingAction.type === 'uncheck_clip') {
+                    elements.dbModeClip.checked = false;
+                    drawDatasetBar();
+                    requantize(true);
+                }
+                pendingAction = null;
+            } else {
+                requantize(true);
+            }
+        });
+    }
 
     applyPreset('Q4_0');
     elements.presetEl.value = 'Q4_0';

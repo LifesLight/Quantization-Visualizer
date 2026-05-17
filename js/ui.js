@@ -1,5 +1,6 @@
 import { presetGroups, getPresetById } from './templates/presets.js';
 import registry from './quants/registry.js';
+import { drawDatasetBar } from './render.js';
 
 export const elements = {
     get inputEl() { return document.getElementById('float-input'); },
@@ -14,9 +15,12 @@ export const elements = {
     get distEl() { return document.getElementById('gen-dist'); },
     get advToggleBtn() { return document.getElementById('gen-adv-toggle'); },
     get advPanel() { return document.getElementById('gen-adv-panel'); },
+    get rawAdvToggleBtn() { return document.getElementById('raw-adv-toggle'); },
+    get rawAdvPanel() { return document.getElementById('raw-adv-panel'); },
     get genCountEl() { return document.getElementById('gen-count'); },
     get genBtn() { return document.getElementById('gen-btn'); },
-    get genBiasEl() { return document.getElementById('gen-bias'); },
+    get dataScaleEl() { return document.getElementById('data-scale'); },
+    get dataOffsetEl() { return document.getElementById('data-offset'); },
     get genStdEl() { return document.getElementById('gen-std'); },
     get genScaleEl() { return document.getElementById('gen-scale'); },
     get genBimodalDistEl() { return document.getElementById('gen-bimodal-dist'); },
@@ -68,17 +72,35 @@ export const elements = {
     get chartMinLbl() { return document.getElementById('chart-min-lbl'); },
     get btnResetZoom() { return document.getElementById('btn-reset-zoom'); },
     get btnToggleSRHT() { return document.getElementById('btn-toggle-srht'); },
+
+    get dbToggleBtn() { return document.getElementById('btn-dataset-bar'); },
+    get dbToolsPanel() { return document.getElementById('db-tools-panel'); },
+    get dbModeClip() { return document.getElementById('db-mode-clip'); },
+    get dbModeMinMax() { return document.getElementById('db-mode-minmax'); },
+    get dbModeHotspots() { return document.getElementById('db-mode-hotspots'); },
+    get dbContainer() { return document.getElementById('dataset-bar-wrapper'); },
+    get dbBar() { return document.getElementById('dataset-bar'); },
+    get dbHandleLeft() { return document.getElementById('db-handle-left'); },
+    get dbHandleRight() { return document.getElementById('db-handle-right'); },
+    get dbActiveRegion() { return document.getElementById('db-active-region'); },
+    get dbCanvas() { return document.getElementById('db-canvas'); },
+    get dbMinArrow() { return document.getElementById('db-min-arrow'); },
+    get dbMaxArrow() { return document.getElementById('db-max-arrow'); },
+    get modalLargeData() { return document.getElementById('large-data-modal'); },
+    get btnModalBack() { return document.getElementById('btn-modal-back'); },
+    get btnModalOkay() { return document.getElementById('btn-modal-okay'); },
+
     get autoUpdateElements() {
         return [
             this.modeEl, this.qTypeEl, this.qBitsEl,
             this.blockSizeEl, this.sbSizeEl, this.subSizeEl, this.subBitsEl,
-            this.subOffsetEl, this.distEl, this.genBiasEl, this.genStdEl,
+            this.subOffsetEl, this.distEl, this.genStdEl,
             this.genScaleEl, this.genBimodalDistEl, this.genBimodalSpreadEl,
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
             this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
-            this.trellisWhtEl, this.trellisWhtScopeEl, this.trellisOptItersEl, this.trellisSignSeedEl, 
-            this.mxfpFormatEl, this.primitiveFormatEl
+            this.trellisWhtEl, this.trellisWhtScopeEl, this.trellisOptItersEl, this.trellisSignSeedEl,
+            this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl
         ].filter(el => el !== null);
     }
 };
@@ -205,6 +227,14 @@ export function initUIListeners() {
         elements.advPanel.style.display = isHidden ? 'flex' : 'none';
         elements.advToggleBtn.classList.toggle('open', isHidden);
     });
+
+    if (elements.rawAdvToggleBtn) {
+        elements.rawAdvToggleBtn.addEventListener('click', () => {
+            const isHidden = elements.rawAdvPanel.style.display === 'none';
+            elements.rawAdvPanel.style.display = isHidden ? 'flex' : 'none';
+            elements.rawAdvToggleBtn.classList.toggle('open', isHidden);
+        });
+    }
 
     elements.trellisAdvToggle?.addEventListener('click', () => {
         const isHidden = elements.trellisAdvPanel.style.display === 'none';

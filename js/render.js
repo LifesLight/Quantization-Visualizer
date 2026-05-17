@@ -7,7 +7,52 @@ let lastHoveredIdx = 0;
 export let zoomRange = null;
 export let showSRHT = false;
 
-// Cache DOM templates. .cloneNode(false) is vastly faster than document.createElement()
+export let clipStart = null;
+export let clipEnd = null;
+export let hasWarnedLargeData = false;
+
+export function setHasWarnedLargeData(val) { hasWarnedLargeData = val; }
+export function getHasWarnedLargeData() { return hasWarnedLargeData; }
+export function getClipRange() { return { start: clipStart, end: clipEnd }; }
+
+let rawFloatsCache = [];
+let rawFloatsStr = "";
+let baseFloatsCache = [];
+let lastScale = null;
+let lastOffset = null;
+
+export function getBaseFloats() {
+    const text = elements.inputEl.value;
+    const scale = parseFloat(elements.dataScaleEl.value);
+    const finalScale = isNaN(scale) ? 1.0 : scale;
+    const offset = parseFloat(elements.dataOffsetEl.value);
+    const finalOffset = isNaN(offset) ? 0.0 : offset;
+
+    if (text !== rawFloatsStr) {
+        rawFloatsStr = text;
+        rawFloatsCache = text.split(/[, \n\t]+/).map(s => s.trim()).filter(s => s !== '' && !isNaN(s)).map(Number);
+        lastScale = null;
+    }
+
+    if (finalScale !== lastScale || finalOffset !== lastOffset) {
+        baseFloatsCache = rawFloatsCache.map(v => (v * finalScale) + finalOffset);
+        lastScale = finalScale;
+        lastOffset = finalOffset;
+    }
+
+    return baseFloatsCache;
+}
+
+export function setClipRange(start, end, previewOnly = false) {
+    clipStart = start;
+    clipEnd = end;
+    if (previewOnly) {
+        drawDatasetBar();
+    } else {
+        requantize(true);
+    }
+}
+
 const tplBar = document.createElement('div');
 tplBar.className = 'bar';
 
@@ -35,27 +80,52 @@ export function toggleSRHT() {
     render();
 }
 
-export function requantize() {
-    const floats = elements.inputEl.value.split(/[, \n\t]+/).map(s => s.trim()).filter(s => s !== '' && !isNaN(s)).map(Number);
-    if (floats.length === 0) {
+export function requantize(overrideClipCheck = false) {
+    const baseFloats = getBaseFloats();
+    if (baseFloats.length === 0) {
         currentRenderData = null;
         return;
     }
 
+    const N = baseFloats.length;
+
+    if (elements.dbModeClip && !elements.dbModeClip.checked) {
+        clipStart = 0;
+        clipEnd = Math.max(0, N - 1);
+    } else if (clipStart === null || clipEnd === null || clipEnd >= N || clipStart >= N) {
+        clipStart = 0;
+        clipEnd = N - 1;
+    }
+
+    if (!overrideClipCheck && N > 262144 && !hasWarnedLargeData) {
+        clipStart = 0;
+        clipEnd = 262143;
+        if (elements.dbModeClip) elements.dbModeClip.checked = true;
+
+        if (elements.dbToggleBtn && !elements.dbToggleBtn.classList.contains('open')) {
+            elements.dbToggleBtn.classList.add('open');
+            if (elements.dbToolsPanel) elements.dbToolsPanel.style.display = 'flex';
+            if (elements.dbContainer) elements.dbContainer.style.display = 'flex';
+            if (elements.dbBar) elements.dbBar.style.display = 'block';
+        }
+    }
+
+    clipStart = Math.max(0, Math.min(clipStart, N - 1));
+    clipEnd = Math.max(clipStart, Math.min(clipEnd, N - 1));
+
+    const activeFloats = baseFloats.slice(clipStart, clipEnd + 1);
     const settings = getSettings();
     const quant = registry[settings.qType];
 
-    // Offloads Heavy Algorithmic computations to a single execution
     const {
         qFloats, qMathStrings, bpw, blockMeta, superMeta, formulaHTML, tFloats, tQFloats
-    } = quant.quantize(floats, settings);
+    } = quant.quantize(activeFloats, settings);
 
     currentRenderData = {
-        floats, qFloats, qMathStrings, blockMeta, superMeta, settings,
-        quant, tFloats, tQFloats, bpw, formulaHTML
+        baseFloats, floats: activeFloats, qFloats, qMathStrings,
+        blockMeta, superMeta, settings, quant, tFloats, tQFloats, bpw, formulaHTML
     };
 
-    // Trigger visual build
     render();
 }
 
@@ -63,7 +133,7 @@ export function render() {
     if (!currentRenderData) return;
 
     const {
-        floats, qFloats, qMathStrings, blockMeta, superMeta, settings,
+        baseFloats, floats, qFloats, qMathStrings, blockMeta, superMeta, settings,
         quant, tFloats, tQFloats, bpw, formulaHTML
     } = currentRenderData;
 
@@ -76,9 +146,6 @@ export function render() {
         elements.btnToggleSRHT.style.display = 'flex';
         elements.btnToggleSRHT.classList.toggle('active', showSRHT);
     }
-
-    let vFloats = showSRHT ? tFloats : floats;
-    let vQFloats = showSRHT ? tQFloats : qFloats;
 
     const glbErr = getErrStats(floats, qFloats);
 
@@ -103,39 +170,40 @@ export function render() {
     }
 
     const zStart = zoomRange ? zoomRange.start : 0;
-    const zEnd = zoomRange ? zoomRange.end : vFloats.length - 1;
+    const zEnd = zoomRange ? zoomRange.end : baseFloats.length - 1;
     const zCount = zEnd - zStart + 1;
+
+    let getOrigVal = (i) => {
+        if (i >= clipStart && i <= clipEnd && showSRHT && tFloats) return tFloats[i - clipStart];
+        return baseFloats[i];
+    };
+
+    let getQVal = (i) => {
+        if (i >= clipStart && i <= clipEnd) return (showSRHT && tQFloats) ? tQFloats[i - clipStart] : qFloats[i - clipStart];
+        return baseFloats[i];
+    };
 
     let dMax = -Infinity;
     let dMin = Infinity;
     let absMax = 0;
     for (let i = zStart; i <= zEnd; i++) {
-        let v = vFloats[i];
+        let v = getOrigVal(i);
         if (v > dMax) dMax = v;
         if (v < dMin) dMin = v;
         let absV = Math.abs(v);
         if (absV > absMax) absMax = absV;
     }
 
-    if (dMax === dMin) {
-        dMax += 0.1;
-        dMin -= 0.1;
-    }
+    if (dMax === dMin) { dMax += 0.1; dMin -= 0.1; }
     const spread = dMax - dMin;
 
-    // FIX: Removed the hardcoded Math.max(0.1, absMax) so that tiny NN weights scale properly.
     const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.05 : (absMax === 0 ? 0.1 : absMax) * 1.1;
     const sMin = settings.centeringMode === 'mid' ? dMin - spread * 0.05 : -sMax;
 
     let baselineValue = 0;
     if (settings.centeringMode === 'mid') {
-        if (dMin >= 0) {
-            baselineValue = sMin;
-        } else if (dMax <= 0) {
-            baselineValue = sMax;
-        } else {
-            baselineValue = 0;
-        }
+        if (dMin >= 0) baselineValue = sMin;
+        else if (dMax <= 0) baselineValue = sMax;
     }
 
     elements.chartMaxLbl.textContent = `Max: ${sMax.toFixed(2)}`;
@@ -154,7 +222,7 @@ export function render() {
 
     const clamp = (val) => Math.max(0, Math.min(100, val));
 
-    const createBar = (val, valQ, globalIdx) => {
+    const createBar = (val, valQ, globalIdx, isActive = true) => {
         const bar = tplBar.cloneNode(false);
         bar.dataset.idx = globalIdx;
 
@@ -163,6 +231,14 @@ export function render() {
         const yV = clamp(((val - sMin) / (sMax - sMin)) * 100);
 
         const qFill = tplBarFill.cloneNode(false);
+        if (!isActive) {
+            qFill.style.bottom = `${Math.min(yCenter, yV)}%`;
+            qFill.style.height = `${Math.abs(yV - yCenter)}%`;
+            bar.appendChild(qFill);
+            bar.classList.add('inactive');
+            return bar;
+        }
+
         qFill.style.bottom = `${Math.min(yCenter, yVQ)}%`;
         qFill.style.height = `${Math.abs(yVQ - yCenter)}%`;
         qFill.style.backgroundColor = valQ >= 0 ? 'var(--accent-color)' : 'var(--negative-color)';
@@ -183,11 +259,11 @@ export function render() {
     const pxPerBar = clientWidth / zCount;
 
     elements.chartArea.style.gap = '';
-
     const hasBlocks = blockMeta && blockMeta.length > 0;
     const hasSupers = superMeta && superMeta.length > 0;
-
     let frag;
+
+    const useClip = elements.dbModeClip ? elements.dbModeClip.checked : true;
 
     if (pxPerBar < 1) {
         elements.chartArea.style.gap = '0px';
@@ -195,12 +271,8 @@ export function render() {
 
         const maxBars = clientWidth;
         const binSize = zCount / maxBars;
-
-        const barsPerBlock = settings.blockSize ? (settings.blockSize / binSize) : 0;
-        const showBlocks = hasBlocks && barsPerBlock >= 8;
-
-        const barsPerSuper = settings.sbSize ? (settings.sbSize / binSize) : 0;
-        const showSupers = hasSupers && barsPerSuper >= 8;
+        const showBlocks = hasBlocks && (settings.blockSize ? (settings.blockSize / binSize) : 0) >= 8;
+        const showSupers = hasSupers && (settings.sbSize ? (settings.sbSize / binSize) : 0) >= 8;
 
         let currentSbGrp = null;
         let currentBlkGrp = null;
@@ -215,15 +287,12 @@ export function render() {
             let bestIdx = binStartIdx;
 
             for (let j = binStartIdx; j < binEndIdx; j++) {
-                let mag = Math.abs(vFloats[j]);
-                if (mag > maxMag) {
-                    maxMag = mag;
-                    bestIdx = j;
-                }
+                let mag = Math.abs(getOrigVal(j));
+                if (mag > maxMag) { maxMag = mag; bestIdx = j; }
             }
 
-            let sbIdx = showSupers ? Math.floor(binStartIdx / settings.sbSize) : -1;
-            let blkIdx = showBlocks ? Math.floor(binStartIdx / settings.blockSize) : -1;
+            let sbIdx = showSupers ? Math.floor(Math.max(0, binStartIdx - clipStart) / settings.sbSize) : -1;
+            let blkIdx = showBlocks ? Math.floor(Math.max(0, binStartIdx - clipStart) / settings.blockSize) : -1;
 
             if (showSupers && sbIdx !== lastSbIdx) {
                 currentSbGrp = document.createElement('div');
@@ -238,59 +307,63 @@ export function render() {
                 currentBlkGrp = document.createElement('div');
                 currentBlkGrp.className = 'block-group';
                 currentBlkGrp.style.gap = '0px';
-                if (currentSbGrp) {
-                    currentSbGrp.appendChild(currentBlkGrp);
-                } else {
-                    frag.appendChild(currentBlkGrp);
-                }
+                if (currentSbGrp) currentSbGrp.appendChild(currentBlkGrp);
+                else frag.appendChild(currentBlkGrp);
                 lastBlkIdx = blkIdx;
             }
 
-            const bar = createBar(vFloats[bestIdx], vQFloats[bestIdx], bestIdx);
+            const isActive = !useClip || (bestIdx >= clipStart && bestIdx <= clipEnd);
+            const bar = createBar(getOrigVal(bestIdx), getQVal(bestIdx), bestIdx, isActive);
             bar.style.flex = "1";
 
-            if (currentBlkGrp) {
-                currentBlkGrp.appendChild(bar);
-            } else if (currentSbGrp) {
-                currentSbGrp.appendChild(bar);
-            } else {
-                frag.appendChild(bar);
-            }
+            if (currentBlkGrp) currentBlkGrp.appendChild(bar);
+            else if (currentSbGrp) currentSbGrp.appendChild(bar);
+            else frag.appendChild(bar);
         }
 
         const groups = frag.querySelectorAll('.block-group, .sb-group');
         for (let i = 0; i < groups.length; i++) {
             const grp = groups[i];
             const visibleBars = grp.querySelectorAll('.bar').length;
-            if (visibleBars === 0) {
-                grp.style.display = 'none';
-            } else {
-                grp.style.flex = visibleBars;
-            }
+            if (visibleBars === 0) grp.style.display = 'none';
+            else grp.style.flex = visibleBars;
         }
 
     } else {
-        frag = quant.buildElements(vFloats, vQFloats, settings, (val, valQ, globalIdx) => {
-            if (zoomRange && (globalIdx < zoomRange.start || globalIdx > zoomRange.end)) {
-                return tplDummy.cloneNode(false);
-            }
-            return createBar(val, valQ, globalIdx);
-        });
+        frag = document.createDocumentFragment();
+        const actZStart = useClip ? Math.max(zStart, clipStart) : zStart;
+        const actZEnd = useClip ? Math.min(zEnd, clipEnd) : zEnd;
 
-        if (zoomRange) {
-            const dummies = frag.querySelectorAll('.dummy-bar');
-            for (let i = 0; i < dummies.length; i++) dummies[i].remove();
+        if (useClip && zStart < clipStart) {
+            const preEnd = Math.min(zEnd, clipStart - 1);
+            for (let i = zStart; i <= preEnd; i++) frag.appendChild(createBar(baseFloats[i], baseFloats[i], i, false));
+        }
 
-            const groups = frag.querySelectorAll('.block-group, .sb-group');
-            for (let i = 0; i < groups.length; i++) {
-                const grp = groups[i];
-                const visibleBars = grp.querySelectorAll('.bar').length;
-                if (visibleBars === 0) {
-                    grp.style.display = 'none';
-                } else {
-                    grp.style.flex = visibleBars;
-                }
-            }
+        if (actZStart <= actZEnd) {
+            let vFloatsActive = showSRHT ? tFloats : floats;
+            let vQFloatsActive = showSRHT ? tQFloats : qFloats;
+            const activeFrag = quant.buildElements(vFloatsActive, vQFloatsActive, settings, (val, valQ, sliceIdx) => {
+                const globalIdx = useClip ? sliceIdx + clipStart : sliceIdx;
+                if (globalIdx < zStart || globalIdx > zEnd) return tplDummy.cloneNode(false);
+                return createBar(val, valQ, globalIdx, true);
+            });
+            frag.appendChild(activeFrag);
+        }
+
+        if (useClip && zEnd > clipEnd) {
+            const postStart = Math.max(zStart, clipEnd + 1);
+            for (let i = postStart; i <= zEnd; i++) frag.appendChild(createBar(baseFloats[i], baseFloats[i], i, false));
+        }
+
+        const dummies = frag.querySelectorAll('.dummy-bar');
+        for (let i = 0; i < dummies.length; i++) dummies[i].remove();
+
+        const groups = frag.querySelectorAll('.block-group, .sb-group');
+        for (let i = 0; i < groups.length; i++) {
+            const grp = groups[i];
+            const visibleBars = grp.querySelectorAll('.bar').length;
+            if (visibleBars === 0) grp.style.display = 'none';
+            else grp.style.flex = visibleBars;
         }
     }
 
@@ -298,38 +371,156 @@ export function render() {
     if (visibleTopGroups.length > 0) {
         let rightEdge = visibleTopGroups[visibleTopGroups.length - 1];
         while (rightEdge) {
-            if (rightEdge.classList && (rightEdge.classList.contains('sb-group') || rightEdge.classList.contains('block-group'))) {
-                rightEdge.style.borderRight = 'none';
-            }
+            if (rightEdge.classList && (rightEdge.classList.contains('sb-group') || rightEdge.classList.contains('block-group'))) rightEdge.style.borderRight = 'none';
             const visChildren = Array.from(rightEdge.childNodes).filter(el => el.nodeType === 1 && el.style.display !== 'none');
             rightEdge = visChildren.length > 0 ? visChildren[visChildren.length - 1] : null;
         }
 
         let leftEdge = visibleTopGroups[0];
         while (leftEdge) {
-            if (leftEdge.classList && (leftEdge.classList.contains('sb-group') || leftEdge.classList.contains('block-group'))) {
-                leftEdge.style.borderLeft = 'none';
-            }
+            if (leftEdge.classList && (leftEdge.classList.contains('sb-group') || leftEdge.classList.contains('block-group'))) leftEdge.style.borderLeft = 'none';
             const visChildren = Array.from(leftEdge.childNodes).filter(el => el.nodeType === 1 && el.style.display !== 'none');
             leftEdge = visChildren.length > 0 ? visChildren[0] : null;
         }
     }
 
     elements.chartArea.appendChild(frag);
+    drawDatasetBar();
     updateInspector(lastHoveredIdx);
+}
+
+export function drawDatasetBar() {
+    if (!elements.dbBar || elements.dbBar.style.display === 'none') return;
+
+    const baseFloats = currentRenderData ? currentRenderData.baseFloats : getBaseFloats();
+    if (!baseFloats || baseFloats.length === 0) return;
+
+    const N = baseFloats.length;
+    const zS = zoomRange ? zoomRange.start : 0;
+    const zE = zoomRange ? zoomRange.end : N - 1;
+    const zCount = zE - zS + 1;
+
+    const getPct = (idx) => {
+        if (zCount <= 1) return 0;
+        return Math.max(0, Math.min(100, ((idx - zS) / (zCount - 1)) * 100));
+    };
+
+    const useClip = elements.dbModeClip && elements.dbModeClip.checked;
+    const useMinMax = elements.dbModeMinMax && elements.dbModeMinMax.checked;
+    const useHotspots = elements.dbModeHotspots && elements.dbModeHotspots.checked;
+
+    if (useClip) {
+        let leftPct = getPct(clipStart);
+        let rightPct = getPct(clipEnd);
+        elements.dbActiveRegion.style.left = `${leftPct}%`;
+        elements.dbActiveRegion.style.width = `${rightPct - leftPct}%`;
+        elements.dbActiveRegion.style.background = 'rgba(79, 70, 229, 0.15)';
+        elements.dbActiveRegion.style.borderLeft = '1px solid var(--primary-color)';
+        elements.dbActiveRegion.style.borderRight = '1px solid var(--primary-color)';
+        if (elements.dbHandleLeft) elements.dbHandleLeft.style.display = 'block';
+        if (elements.dbHandleRight) elements.dbHandleRight.style.display = 'block';
+    } else {
+        elements.dbActiveRegion.style.left = `0%`;
+        elements.dbActiveRegion.style.width = `100%`;
+        elements.dbActiveRegion.style.background = 'transparent';
+        elements.dbActiveRegion.style.borderLeft = 'none';
+        elements.dbActiveRegion.style.borderRight = 'none';
+        if (elements.dbHandleLeft) elements.dbHandleLeft.style.display = 'none';
+        if (elements.dbHandleRight) elements.dbHandleRight.style.display = 'none';
+    }
+
+    const canvas = elements.dbCanvas;
+    const ctx = canvas.getContext('2d');
+    const rect = elements.dbBar.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    elements.dbMinArrow.style.display = 'none';
+    elements.dbMaxArrow.style.display = 'none';
+
+    if (useMinMax) {
+        let minIdx = zS, maxIdx = zS;
+        let minV = Infinity, maxV = -Infinity;
+        for (let i = zS; i <= zE; i++) {
+            if (baseFloats[i] < minV) { minV = baseFloats[i]; minIdx = i; }
+            if (baseFloats[i] > maxV) { maxV = baseFloats[i]; maxIdx = i; }
+        }
+        elements.dbMinArrow.style.display = 'block';
+        elements.dbMinArrow.style.left = `${getPct(minIdx)}%`;
+        elements.dbMaxArrow.style.display = 'block';
+        elements.dbMaxArrow.style.left = `${getPct(maxIdx)}%`;
+    }
+
+    if (useHotspots && currentRenderData) {
+        const floats = currentRenderData.floats;
+        const qFloats = currentRenderData.qFloats;
+
+        let leftPct = useClip ? getPct(clipStart) : 0;
+        let rightPct = useClip ? getPct(clipEnd) : 100;
+
+        const startX = Math.max(0, (leftPct / 100) * canvas.width);
+        const endX = Math.min(canvas.width, (rightPct / 100) * canvas.width);
+        const pxWidth = endX - startX;
+
+        if (pxWidth > 0) {
+            const bins = Math.ceil(pxWidth);
+            const activeLen = floats.length;
+            let maxSE = 0;
+            const seArr = new Float32Array(bins);
+
+            for (let b = 0; b < bins; b++) {
+                const px = startX + b;
+                let iGlobal = zS + (px / canvas.width) * (zCount - 1);
+                let sliceIdx = useClip ? Math.floor(iGlobal - clipStart) : Math.floor(iGlobal);
+
+                if (sliceIdx >= 0 && sliceIdx < activeLen) {
+                    const err = floats[sliceIdx] - qFloats[sliceIdx];
+                    const se = err * err;
+                    seArr[b] = se;
+                    if (se > maxSE) maxSE = se;
+                }
+            }
+
+            if (maxSE > 0) {
+                for (let b = 0; b < bins; b++) {
+                    if (seArr[b] > 0) {
+                        const intensity = Math.min(1, seArr[b] / maxSE);
+                        ctx.fillStyle = `rgba(239, 68, 68, ${intensity})`;
+                        ctx.fillRect(startX + b, 0, 1, canvas.height);
+                    }
+                }
+            }
+        }
+    }
 }
 
 export function updateInspector(idx) {
     lastHoveredIdx = idx;
     if (!currentRenderData) return;
-    const { floats, qFloats, qMathStrings, blockMeta, superMeta, settings, quant, tFloats, tQFloats } = currentRenderData;
-    if (floats.length === 0) return;
-    if (idx < 0 || idx >= floats.length) idx = 0;
+    const { baseFloats, floats, qFloats, qMathStrings, blockMeta, superMeta, settings, quant, tFloats, tQFloats } = currentRenderData;
+    const N = baseFloats.length;
+    if (N === 0) return;
+    if (idx < 0 || idx >= N) idx = 0;
 
-    const val = showSRHT && tFloats ? tFloats[idx] : floats[idx];
-    const valQ = showSRHT && tQFloats ? tQFloats[idx] : qFloats[idx];
-    const mathStr = qMathStrings[idx];
     elements.iWIdx.textContent = `[${idx}]`;
+
+    const useClip = elements.dbModeClip && elements.dbModeClip.checked;
+
+    if (useClip && (idx < clipStart || idx > clipEnd)) {
+        const val = baseFloats[idx];
+        elements.insWData.innerHTML = `<div class="data-row"><span>Original:</span> <span class="val-hl">${val.toFixed(5)}</span></div><div class="empty-state" style="padding:10px 0;">Inactive Weight</div>`;
+        elements.iBIdx.textContent = '[-]';
+        elements.insBData.innerHTML = '<div class="empty-state">Inactive</div>';
+        elements.iSBIdx.textContent = '[-]';
+        elements.insSBData.innerHTML = '<div class="empty-state">Inactive</div>';
+        return;
+    }
+
+    const sliceIdx = useClip ? idx - clipStart : idx;
+    const val = showSRHT && tFloats ? tFloats[sliceIdx] : floats[sliceIdx];
+    const valQ = showSRHT && tQFloats ? tQFloats[sliceIdx] : qFloats[sliceIdx];
+    const mathStr = qMathStrings[sliceIdx];
 
     let mathHtml = mathStr ? `<div class="data-row" style="margin-top:4px; color:var(--text-muted);"><span>Math:</span> <span style="color:var(--text-main);">${mathStr}</span></div>` : '';
 
@@ -338,7 +529,7 @@ export function updateInspector(idx) {
 
     elements.insWData.innerHTML = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span>${Math.abs(val - valQ).toFixed(6)}</span></div>`;
 
-    const { blockHtml, blockIdxStr, superHtml, superIdxStr } = quant.formatInspector(idx, blockMeta, superMeta, settings);
+    const { blockHtml, blockIdxStr, superHtml, superIdxStr } = quant.formatInspector(sliceIdx, blockMeta, superMeta, settings);
 
     if (blockHtml) {
         elements.iBIdx.textContent = blockIdxStr;
