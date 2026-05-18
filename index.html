@@ -119,7 +119,7 @@
                         <div id="db-tools-panel" class="adv-panel" style="display: none;">
                             <div class="settings-group" style="flex-direction: column; gap: 4px;">
                                 <div style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
-                                    <input type="checkbox" id="db-mode-clip" checked
+                                    <input type="checkbox" id="db-mode-clip"
                                         style="width: auto; margin: 0; cursor: pointer;">
                                     <label for="db-mode-clip" style="margin: 0; cursor: pointer;">Weight Clip</label>
                                 </div>
@@ -133,7 +133,7 @@
                                     <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
                                         <label for="db-clip-width"
                                             style="font-size: 0.8rem; font-weight:normal;">Width</label>
-                                        <input type="number" id="db-clip-width" value="262144" min="1">
+                                        <input type="number" id="db-clip-width" value="1048576" min="1">
                                     </div>
                                 </div>
                             </div>
@@ -551,7 +551,7 @@
         style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
         <div class="panel modal-panel">
             <h3 style="margin-top:0;">Performance Warning</h3>
-            <p style="font-size: 0.95rem; line-height: 1.4; color: var(--text-muted);">Selecting more than 262,144
+            <p style="font-size: 0.95rem; line-height: 1.4; color: var(--text-muted);">Selecting more than 1.048.576
                 active weights might make complex quantization algorithms very slow or non-functional. Do you wish to
                 continue?</p>
             <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">

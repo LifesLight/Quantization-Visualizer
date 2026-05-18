@@ -75,9 +75,6 @@ tplBarFill.className = 'bar-fill';
 const tplErrFill = document.createElement('div');
 tplErrFill.className = 'error-fill';
 
-const tplDummy = document.createElement('div');
-tplDummy.className = 'dummy-bar';
-
 export function setZoomRange(start, end) {
     zoomRange = { start, end };
     render();
@@ -120,9 +117,9 @@ export function requantize(overrideClipCheck = false) {
     }
 
     const activeCount = clipEnd - clipStart + 1;
-    if (!overrideClipCheck && activeCount > 262144 && !hasWarnedLargeData) {
+    if (!overrideClipCheck && activeCount > 1048576 && !hasWarnedLargeData) {
         clipStart = 0;
-        clipEnd = 262143;
+        clipEnd = 1048575;
         if (clipEnd >= N) clipEnd = N - 1;
 
         if (elements.dbModeClip) elements.dbModeClip.checked = true;
@@ -189,7 +186,6 @@ export function render() {
     const relError = stats.global_sum_abs === 0 ? 0 : ((stats.global_mae * actLen) / stats.global_sum_abs) * 100;
 
     elements.quantStats.textContent = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
-
     elements.formulaBox.innerHTML = formulaHTML;
 
     if (zoomRange) {
@@ -202,25 +198,27 @@ export function render() {
     const zEnd = zoomRange ? zoomRange.end : baseLen - 1;
     const zCount = zEnd - zStart + 1;
 
-    let getOrigVal = (i) => {
-        if (i >= clipStart && i <= clipEnd && showSRHT && tFloats) return tFloats[i - clipStart];
-        return baseFloats[i];
-    };
-
-    let getQVal = (i) => {
-        if (i >= clipStart && i <= clipEnd) return (showSRHT && tQFloats) ? tQFloats[i - clipStart] : qFloats[i - clipStart];
-        return baseFloats[i];
-    };
-
     let dMax = -Infinity;
     let dMin = Infinity;
     let absMax = 0;
-    for (let i = zStart; i <= zEnd; i++) {
-        let v = getOrigVal(i);
-        if (v > dMax) dMax = v;
-        if (v < dMin) dMin = v;
-        let absV = Math.abs(v);
-        if (absV > absMax) absMax = absV;
+
+    const useSRHTForRange = showSRHT && tFloats;
+    if (useSRHTForRange) {
+        for (let i = zStart; i <= zEnd; i++) {
+            let v = (i >= clipStart && i <= clipEnd) ? tFloats[i - clipStart] : baseFloats[i];
+            if (v > dMax) dMax = v;
+            if (v < dMin) dMin = v;
+            let absV = v < 0 ? -v : v;
+            if (absV > absMax) absMax = absV;
+        }
+    } else {
+        for (let i = zStart; i <= zEnd; i++) {
+            let v = baseFloats[i];
+            if (v > dMax) dMax = v;
+            if (v < dMin) dMin = v;
+            let absV = v < 0 ? -v : v;
+            if (absV > absMax) absMax = absV;
+        }
     }
 
     if (dMax === dMin) { dMax += 0.1; dMin -= 0.1; }
@@ -291,13 +289,11 @@ export function render() {
     const actBlockSize = stats.block_size || 0;
     const actSbSize = stats.super_block_size || 0;
 
-    let frag;
-
+    let frag = document.createDocumentFragment();
     const useClip = elements.dbModeClip ? elements.dbModeClip.checked : true;
 
     if (pxPerBar < 1) {
         elements.chartArea.style.gap = '0px';
-        frag = document.createDocumentFragment();
 
         const maxBars = clientWidth;
         const binSize = zCount / maxBars;
@@ -316,9 +312,18 @@ export function render() {
             let maxMag = -1;
             let bestIdx = binStartIdx;
 
-            for (let j = binStartIdx; j < binEndIdx; j++) {
-                let mag = Math.abs(getOrigVal(j));
-                if (mag > maxMag) { maxMag = mag; bestIdx = j; }
+            if (useSRHTForRange) {
+                for (let j = binStartIdx; j < binEndIdx; j++) {
+                    let v = (j >= clipStart && j <= clipEnd) ? tFloats[j - clipStart] : baseFloats[j];
+                    let mag = v < 0 ? -v : v;
+                    if (mag > maxMag) { maxMag = mag; bestIdx = j; }
+                }
+            } else {
+                for (let j = binStartIdx; j < binEndIdx; j++) {
+                    let v = baseFloats[j];
+                    let mag = v < 0 ? -v : v;
+                    if (mag > maxMag) { maxMag = mag; bestIdx = j; }
+                }
             }
 
             let sbIdx = showSupers ? Math.floor(Math.max(0, binStartIdx - clipStart) / actSbSize) : -1;
@@ -343,7 +348,10 @@ export function render() {
             }
 
             const isActive = !useClip || (bestIdx >= clipStart && bestIdx <= clipEnd);
-            const bar = createBar(getOrigVal(bestIdx), getQVal(bestIdx), bestIdx, isActive);
+            let val = useSRHTForRange && isActive ? tFloats[bestIdx - clipStart] : baseFloats[bestIdx];
+            let valQ = isActive ? ((showSRHT && tQFloats) ? tQFloats[bestIdx - clipStart] : qFloats[bestIdx - clipStart]) : baseFloats[bestIdx];
+
+            const bar = createBar(val, valQ, bestIdx, isActive);
             bar.style.flex = "1";
 
             if (currentBlkGrp) currentBlkGrp.appendChild(bar);
@@ -360,7 +368,6 @@ export function render() {
         }
 
     } else {
-        frag = document.createDocumentFragment();
         const actZStart = useClip ? Math.max(zStart, clipStart) : zStart;
         const actZEnd = useClip ? Math.min(zEnd, clipEnd) : zEnd;
 
@@ -372,21 +379,52 @@ export function render() {
         if (actZStart <= actZEnd) {
             let vFloatsActive = showSRHT ? tFloats : floats;
             let vQFloatsActive = showSRHT ? tQFloats : qFloats;
-            const activeFrag = quant.buildElements(vFloatsActive, vQFloatsActive, settings, (val, valQ, sliceIdx) => {
-                const globalIdx = useClip ? sliceIdx + clipStart : sliceIdx;
-                if (globalIdx < zStart || globalIdx > zEnd) return tplDummy.cloneNode(false);
-                return createBar(val, valQ, globalIdx, true);
-            });
-            frag.appendChild(activeFrag);
+
+            let currentSbGrp = null;
+            let currentBlkGrp = null;
+            let lastSbIdx = -1;
+            let lastBlkIdx = -1;
+
+            for (let i = actZStart; i <= actZEnd; i++) {
+                const sliceIdx = useClip ? i - clipStart : i;
+                if (sliceIdx < 0 || sliceIdx >= actLen) continue;
+
+                let sbIdx = actSbSize > 0 ? Math.floor(sliceIdx / actSbSize) : -1;
+                let blkIdx = actBlockSize > 0 ? Math.floor(sliceIdx / actBlockSize) : -1;
+
+                if (actSbSize > 0 && sbIdx !== lastSbIdx) {
+                    currentSbGrp = document.createElement('div');
+                    currentSbGrp.className = actBlockSize > 0 ? 'sb-group' : 'block-group';
+                    currentSbGrp.style.gap = '0px';
+                    frag.appendChild(currentSbGrp);
+                    lastSbIdx = sbIdx;
+                    lastBlkIdx = -1;
+                }
+
+                if (actBlockSize > 0 && blkIdx !== lastBlkIdx) {
+                    currentBlkGrp = document.createElement('div');
+                    currentBlkGrp.className = 'block-group';
+                    currentBlkGrp.style.gap = '0px';
+                    if (currentSbGrp) currentSbGrp.appendChild(currentBlkGrp);
+                    else frag.appendChild(currentBlkGrp);
+                    lastBlkIdx = blkIdx;
+                }
+
+                const val = vFloatsActive[sliceIdx];
+                const valQ = vQFloatsActive[sliceIdx];
+                const bar = createBar(val, valQ, i, true);
+                bar.style.flex = "1";
+
+                if (currentBlkGrp) currentBlkGrp.appendChild(bar);
+                else if (currentSbGrp) currentSbGrp.appendChild(bar);
+                else frag.appendChild(bar);
+            }
         }
 
         if (useClip && zEnd > clipEnd) {
             const postStart = Math.max(zStart, clipEnd + 1);
             for (let i = postStart; i <= zEnd; i++) frag.appendChild(createBar(baseFloats[i], baseFloats[i], i, false));
         }
-
-        const dummies = frag.querySelectorAll('.dummy-bar');
-        for (let i = 0; i < dummies.length; i++) dummies[i].remove();
 
         const groups = frag.querySelectorAll('.block-group, .sb-group');
         for (let i = 0; i < groups.length; i++) {
@@ -475,8 +513,9 @@ export function drawDatasetBar() {
         let minIdx = zS, maxIdx = zS;
         let minV = Infinity, maxV = -Infinity;
         for (let i = zS; i <= zE; i++) {
-            if (baseFloats[i] < minV) { minV = baseFloats[i]; minIdx = i; }
-            if (baseFloats[i] > maxV) { maxV = baseFloats[i]; maxIdx = i; }
+            let v = baseFloats[i];
+            if (v < minV) { minV = v; minIdx = i; }
+            if (v > maxV) { maxV = v; maxIdx = i; }
         }
         elements.dbMinArrow.style.display = 'block';
         elements.dbMinArrow.style.left = `${getPct(minIdx)}%`;
@@ -551,7 +590,6 @@ export function updateInspector(idx) {
 
     const sliceIdx = useClip ? idx - clipStart : idx;
 
-    // Call into Rust dynamically to populate the inspector JSON meta without allocating for all bars
     const insData = backend.get_inspector_data(sliceIdx, currentRenderData.settings);
 
     const floats = getF32Array(currentRenderData.actPtr, currentRenderData.actLen);

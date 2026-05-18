@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const N = getBaseFloats().length;
-            if (!e.target.checked && N > 262144 && !getHasWarnedLargeData()) {
+            if (!e.target.checked && N > 1048576 && !getHasWarnedLargeData()) {
                 e.preventDefault();
                 e.target.checked = true; // revert visually
                 if (elements.dbClipParams) elements.dbClipParams.style.display = 'flex';
@@ -218,7 +218,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const diff = end - start + 1;
         setUserModifiedClip(true);
-        if (diff > 262144 && !getHasWarnedLargeData()) {
+        if (diff > 1048576 && !getHasWarnedLargeData()) {
             pendingAction = { type: 'slider', start: start, end: end };
             elements.modalLargeData.style.display = 'flex';
         } else {
@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 setUserModifiedClip(true);
                 const clip = getClipRange();
                 const diff = clip.end - clip.start + 1;
-                if (diff > 262144 && !getHasWarnedLargeData()) {
+                if (diff > 1048576 && !getHasWarnedLargeData()) {
                     pendingAction = { type: 'slider', start: clip.start, end: clip.end };
                     setClipRange(initialClipStart, initialClipEnd, true); // revert visually until accepted
                     elements.modalLargeData.style.display = 'flex';
