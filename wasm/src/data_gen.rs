@@ -7,6 +7,7 @@ extern "C" {
     fn random() -> f64;
 }
 
+/// Generates a random non-zero float
 fn rand_nonzero() -> f64 {
     let mut r = random();
     while r == 0.0 {
@@ -40,6 +41,7 @@ pub fn generate_dataset(
                 let peak = if random() > 0.5 { bim_dist } else { -bim_dist };
                 let u = rand_nonzero();
                 let v = rand_nonzero();
+                // Box-Muller transform
                 let norm = (-2.0 * u.ln()).sqrt() * (2.0 * PI * v).cos();
                 peak + norm * bim_spread
             }
@@ -53,7 +55,7 @@ pub fn generate_dataset(
                 norm
             }
             _ => {
-                // "normal"
+                // Standard normal distribution via Box-Muller
                 let u = rand_nonzero();
                 let v = rand_nonzero();
                 let norm = (-2.0 * u.ln()).sqrt() * (2.0 * PI * v).cos();

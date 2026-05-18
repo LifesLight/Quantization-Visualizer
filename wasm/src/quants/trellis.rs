@@ -101,7 +101,7 @@ pub struct TrellisBlockResult {
     pub cost: f64,
 }
 
-// Zero-allocation path step (no dynamic vectors for candidates)
+/// Represents a single step in the Viterbi path.
 #[derive(Clone, Copy)]
 struct StateInfo {
     prev_state: isize,
@@ -127,7 +127,7 @@ pub fn trellis_opt_scale(
         subset_indices[i % 4].push(i);
     }
 
-    // Pre-allocate to prevent Wasm allocations per sample
+    // Pre-allocate to prevent dynamic allocations in the inner loop
     let mut prev_costs = vec![f64::INFINITY; states];
     let mut next_costs = vec![0.0; states];
 
@@ -277,7 +277,6 @@ pub fn trellis_quantize_block(
         }
         min_final_cost = cost_total;
     } else {
-        // Pre-allocate flat path memory
         let mut path_memory = vec![
             StateInfo {
                 prev_state: -1,
@@ -473,7 +472,6 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
             .collect()
     };
 
-    // Calculate transitions EXACTLY ONCE and pass by reference
     let transitions_opt = get_transitions(states);
     let dummy_trans = vec![];
     let transitions = transitions_opt.as_ref().unwrap_or(&dummy_trans);
@@ -533,7 +531,6 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     };
     let mut blocks = Vec::new();
 
-    // Pre-allocate WHT buffers for the loop to kill Wasm allocations
     let max_pad_len = if use_wht && !is_global {
         t_bsize.next_power_of_two()
     } else {

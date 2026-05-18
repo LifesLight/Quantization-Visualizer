@@ -14,11 +14,11 @@ pub fn quantize(floats: &[f32], _settings: &Settings) -> QuantizeOutput {
             max_abs_global = v.abs();
         }
     }
-    let global_scale = fp32(if max_abs_global > 0.0 {
+    let global_scale = if max_abs_global > 0.0 {
         max_abs_global / 6.0
     } else {
         1.0
-    });
+    };
 
     for i in (0..floats.len()).step_by(block_size) {
         let chunk_len = (floats.len() - i).min(block_size);
@@ -59,7 +59,7 @@ pub fn quantize(floats: &[f32], _settings: &Settings) -> QuantizeOutput {
     QuantizeOutput {
         q_floats, t_floats: None, t_q_floats: None, bpw,
         formula_html: "<span>Weight = <span class=\"eq-pill\">Global_FP32<span class=\"bits\">32b</span></span> &times; ( <span class=\"eq-pill\">NVFP4_Value<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">FP8_Scale<span class=\"bits\">8b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">NVFP4: 16 weights share one FP8 scale. All weights share one global FP32 scale.</span>".into(),
-        block_size, super_block_size: floats.len(), meta: QuantMeta::Nvfp4(blocks, global_scale, 0.0, 0.0), // global err populated in backend
+        block_size, super_block_size: floats.len(), meta: QuantMeta::Nvfp4(blocks, global_scale, 0.0, 0.0),
     }
 }
 

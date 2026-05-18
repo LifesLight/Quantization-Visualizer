@@ -1,61 +1,16 @@
-pub fn fp32(val: f32) -> f32 {
-    val
-}
+use half::{bf16 as half_bf16, f16 as half_f16};
 
+/// Simulates FP16 quantization by casting f32 -> f16 -> f32
 pub fn fp16(val: f32) -> f32 {
-    if val == 0.0 {
-        return 0.0;
-    }
-    let abs = val.abs();
-    if abs >= 65504.0 {
-        return val.signum() * 65504.0;
-    }
-    if abs < 5.96046e-8 {
-        return 0.0;
-    }
-    if abs < 0.000061035 {
-        return val.signum() * (abs / 5.96046e-8).round() * 5.96046e-8;
-    }
-    let exp = abs.log2().floor();
-    let mut m = ((abs / exp.exp2() - 1.0) * 1024.0).round();
-    let mut exp_adj = exp;
-    if m == 1024.0 {
-        m = 0.0;
-        exp_adj += 1.0;
-    }
-    if exp_adj > 15.0 {
-        return val.signum() * 65504.0;
-    }
-    val.signum() * exp_adj.exp2() * (1.0 + m / 1024.0)
+    half_f16::from_f32(val).to_f32()
 }
 
+/// Simulates BF16 quantization by casting f32 -> bf16 -> f32
 pub fn bf16(val: f32) -> f32 {
-    if val == 0.0 {
-        return 0.0;
-    }
-    let abs = val.abs();
-    if abs >= 3.389531389251535e38 {
-        return val.signum() * 3.389531389251535e38;
-    }
-    if abs < 9.18355e-41 {
-        return 0.0;
-    }
-    if abs < 1.1754943508222875e-38 {
-        return val.signum() * (abs / 9.18355e-41).round() * 9.18355e-41;
-    }
-    let exp = abs.log2().floor();
-    let mut m = ((abs / exp.exp2() - 1.0) * 128.0).round();
-    let mut exp_adj = exp;
-    if m == 128.0 {
-        m = 0.0;
-        exp_adj += 1.0;
-    }
-    if exp_adj > 127.0 {
-        return val.signum() * 3.389531389251535e38;
-    }
-    val.signum() * exp_adj.exp2() * (1.0 + m / 128.0)
+    half_bf16::from_f32(val).to_f32()
 }
 
+/// Simulates FP8 (E5M2) quantization
 pub fn fp8_e5m2(val: f32) -> f32 {
     if val == 0.0 {
         return 0.0;
@@ -83,6 +38,7 @@ pub fn fp8_e5m2(val: f32) -> f32 {
     val.signum() * exp_adj.exp2() * (1.0 + m / 4.0)
 }
 
+/// Simulates FP8 (E4M3) quantization
 pub fn fp8_e4m3(val: f32) -> f32 {
     if val == 0.0 {
         return 0.0;
@@ -107,10 +63,10 @@ pub fn fp8_e4m3(val: f32) -> f32 {
     val.signum() * exp_adj.exp2() * (1.0 + m / 8.0)
 }
 
+/// Calculates Mean Squared Error and Mean Absolute Error between two slices
 pub fn get_err_stats(arr_o: &[f32], arr_q: &[f32]) -> (f64, f64) {
     let mut se = 0.0;
     let mut ae = 0.0;
-    // .zip() elides bounds checks for massive Wasm speedups
     for (&o, &q) in arr_o.iter().zip(arr_q.iter()) {
         let diff = (o - q) as f64;
         se += diff * diff;
@@ -120,7 +76,7 @@ pub fn get_err_stats(arr_o: &[f32], arr_q: &[f32]) -> (f64, f64) {
     (se / n, ae / n)
 }
 
-// In-place zero-allocation WHT for hot loops
+/// In-place Fast Walsh-Hadamard Transform
 pub fn fwht_f32_inplace(res: &mut [f32]) {
     let p2 = res.len();
     let mut h = 1;
@@ -143,23 +99,9 @@ pub fn fwht_f32_inplace(res: &mut [f32]) {
     }
 }
 
-// Kept original for backward compatibility with other unpasted modules
-pub fn fwht_f32(data: &[f32]) -> Vec<f32> {
-    let n = data.len();
-    let mut p2 = 1;
-    while p2 < n {
-        p2 *= 2;
-    }
-    let mut res = vec![0.0; p2];
-    res[..n].copy_from_slice(data);
-    fwht_f32_inplace(&mut res);
-    res.truncate(n);
-    res
-}
-
+/// Generates a pseudo-random sign (+1.0 or -1.0) based on index and seed
 pub fn get_sign_flip(index: usize, seed: u32) -> f32 {
     let h = ((index as f64) * 12.9898 + (seed as f64) * 78.233 + 1.0).sin() * 43758.5453;
-    // Keeping JS exact match (-h.floor() instead of .fract() due to negative fraction logic)
     if (h - h.floor()) >= 0.5 {
         1.0
     } else {
@@ -167,6 +109,7 @@ pub fn get_sign_flip(index: usize, seed: u32) -> f32 {
     }
 }
 
+/// Computes centroids for Lloyd-Max quantization
 pub fn get_lloyd_max_centroids(bits: u32, dist: &str) -> Vec<f32> {
     let levels = 1_usize << bits;
     let mut centroids = vec![0.0; levels];
@@ -209,6 +152,7 @@ pub fn get_lloyd_max_centroids(bits: u32, dist: &str) -> Vec<f32> {
     centroids.iter().map(|&x| x as f32).collect()
 }
 
+/// Snaps a value to the closest centroid in a codebook
 pub fn snap_to_codebook(val: f32, cb: &[f32]) -> f32 {
     let abs_val = val.abs();
     let mut best = cb[0];

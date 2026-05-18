@@ -16,7 +16,7 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
             "bf16" => bf16(v),
             "fp8_e4m3" => fp8_e4m3(v),
             "fp8_e5m2" => fp8_e5m2(v),
-            _ => fp32(v),
+            _ => v,
         })
         .collect();
 

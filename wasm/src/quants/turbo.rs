@@ -25,7 +25,7 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     };
     let mut blocks = Vec::new();
 
-    // Pre-allocate fixed working buffers (Zero Wasm allocations in the hot loop)
+    // Pre-allocate working buffers for the hot loop
     let max_pad_len = t_bsize.next_power_of_two();
     let mut chunk_padded = vec![0.0; max_pad_len];
     let mut chunk_q = vec![0.0; max_pad_len];
