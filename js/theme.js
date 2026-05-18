@@ -12,8 +12,10 @@
 
         function updateThemeIcon() {
             const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-            iconMoon.style.display = isDark ? 'none' : 'block';
-            iconSun.style.display = isDark ? 'block' : 'none';
+            if (iconMoon && iconSun) {
+                iconMoon.style.display = isDark ? 'none' : 'block';
+                iconSun.style.display = isDark ? 'block' : 'none';
+            }
         }
 
         if (themeToggle) {
@@ -29,6 +31,27 @@
                 if (!localStorage.getItem('theme')) {
                     document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
                     updateThemeIcon();
+                }
+            });
+        }
+
+        const btnAbout = document.getElementById('btn-about');
+        const aboutModal = document.getElementById('about-modal');
+        const btnAboutClose = document.getElementById('btn-about-close');
+
+        if (btnAbout && aboutModal) {
+            btnAbout.addEventListener('click', () => {
+                aboutModal.style.display = 'flex';
+            });
+        }
+
+        if (btnAboutClose && aboutModal) {
+            btnAboutClose.addEventListener('click', () => {
+                aboutModal.style.display = 'none';
+            });
+            aboutModal.addEventListener('click', (e) => {
+                if (e.target === aboutModal) {
+                    aboutModal.style.display = 'none';
                 }
             });
         }
