@@ -1,6 +1,9 @@
 import { elements, getSettings } from './ui.js';
 import registry from './quants/registry.js';
-import { getErrStats } from './mathUtils.js';
+import { getF32Array } from './wasmWrapper.js';
+
+export let backend = null;
+export function setBackend(b) { backend = b; }
 
 let currentRenderData = null;
 let lastHoveredIdx = 0;
@@ -17,13 +20,12 @@ export function getHasWarnedLargeData() { return hasWarnedLargeData; }
 export function getClipRange() { return { start: clipStart, end: clipEnd }; }
 export function setUserModifiedClip(val) { userModifiedClip = val; }
 
-let rawFloatsCache = [];
 let rawFloatsStr = "";
-let baseFloatsCache = [];
 let lastScale = null;
 let lastOffset = null;
 
 export function getBaseFloats() {
+    if (!backend) return new Float32Array();
     const text = elements.inputEl.value;
     const scale = parseFloat(elements.dataScaleEl.value);
     const finalScale = isNaN(scale) ? 1.0 : scale;
@@ -32,17 +34,17 @@ export function getBaseFloats() {
 
     if (text !== rawFloatsStr) {
         rawFloatsStr = text;
-        rawFloatsCache = text.split(/[, \n\t]+/).map(s => s.trim()).filter(s => s !== '' && !isNaN(s)).map(Number);
+        backend.parse_floats(text);
         lastScale = null;
     }
 
     if (finalScale !== lastScale || finalOffset !== lastOffset) {
-        baseFloatsCache = rawFloatsCache.map(v => (v * finalScale) + finalOffset);
+        backend.set_scale_offset(finalScale, finalOffset);
         lastScale = finalScale;
         lastOffset = finalOffset;
     }
 
-    return baseFloatsCache;
+    return getF32Array(backend.get_base_floats_ptr(), backend.get_base_floats_len());
 }
 
 export function updateDbBarVisibility() {
@@ -93,12 +95,11 @@ export function toggleSRHT() {
 
 export function requantize(overrideClipCheck = false) {
     const baseFloats = getBaseFloats();
-    if (baseFloats.length === 0) {
+    const N = baseFloats.length;
+    if (N === 0) {
         currentRenderData = null;
         return;
     }
-
-    const N = baseFloats.length;
 
     if (elements.dbModeClip && !elements.dbModeClip.checked) {
         clipStart = 0;
@@ -138,17 +139,24 @@ export function requantize(overrideClipCheck = false) {
     clipStart = Math.max(0, Math.min(clipStart, N - 1));
     clipEnd = Math.max(clipStart, Math.min(clipEnd, N - 1));
 
-    const activeFloats = baseFloats.slice(clipStart, clipEnd + 1);
+    backend.set_clip(clipStart, clipEnd);
     const settings = getSettings();
     const quant = registry[settings.qType];
 
-    const {
-        qFloats, qMathStrings, bpw, blockMeta, superMeta, formulaHTML, tFloats, tQFloats
-    } = quant.quantize(activeFloats, settings);
+    const stats = backend.quantize(settings);
 
     currentRenderData = {
-        baseFloats, floats: activeFloats, qFloats, qMathStrings,
-        blockMeta, superMeta, settings, quant, tFloats, tQFloats, bpw, formulaHTML
+        baseLen: backend.get_base_floats_len(),
+        basePtr: backend.get_base_floats_ptr(),
+        actLen: backend.get_active_floats_len(),
+        actPtr: backend.get_active_floats_ptr(),
+        qPtr: backend.get_q_floats_ptr(),
+        tPtr: backend.get_t_floats_ptr(),
+        tQPtr: backend.get_t_q_floats_ptr(),
+        settings, quant,
+        bpw: stats.bpw,
+        formulaHTML: stats.formula_html,
+        stats
     };
 
     render();
@@ -158,12 +166,17 @@ export function render() {
     if (!currentRenderData) return;
 
     const {
-        baseFloats, floats, qFloats, qMathStrings, blockMeta, superMeta, settings,
-        quant, tFloats, tQFloats, bpw, formulaHTML
+        baseLen, basePtr, actLen, actPtr, qPtr, tPtr, tQPtr, settings,
+        quant, bpw, formulaHTML, stats
     } = currentRenderData;
 
-    const hasSRHT = tFloats != null && tQFloats != null;
-    if (!hasSRHT) {
+    const baseFloats = getF32Array(basePtr, baseLen);
+    const floats = getF32Array(actPtr, actLen);
+    const qFloats = getF32Array(qPtr, actLen);
+    const tFloats = stats.has_srht ? getF32Array(tPtr, actLen) : null;
+    const tQFloats = stats.has_srht ? getF32Array(tQPtr, actLen) : null;
+
+    if (!stats.has_srht) {
         showSRHT = false;
         elements.btnToggleSRHT.style.display = 'none';
         elements.btnToggleSRHT.classList.remove('active');
@@ -172,19 +185,10 @@ export function render() {
         elements.btnToggleSRHT.classList.toggle('active', showSRHT);
     }
 
-    const glbErr = getErrStats(floats, qFloats);
+    const sqnr = (stats.global_mse === 0 || stats.global_variance === 0) ? Infinity : 10 * Math.log10(stats.global_variance / stats.global_mse);
+    const relError = stats.global_sum_abs === 0 ? 0 : ((stats.global_mae * actLen) / stats.global_sum_abs) * 100;
 
-    let sigPower = 0;
-    let sumAbsOrig = 0;
-    for (let i = 0; i < floats.length; i++) {
-        sigPower += floats[i] * floats[i];
-        sumAbsOrig += Math.abs(floats[i]);
-    }
-    const sigVar = floats.length > 0 ? sigPower / floats.length : 0;
-    const sqnr = (glbErr.mse === 0 || sigVar === 0) ? Infinity : 10 * Math.log10(sigVar / glbErr.mse);
-    const relError = sumAbsOrig === 0 ? 0 : ((glbErr.mae * floats.length) / sumAbsOrig) * 100;
-
-    elements.quantStats.textContent = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${glbErr.mse.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
+    elements.quantStats.textContent = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
 
     elements.formulaBox.innerHTML = formulaHTML;
 
@@ -195,7 +199,7 @@ export function render() {
     }
 
     const zStart = zoomRange ? zoomRange.start : 0;
-    const zEnd = zoomRange ? zoomRange.end : baseFloats.length - 1;
+    const zEnd = zoomRange ? zoomRange.end : baseLen - 1;
     const zCount = zEnd - zStart + 1;
 
     let getOrigVal = (i) => {
@@ -284,12 +288,8 @@ export function render() {
     const pxPerBar = clientWidth / zCount;
 
     elements.chartArea.style.gap = '';
-    const hasBlocks = blockMeta && blockMeta.length > 0;
-    const hasSupers = superMeta && superMeta.length > 0;
-
-    // Dynamically fetch lengths matching internal quantizer math structures, overriding UI where needed
-    const actBlockSize = hasBlocks ? blockMeta[0].size : 0;
-    const actSbSize = hasSupers ? superMeta[0].size : 0;
+    const actBlockSize = stats.block_size || 0;
+    const actSbSize = stats.super_block_size || 0;
 
     let frag;
 
@@ -301,8 +301,8 @@ export function render() {
 
         const maxBars = clientWidth;
         const binSize = zCount / maxBars;
-        const showBlocks = hasBlocks && actBlockSize > 0 && (actBlockSize / binSize) >= 8;
-        const showSupers = hasSupers && actSbSize > 0 && (actSbSize / binSize) >= 8;
+        const showBlocks = actBlockSize > 0 && (actBlockSize / binSize) >= 8;
+        const showSupers = actSbSize > 0 && (actSbSize / binSize) >= 8;
 
         let currentSbGrp = null;
         let currentBlkGrp = null;
@@ -421,8 +421,7 @@ export function render() {
 
 export function drawDatasetBar() {
     if (!elements.dbBar || elements.dbBar.style.display === 'none') return;
-
-    const baseFloats = currentRenderData ? currentRenderData.baseFloats : getBaseFloats();
+    const baseFloats = getBaseFloats();
     if (!baseFloats || baseFloats.length === 0) return;
 
     const N = baseFloats.length;
@@ -486,8 +485,8 @@ export function drawDatasetBar() {
     }
 
     if (useHotspots && currentRenderData) {
-        const floats = currentRenderData.floats;
-        const qFloats = currentRenderData.qFloats;
+        const floats = getF32Array(currentRenderData.actPtr, currentRenderData.actLen);
+        const qFloats = getF32Array(currentRenderData.qPtr, currentRenderData.actLen);
 
         let leftPct = useClip ? getPct(clipStart) : 0;
         let rightPct = useClip ? getPct(clipEnd) : 100;
@@ -531,14 +530,14 @@ export function drawDatasetBar() {
 export function updateInspector(idx) {
     lastHoveredIdx = idx;
     if (!currentRenderData) return;
-    const { baseFloats, floats, qFloats, qMathStrings, blockMeta, superMeta, settings, quant, tFloats, tQFloats } = currentRenderData;
-    const N = baseFloats.length;
+    const N = currentRenderData.baseLen;
     if (N === 0) return;
     if (idx < 0 || idx >= N) idx = 0;
 
     elements.iWIdx.textContent = `[${idx}]`;
 
     const useClip = elements.dbModeClip && elements.dbModeClip.checked;
+    const baseFloats = getF32Array(currentRenderData.basePtr, currentRenderData.baseLen);
 
     if (useClip && (idx < clipStart || idx > clipEnd)) {
         const val = baseFloats[idx];
@@ -551,9 +550,18 @@ export function updateInspector(idx) {
     }
 
     const sliceIdx = useClip ? idx - clipStart : idx;
+
+    // Call into Rust dynamically to populate the inspector JSON meta without allocating for all bars
+    const insData = backend.get_inspector_data(sliceIdx, currentRenderData.settings);
+
+    const floats = getF32Array(currentRenderData.actPtr, currentRenderData.actLen);
+    const qFloats = getF32Array(currentRenderData.qPtr, currentRenderData.actLen);
+    const tFloats = currentRenderData.stats.has_srht ? getF32Array(currentRenderData.tPtr, currentRenderData.actLen) : null;
+    const tQFloats = currentRenderData.stats.has_srht ? getF32Array(currentRenderData.tQPtr, currentRenderData.actLen) : null;
+
     const val = showSRHT && tFloats ? tFloats[sliceIdx] : floats[sliceIdx];
     const valQ = showSRHT && tQFloats ? tQFloats[sliceIdx] : qFloats[sliceIdx];
-    const mathStr = qMathStrings[sliceIdx];
+    const mathStr = insData.mathStr;
 
     let mathHtml = mathStr ? `<div class="data-row" style="margin-top:4px; color:var(--text-muted);"><span>Math:</span> <span style="color:var(--text-main);">${mathStr}</span></div>` : '';
 
@@ -563,19 +571,17 @@ export function updateInspector(idx) {
 
     elements.insWData.innerHTML = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl" title="${val}">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl" title="${valQ}">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span title="${errVal}">${errVal.toFixed(6)}</span></div>`;
 
-    const { blockHtml, blockIdxStr, superHtml, superIdxStr } = quant.formatInspector(sliceIdx, blockMeta, superMeta, settings);
-
-    if (blockHtml) {
-        elements.iBIdx.textContent = blockIdxStr;
-        elements.insBData.innerHTML = blockHtml;
+    if (insData.blockHtml) {
+        elements.iBIdx.textContent = insData.blockIdxStr;
+        elements.insBData.innerHTML = insData.blockHtml;
     } else {
         elements.iBIdx.textContent = '[-]';
         elements.insBData.innerHTML = '<div class="empty-state">Hover over a block to inspect</div>';
     }
 
-    if (superHtml) {
-        elements.iSBIdx.textContent = superIdxStr;
-        elements.insSBData.innerHTML = superHtml;
+    if (insData.superHtml) {
+        elements.iSBIdx.textContent = insData.superIdxStr;
+        elements.insSBData.innerHTML = insData.superHtml;
     } else {
         elements.iSBIdx.textContent = '[-]';
         elements.insSBData.innerHTML = '<div class="empty-state">Hover over a superblock</div>';

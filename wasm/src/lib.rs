@@ -1,2 +1,4 @@
+pub mod data_gen;
 mod math_utils;
-mod trellis;
+pub mod quants;
+pub mod state;

@@ -20,15 +20,5 @@ A visualizer for floating-point quantization. It shows how different schemes map
 *   **Inspector:** Hover over bars to see the exact reconstruction math (`Q * Scale + Offset`) and error stats for that specific block.
 *   **Stats:** Live calculation of Bits-Per-Weight (BPW), compression ratio, and global Mean Squared Error (MSE).
 
-### Running
-
-Because the project uses ES Modules, it requires a local web server to handle imports.
-
-```bash
-# Example using Python
-python -m http.server 8000
-```
-Open `localhost:8000` in your browser.
-
 ### License
 MIT. (c) Alexander Kurtz 2026.

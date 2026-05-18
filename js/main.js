@@ -1,8 +1,8 @@
 import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
-import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility, updateVisualsOnly } from './render.js';
-import { initWasm } from './wasmWrapper.js';
+import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility, updateVisualsOnly, setBackend } from './render.js';
+import { initWasm, getWasm } from './wasmWrapper.js';
 
 function getNearestBarIdx(clientX) {
     const bars = Array.from(elements.chartArea.querySelectorAll('.bar')).filter(b => b.style.display !== 'none');
@@ -22,6 +22,8 @@ function getNearestBarIdx(clientX) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await initWasm();
+    const wasm = getWasm();
+    setBackend(new wasm.AppBackend());
 
     populateDynamicSelectors();
     initUIListeners();
@@ -30,15 +32,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (evt) => {
-            const content = evt.target.result;
-            const floats = content.match(/-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/g);
-            if (floats && floats.length > 0) {
-                elements.inputEl.value = floats.join(', ');
-                resetZoom(false);
-                requantize();
-            } else {
-                alert("No valid numbers found in the file.");
-            }
+            elements.inputEl.value = evt.target.result;
+            resetZoom(false);
+            requantize();
         };
         reader.readAsText(file);
     };
@@ -73,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
+    elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
         if (e.target.id.startsWith('gen-')) {
             generateData();
             resetZoom(false);
@@ -241,7 +237,7 @@ elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
     let dragStartXRatio = 0;
     let hasMoved = false;
     let initialMouseX = 0;
-    const DRAG_THRESHOLD = 4; // pixels
+    const DRAG_THRESHOLD = 4;
 
     const onDbMouseMove = (e) => {
         if (!isDraggingLeft && !isDraggingRight && !isDraggingCenter) return;
@@ -250,7 +246,7 @@ elements.autoUpdateElements.forEach(el => el.addEventListener('change', (e) => {
             if (Math.abs(e.clientX - initialMouseX) >= DRAG_THRESHOLD) {
                 hasMoved = true;
             } else {
-                return; // suppress tiny accidental mouse drags
+                return;
             }
         }
 
