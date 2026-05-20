@@ -27,6 +27,8 @@ export const elements = {
     get advPanel() { return document.getElementById('gen-adv-panel'); },
     get rawAdvToggleBtn() { return document.getElementById('raw-adv-toggle'); },
     get rawAdvPanel() { return document.getElementById('raw-adv-panel'); },
+    get dataTransformToggle() { return document.getElementById('data-transform-toggle'); },
+    get dataTransformPanel() { return document.getElementById('data-transform-panel'); },
 
     // --- Core Quantization Settings ---
     get modeEl() { return document.getElementById('centering-mode'); },
@@ -248,7 +250,7 @@ export function getSettings() {
 
         mxfpFormat: elements.mxfpFormatEl?.value || 'mxfp4_e2m1',
         primitiveFormat: elements.primitiveFormatEl?.value || 'fp32',
-        
+
         centeringMode: elements.modeEl.value,
         axisIgnoreOutliers: elements.axisIgnoreOutliers ? elements.axisIgnoreOutliers.checked : false,
         axisOutlierPct: elements.axisOutlierPct ? (parseFloat(elements.axisOutlierPct.value) || 0.0) : 0.0,
@@ -313,6 +315,7 @@ export function initUIListeners() {
     setupToggle(elements.turboAdvToggle, elements.turboAdvPanel);
     setupToggle(elements.trellisAdvToggle, elements.trellisAdvPanel);
     setupToggle(elements.axisToggleBtn, elements.axisPanel);
+    setupToggle(elements.dataTransformToggle, elements.dataTransformPanel);
 
     const updateAxisUI = () => {
         if (!elements.modeEl) return;

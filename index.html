@@ -98,20 +98,32 @@
                         </div>
                     </div>
 
-                    <div class="settings-group" style="flex-direction: row; gap: 8px; margin-top: 10px;">
-                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
-                            <label for="data-scale">Scale Data</label>
-                            <input type="number" id="data-scale" value="1.0" step="0.1">
-                        </div>
-                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
-                            <label for="data-offset">Offset Data</label>
-                            <input type="number" id="data-offset" value="0.0" step="0.1">
+                    <div class="settings-group" style="margin-top: 10px;">
+                        <button id="data-transform-toggle" class="adv-toggle-btn">
+                            <span>Data Scaling & Offset</span>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
+                        </button>
+                        <div id="data-transform-panel" class="adv-panel" style="display: none;">
+                            <div style="display: flex; flex-direction: row; gap: 8px; width: 100%;">
+                                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                    <label for="data-scale" style="font-size: 0.8rem; font-weight:normal;">Scale
+                                        Data</label>
+                                    <input type="number" id="data-scale" value="1.0" step="0.1">
+                                </div>
+                                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                    <label for="data-offset" style="font-size: 0.8rem; font-weight:normal;">Offset
+                                        Data</label>
+                                    <input type="number" id="data-offset" value="0.0" step="0.1">
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <div class="settings-group" style="margin-top: 10px;">
                         <button id="btn-dataset-bar" class="adv-toggle-btn">
-                            <span>Dataset Tools</span>
+                            <span>Overview Minimap & Tools</span>
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                 <path d="M7 10l5 5 5-5z" />
                             </svg>
