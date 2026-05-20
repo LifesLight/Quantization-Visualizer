@@ -1,10 +1,20 @@
+/**
+ * Data Generation
+ * Handles reading distribution parameters from the UI and passing them to the WASM backend
+ * to generate synthetic weight data.
+ */
 import { elements } from './ui.js';
 import { getWasm } from './wasmWrapper.js';
 
+/**
+ * Generates a new dataset based on the current UI parameters and updates the input text area.
+ */
 export function generateData() {
+    // 1. Base Parameters
     const dist = elements.distEl.value;
     const count = parseInt(elements.genCountEl.value) || 256;
 
+    // 2. Distribution-specific Parameters
     const uniRange = parseFloat(elements.genUniRangeEl.value) || 10.0;
     const lapScale = parseFloat(elements.genScaleEl.value) || 1.0;
     const bimDist = parseFloat(elements.genBimodalDistEl.value) || 4.0;
@@ -13,11 +23,12 @@ export function generateData() {
     const outMult = parseFloat(elements.genOutlierMultEl.value) || 5.0;
     const normStd = parseFloat(elements.genStdEl.value) || 1.0;
 
+    // 3. Generate via WASM
     const wasm = getWasm();
-
     const resultStr = wasm.generate_dataset(
         dist, count, uniRange, lapScale, bimDist, bimSpread, outProb, outMult, normStd
     );
 
+    // 4. Update UI
     elements.inputEl.value = resultStr;
 }
