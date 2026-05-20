@@ -1,7 +1,7 @@
 import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
-import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility, updateVisualsOnly, setBackend, setHoveredIdx, setDragState } from './render.js';
+import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility, updateVisualsOnly, setBackend, setHoveredIdx, setDragState, updateOverlays } from './render.js';
 import { initWasm, getWasm } from './wasmWrapper.js';
 
 /**
@@ -49,11 +49,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateDynamicSelectors();
     initUIListeners();
 
-    let resizeTimeout;
-    const resizeObserver = new ResizeObserver(() => {
-        cancelAnimationFrame(resizeTimeout);
-        resizeTimeout = requestAnimationFrame(() => render());
-    });
+let resizeRaf = null;
+let resizeDebounce = null;
+
+const resizeObserver = new ResizeObserver(() => {
+    // Keep hover/drag overlays aligned during resize without expensive redraw
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => updateOverlays());
+
+    // Do ONE expensive redraw after resize settles
+    clearTimeout(resizeDebounce);
+    resizeDebounce = setTimeout(() => {
+        // Skip inspector updates here; hover will refresh it on next pointermove anyway
+        render({ updateInspector: false });
+    }, 150); // tune 100–250ms
+});
+
+resizeObserver.observe(elements.chartArea);
     resizeObserver.observe(elements.chartArea);
 
     const processFile = (file) => {

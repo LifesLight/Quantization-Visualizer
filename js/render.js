@@ -172,6 +172,15 @@ export function setUserModifiedClip(val) { userModifiedClip = val; }
 let rawFloatsStr = "";
 let lastScale = null;
 let lastOffset = null;
+let baseDataVersion = 0;
+
+let minMaxCache = {
+    version: -1,
+    minIdx: 0,
+    maxIdx: 0,
+    minV: Infinity,
+    maxV: -Infinity
+};
 
 /**
  * Parses, transforms and scales raw buffer streams from UI.
@@ -189,12 +198,18 @@ export function getBaseFloats() {
         rawFloatsStr = text;
         backend.parse_floats(text);
         lastScale = null;
+
+        baseDataVersion++;
+        minMaxCache.version = -1;
     }
 
     if (finalScale !== lastScale || finalOffset !== lastOffset) {
         backend.set_scale_offset(finalScale, finalOffset);
         lastScale = finalScale;
         lastOffset = finalOffset;
+
+        baseDataVersion++;
+        minMaxCache.version = -1;
     }
 
     return getF32Array(backend.get_base_floats_ptr(), backend.get_base_floats_len());
@@ -295,7 +310,9 @@ export function requantize(overrideClipCheck = false) {
         settings, quant: registry[settings.qType],
         bpw: stats.bpw,
         formulaHTML: stats.formula_html,
-        stats
+        stats,
+
+        _rangeCache: null
     };
 
     render();
@@ -304,7 +321,11 @@ export function requantize(overrideClipCheck = false) {
 /**
  * Processes layout transformations, active canvas painting routines and boundary overlays.
  */
-export function render() {
+export function render(opts = {}) {
+    const {
+        updateInspector: doInspector = true,
+        drawDbBar: doDbBar = true,
+    } = opts;
     if (!currentRenderData) return;
 
     const {
@@ -338,15 +359,29 @@ export function render() {
     const zEnd = zoomRange ? zoomRange.end : baseLen - 1;
     const zCount = zEnd - zStart + 1;
 
-    let dMax = -Infinity, dMin = Infinity, absMax = 0;
     const useSRHTForRange = showSRHT && tFloats;
 
-    for (let i = zStart; i <= zEnd; i++) {
-        let v = (useSRHTForRange && i >= clipStart && i <= clipEnd) ? tFloats[i - clipStart] : baseFloats[i];
-        if (v > dMax) dMax = v;
-        if (v < dMin) dMin = v;
-        let absV = v < 0 ? -v : v;
-        if (absV > absMax) absMax = absV;
+    const rangeKey = `${zStart}:${zEnd}:${useSRHTForRange ? 1 : 0}:${clipStart}:${clipEnd}`;
+    let dMax, dMin, absMax;
+
+    const rc = currentRenderData._rangeCache;
+    if (!rc || rc.key !== rangeKey) {
+        dMax = -Infinity; dMin = Infinity; absMax = 0;
+
+        for (let i = zStart; i <= zEnd; i++) {
+            const v = (useSRHTForRange && i >= clipStart && i <= clipEnd)
+                ? tFloats[i - clipStart]
+                : baseFloats[i];
+
+            if (v > dMax) dMax = v;
+            if (v < dMin) dMin = v;
+            const av = v < 0 ? -v : v;
+            if (av > absMax) absMax = av;
+        }
+
+        currentRenderData._rangeCache = { key: rangeKey, dMax, dMin, absMax };
+    } else {
+        ({ dMax, dMin, absMax } = rc);
     }
 
     if (dMax === dMin) { dMax += 0.1; dMin -= 0.1; }
@@ -514,12 +549,8 @@ export function render() {
         drawBoundaries(actBlockSize, cSub, 1, 0);
     }
 
-    drawDatasetBar();
-
-    if (dragStartIdx === null) {
-        updateInspector(lastHoveredIdx);
-    }
-
+    if (doDbBar) drawDatasetBar();
+    if (doInspector && dragStartIdx === null) updateInspector(lastHoveredIdx);
     updateOverlays();
 }
 
@@ -584,15 +615,20 @@ export function drawDatasetBar() {
     ctx.clearRect(0, 0, rect.width, rect.height);
 
     if (useMinMax) {
-        let minIdx = 0, maxIdx = 0;
-        let minV = Infinity, maxV = -Infinity;
-        for (let i = 0; i < N; i++) {
-            let v = baseFloats[i];
-            if (v < minV) { minV = v; minIdx = i; }
-            if (v > maxV) { maxV = v; maxIdx = i; }
+        if (minMaxCache.version !== baseDataVersion) {
+            let minIdx = 0, maxIdx = 0;
+            let minV = Infinity, maxV = -Infinity;
+
+            for (let i = 0; i < N; i++) {
+                const v = baseFloats[i];
+                if (v < minV) { minV = v; minIdx = i; }
+                if (v > maxV) { maxV = v; maxIdx = i; }
+            }
+
+            minMaxCache = { version: baseDataVersion, minIdx, maxIdx, minV, maxV };
         }
 
-        const minPct = getZoomPctUnclamped(minIdx);
+        const minPct = getZoomPctUnclamped(minMaxCache.minIdx);
         if (minPct >= 0 && minPct <= 100) {
             elements.dbMinArrow.style.display = 'block';
             elements.dbMinArrow.style.left = `${minPct}%`;
@@ -606,7 +642,7 @@ export function drawDatasetBar() {
             elements.dbMinArrow.style.display = 'none';
         }
 
-        const maxPct = getZoomPctUnclamped(maxIdx);
+        const maxPct = getZoomPctUnclamped(minMaxCache.maxIdx);
         if (maxPct >= 0 && maxPct <= 100) {
             elements.dbMaxArrow.style.display = 'block';
             elements.dbMaxArrow.style.left = `${maxPct}%`;
