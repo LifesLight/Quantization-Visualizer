@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             dragStartIdxTemp = null;
 
             if (startIdx !== null && endIdx !== null && startIdx !== endIdx) {
-                setZoomRange(Math.min(startIdx, endIdx), Math.max(startIdx, endIdx), false);
+                setZoomRange(Math.min(startIdx, endIdx), Math.max(startIdx, endIdx));
             }
 
             const newHoverIdx = getNearestBarIdx(upEvt.clientX);

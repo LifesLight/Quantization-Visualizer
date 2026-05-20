@@ -23,13 +23,133 @@ let cachedPattern = null;
 let cachedPatternIsDark = null;
 
 /**
- * Registers coordinates for the visual hover index and triggers a canvas redraw.
+ * Syncs the position and sizes of the DOM highlight overlays without redrawing the canvas.
+ */
+export function updateOverlays() {
+    const hoverEl = document.getElementById('hover-overlay');
+    const blockEl = document.getElementById('block-overlay');
+    const superEl = document.getElementById('super-overlay');
+    const dragEl = document.getElementById('drag-overlay');
+
+    if (!currentRenderData || !hoverEl) return;
+
+    const { stats, baseLen } = currentRenderData;
+    const zStart = zoomRange ? zoomRange.start : 0;
+    const zEnd = zoomRange ? zoomRange.end : baseLen - 1;
+    const zCount = zEnd - zStart + 1;
+    const rect = elements.chartArea.getBoundingClientRect();
+    const barW = rect.width / zCount;
+
+    const useClip = elements.dbModeClip && elements.dbModeClip.checked;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    // Helper to calculate pixel position and width
+    const getXW = (dStart, dEnd) => {
+        let x, w;
+        if (barW >= 1) {
+            x = (dStart - zStart) * barW;
+            w = (dEnd - dStart + 1) * barW;
+        } else {
+            x = Math.floor(((dStart - zStart) / zCount) * rect.width);
+            w = Math.max(1, Math.ceil(((dEnd - dStart + 1) / zCount) * rect.width));
+        }
+        return { x, w };
+    };
+
+    if (dragStartIdx !== null && dragCurrentIdx !== null) {
+        const sIdx = Math.min(dragStartIdx, dragCurrentIdx);
+        const eIdx = Math.max(dragStartIdx, dragCurrentIdx);
+        const xStart = Math.max(zStart, sIdx);
+        const xEnd = Math.min(zEnd, eIdx);
+        if (xStart <= xEnd) {
+            const { x, w } = getXW(xStart, xEnd);
+            dragEl.style.display = 'block';
+            dragEl.style.left = `${x}px`;
+            dragEl.style.width = `${w}px`;
+        } else {
+            dragEl.style.display = 'none';
+        }
+    } else {
+        dragEl.style.display = 'none';
+    }
+
+    // Hide Hover Overlays initially
+    hoverEl.style.display = 'none';
+    blockEl.style.display = 'none';
+    superEl.style.display = 'none';
+
+    const primaryIdx = hoveredIdx !== null ? hoveredIdx : dragStartIdx;
+
+    if (primaryIdx !== null && primaryIdx >= zStart && primaryIdx <= zEnd) {
+        // Individual Bar Hover
+        const { x, w } = getXW(primaryIdx, primaryIdx);
+        hoverEl.style.display = 'block';
+        hoverEl.style.left = `${x}px`;
+        hoverEl.style.width = `${w}px`;
+        hoverEl.style.backgroundColor = isDark ? 'rgba(248, 250, 252, 0.15)' : 'rgba(15, 23, 42, 0.15)';
+
+        // Block / Super Block Highlights
+        const sliceIdx = useClip ? primaryIdx - clipStart : primaryIdx;
+        if (sliceIdx >= 0 && sliceIdx < currentRenderData.actLen) {
+            const actBlockSize = stats.block_size || 0;
+            const actSbSize = stats.super_block_size || 0;
+            const showBlocks = actBlockSize > 0 && (barW < 1 ? (actBlockSize * barW) >= 8 : true);
+            const showSupers = actSbSize > 0 && (barW < 1 ? (actSbSize * barW) >= 8 : true);
+
+            if (showSupers) {
+                const startSlice = Math.floor(sliceIdx / actSbSize) * actSbSize;
+                const endSlice = startSlice + actSbSize - 1;
+                const dStart = Math.max(zStart, useClip ? startSlice + clipStart : startSlice);
+                const dEnd = Math.min(zEnd, useClip ? endSlice + clipStart : endSlice);
+
+                if (dStart <= dEnd) {
+                    const xw = getXW(dStart, dEnd);
+                    superEl.style.display = 'block';
+                    superEl.style.left = `${xw.x}px`;
+                    superEl.style.width = `${xw.w}px`;
+                    superEl.style.backgroundColor = isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)';
+                }
+            }
+
+            if (showBlocks) {
+                const startSlice = Math.floor(sliceIdx / actBlockSize) * actBlockSize;
+                const endSlice = startSlice + actBlockSize - 1;
+                const dStart = Math.max(zStart, useClip ? startSlice + clipStart : startSlice);
+                const dEnd = Math.min(zEnd, useClip ? endSlice + clipStart : endSlice);
+
+                if (dStart <= dEnd) {
+                    const xw = getXW(dStart, dEnd);
+                    blockEl.style.display = 'block';
+                    blockEl.style.left = `${xw.x}px`;
+                    blockEl.style.width = `${xw.w}px`;
+                    blockEl.style.backgroundColor = isDark ? 'rgba(79, 70, 229, 0.15)' : 'rgba(79, 70, 229, 0.05)';
+
+                    // FIXED: Explicitly set the border color inside the shorthand string so it doesn't default to white text color
+                    const borderColor = isDark ? 'rgba(79, 70, 229, 0.5)' : 'rgba(79, 70, 229, 0.3)';
+                    blockEl.style.borderLeft = dStart >= zStart ? `1px solid ${borderColor}` : 'none';
+                    blockEl.style.borderRight = dEnd + 1 <= zEnd ? `1px solid ${borderColor}` : 'none';
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Registers coordinates for the visual hover index and triggers DOM overlay redraw.
  * @param {number|null} idx - The focused data point index.
  */
 export function setHoveredIdx(idx) {
+    if (hoveredIdx === idx) return;
     hoveredIdx = idx;
-    if (idx !== null) lastHoveredIdx = idx;
-    render();
+
+    if (idx !== null) {
+        lastHoveredIdx = idx;
+        if (dragStartIdx === null) {
+            updateInspector(idx);
+        }
+    }
+    // Only update overlays - skip the heavy canvas rendering!
+    updateOverlays();
 }
 
 /**
@@ -38,9 +158,10 @@ export function setHoveredIdx(idx) {
  * @param {number|null} currentIdx - Boundary current.
  */
 export function setDragState(startIdx, currentIdx) {
+    if (dragStartIdx === startIdx && dragCurrentIdx === currentIdx) return;
     dragStartIdx = startIdx;
     dragCurrentIdx = currentIdx;
-    render();
+    updateOverlays();
 }
 
 export function setHasWarnedLargeData(val) { hasWarnedLargeData = val; }
@@ -79,9 +200,6 @@ export function getBaseFloats() {
     return getF32Array(backend.get_base_floats_ptr(), backend.get_base_floats_len());
 }
 
-/**
- * Controls DOM display properties for the auxiliary dataset bar.
- */
 export function updateDbBarVisibility() {
     const checked = (elements.dbModeClip && elements.dbModeClip.checked) ||
         (elements.dbModeMinMax && elements.dbModeMinMax.checked) ||
@@ -91,12 +209,6 @@ export function updateDbBarVisibility() {
     if (checked) drawDatasetBar();
 }
 
-/**
- * Restricts unquantized mathematical boundaries to localized subsets.
- * @param {number} start - Beginning index.
- * @param {number} end - End index.
- * @param {boolean} previewOnly - If true halts the full quantize execution pass.
- */
 export function setClipRange(start, end, previewOnly = false) {
     clipStart = start;
     clipEnd = end;
@@ -104,21 +216,11 @@ export function setClipRange(start, end, previewOnly = false) {
     else requantize(true);
 }
 
-/**
- * Transforms horizontal zoom thresholds and triggers render updates.
- * @param {number} start - Zoom start.
- * @param {number} end - Zoom end.
- * @param {boolean} doRender - Direct pass flag.
- */
 export function setZoomRange(start, end, doRender = true) {
     zoomRange = { start, end };
     if (doRender) render();
 }
 
-/**
- * Clears horizontal zoom bounds reverting layout views to baseline default.
- * @param {boolean} doRender - Direct pass flag.
- */
 export function resetZoom(doRender = true) {
     zoomRange = null;
     if (doRender) render();
@@ -129,10 +231,6 @@ export function toggleSRHT() {
     render();
 }
 
-/**
- * Requantizes the target memory array by dispatching options to WASM backend.
- * @param {boolean} overrideClipCheck - Opts out of UI modal protection checks.
- */
 export function requantize(overrideClipCheck = false) {
     const baseFloats = getBaseFloats();
     const N = baseFloats.length;
@@ -267,7 +365,14 @@ export function render() {
 
     let canvas = document.getElementById('main-canvas');
     if (!canvas) {
-        elements.chartArea.innerHTML = '<canvas id="main-canvas" style="position:absolute; width:100%; height:100%; left:0; top:0; pointer-events:none;"></canvas><div class="baseline" id="baseline"></div>';
+        elements.chartArea.innerHTML = `
+            <canvas id="main-canvas" style="position:absolute; width:100%; height:100%; left:0; top:0; pointer-events:none;"></canvas>
+            <div id="super-overlay" style="position:absolute; top:0; height:100%; pointer-events:none; display:none; z-index:1;"></div>
+            <div id="block-overlay" style="position:absolute; top:0; height:100%; pointer-events:none; display:none; z-index:2; border-top:none; border-bottom:none; box-sizing:border-box;"></div>
+            <div id="hover-overlay" style="position:absolute; top:0; height:100%; pointer-events:none; display:none; z-index:3;"></div>
+            <div id="drag-overlay" style="position:absolute; top:0; height:100%; background:rgba(79, 70, 229, 0.15); border-left:1px solid rgba(79, 70, 229, 0.5); border-right:1px solid rgba(79, 70, 229, 0.5); pointer-events:none; display:none; z-index:4; box-sizing:border-box;"></div>
+            <div class="baseline" id="baseline" style="z-index:5;"></div>
+        `;
         canvas = document.getElementById('main-canvas');
     }
 
@@ -325,100 +430,15 @@ export function render() {
     const cMain = isDark ? '#f8fafc' : '#0f172a';
     const cSub = isDark ? 'rgba(248, 250, 252, 0.25)' : 'rgba(15, 23, 42, 0.25)';
 
-    const activeHighlights = new Set();
-    if (hoveredIdx !== null) activeHighlights.add(hoveredIdx);
-    if (dragStartIdx !== null) activeHighlights.add(dragStartIdx);
-    const highlightIndices = Array.from(activeHighlights);
-
-    const drawHighlightBox = (size, isSuper) => {
-        if (!size || highlightIndices.length === 0) return;
-        const drawn = new Set();
-
-        for (const hIdx of highlightIndices) {
-            if (hIdx >= zStart && hIdx <= zEnd) {
-                const sliceIdx = useClip ? hIdx - clipStart : hIdx;
-                if (sliceIdx >= 0 && sliceIdx < actLen) {
-                    const startSlice = Math.floor(sliceIdx / size) * size;
-                    if (drawn.has(startSlice)) continue;
-                    drawn.add(startSlice);
-
-                    const endSlice = startSlice + size - 1;
-                    const dStart = Math.max(zStart, useClip ? startSlice + clipStart : startSlice);
-                    const dEnd = Math.min(zEnd, useClip ? endSlice + clipStart : endSlice);
-
-                    if (dStart <= dEnd) {
-                        let x, w;
-                        if (barW >= 1) {
-                            x = (dStart - zStart) * barW;
-                            w = (dEnd - dStart + 1) * barW;
-                        } else {
-                            x = Math.floor(((dStart - zStart) / zCount) * rect.width);
-                            w = Math.ceil(((dEnd - dStart + 1) / zCount) * rect.width);
-                        }
-
-                        if (isSuper) {
-                            ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)';
-                            ctx.fillRect(x, 0, w, rect.height);
-                        } else {
-                            ctx.fillStyle = isDark ? 'rgba(79, 70, 229, 0.15)' : 'rgba(79, 70, 229, 0.05)';
-                            ctx.fillRect(x, 0, w, rect.height);
-
-                            ctx.strokeStyle = isDark ? 'rgba(79, 70, 229, 0.5)' : 'rgba(79, 70, 229, 0.3)';
-                            ctx.lineWidth = 1;
-                            ctx.beginPath();
-                            if (dStart >= zStart) {
-                                let bx = Math.round((dStart - zStart) * barW) + 0.5;
-                                ctx.moveTo(bx, 0); ctx.lineTo(bx, rect.height);
-                            }
-                            if (dEnd + 1 <= zEnd) {
-                                let bx = Math.round((dEnd + 1 - zStart) * barW) + 0.5;
-                                ctx.moveTo(bx, 0); ctx.lineTo(bx, rect.height);
-                            }
-                            ctx.stroke();
-                        }
-                    }
-                }
-            }
-        }
-    };
-
-    if (showSupers) drawHighlightBox(actSbSize, true);
-    if (showBlocks) drawHighlightBox(actBlockSize, false);
-
-    if (dragStartIdx !== null && dragCurrentIdx !== null) {
-        const sIdx = Math.min(dragStartIdx, dragCurrentIdx);
-        const eIdx = Math.max(dragStartIdx, dragCurrentIdx);
-        const xStart = Math.max(zStart, sIdx);
-        const xEnd = Math.min(zEnd, eIdx);
-        if (xStart <= xEnd) {
-            let x, w;
-            if (barW >= 1) {
-                x = (xStart - zStart) * barW;
-                w = (xEnd - xStart + 1) * barW;
-            } else {
-                x = Math.floor(((xStart - zStart) / zCount) * rect.width);
-                w = Math.ceil(((xEnd - xStart + 1) / zCount) * rect.width);
-            }
-            ctx.fillStyle = 'rgba(79, 70, 229, 0.15)';
-            ctx.fillRect(x, 0, w, rect.height);
-
-            ctx.strokeStyle = 'rgba(79, 70, 229, 0.5)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(x, 0); ctx.lineTo(x, rect.height);
-            ctx.moveTo(x + w, 0); ctx.lineTo(x + w, rect.height);
-            ctx.stroke();
-        }
-    }
-
     if (barW < 1) {
         for (let i = 0; i < rect.width; i++) {
             const binS = zStart + Math.floor((i / rect.width) * zCount);
             const binE = Math.max(binS, zStart + Math.floor(((i + 1) / rect.width) * zCount) - 1);
             let bestIdx = binS, maxMag = -1;
+
             for (let j = binS; j <= binE; j++) {
-                let v = useSRHTForRange ? tFloats[j - clipStart] || baseFloats[j] : baseFloats[j];
-                let m = Math.abs(v);
+                let v = (useSRHTForRange && j >= clipStart && j <= clipEnd) ? tFloats[j - clipStart] : baseFloats[j];
+                let m = v < 0 ? -v : v;
                 if (m > maxMag) { maxMag = m; bestIdx = j; }
             }
 
@@ -494,31 +514,15 @@ export function render() {
         drawBoundaries(actBlockSize, cSub, 1, 0);
     }
 
-    for (const hIdx of highlightIndices) {
-        if (hIdx >= zStart && hIdx <= zEnd) {
-            let x, w;
-            if (barW >= 1) {
-                x = (hIdx - zStart) * barW;
-                w = barW;
-            } else {
-                x = Math.floor(((hIdx - zStart) / zCount) * rect.width);
-                w = 1;
-            }
-            ctx.fillStyle = isDark ? 'rgba(248, 250, 252, 0.15)' : 'rgba(15, 23, 42, 0.15)';
-            ctx.fillRect(x, 0, w, rect.height);
-        }
-    }
-
     drawDatasetBar();
 
     if (dragStartIdx === null) {
         updateInspector(lastHoveredIdx);
     }
+
+    updateOverlays();
 }
 
-/**
- * Updates interactive markers and background hotspots on the dataset bar.
- */
 export function drawDatasetBar() {
     if (!elements.dbBar || elements.dbBar.style.display === 'none') return;
     const baseFloats = getBaseFloats();
@@ -663,10 +667,6 @@ export function drawDatasetBar() {
     }
 }
 
-/**
- * Populates UI inspector nodes using the deserialized wasm metrics.
- * @param {number} idx - Global array item index.
- */
 export function updateInspector(idx) {
     lastHoveredIdx = idx;
     if (!currentRenderData) return;
@@ -832,9 +832,6 @@ export function updateInspector(idx) {
     }
 }
 
-/**
- * Triggers a render update bypass for visual axis scaling configurations.
- */
 export function updateVisualsOnly() {
     if (currentRenderData) {
         currentRenderData.settings.centeringMode = elements.modeEl.value;
