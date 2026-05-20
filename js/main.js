@@ -5,9 +5,9 @@ import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRH
 import { initWasm, getWasm } from './wasmWrapper.js';
 
 /**
- * Calculates the exact data index mapped to a specific horizontal pixel coordinate.
- * @param {number} clientX - The absolute mouse X coordinate.
- * @returns {number|null} The nearest global data index.
+ * Maps a horizontal screen coordinate to the nearest data index relative to current zoom bounds.
+ * @param {number} clientX - The horizontal screen coordinate.
+ * @returns {number|null} The mapped index.
  */
 function getNearestBarIdx(clientX) {
     const baseFloats = getBaseFloats();
@@ -29,8 +29,8 @@ function getNearestBarIdx(clientX) {
 let requantizeTimeout = null;
 
 /**
- * Debounces execution of the requantization engine to prevent UI freezes.
- * @param {boolean} forceSync - Whether to bypass the timeout and execute instantly.
+ * Debounces the requantization process.
+ * @param {boolean} forceSync - Skips the debounce delay.
  */
 const debouncedRequantize = (forceSync = false) => {
     clearTimeout(requantizeTimeout);
@@ -274,17 +274,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         const N = getBaseFloats().length;
         if (N === 0) return;
 
+        const zS = zoomRange ? zoomRange.start : 0;
+        const zE = zoomRange ? zoomRange.end : N - 1;
+        const zCount = zE - zS + 1;
         let pxRatio = (e.clientX - rect.left) / rect.width;
 
         if (isDraggingCenter) {
-            let deltaIdx = Math.round((pxRatio - dragStartXRatio) * (N - 1));
+            let deltaIdx = Math.round((pxRatio - dragStartXRatio) * (zCount - 1));
             if (initialClipStart + deltaIdx < 0) deltaIdx = -initialClipStart;
             if (initialClipEnd + deltaIdx > N - 1) deltaIdx = N - 1 - initialClipEnd;
             setClipRange(initialClipStart + deltaIdx, initialClipEnd + deltaIdx, true);
             return;
         }
 
-        let targetIdx = Math.max(0, Math.min(N - 1, Math.round(pxRatio * (N - 1))));
+        let targetIdx = Math.max(0, Math.min(N - 1, Math.round(zS + pxRatio * (zCount - 1))));
         const clip = getClipRange();
 
         if (isDraggingLeft) {

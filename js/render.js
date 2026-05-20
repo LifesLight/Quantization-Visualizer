@@ -23,7 +23,7 @@ let cachedPattern = null;
 let cachedPatternIsDark = null;
 
 /**
- * Triggers a render pass highlighting the specifically hovered data index.
+ * Registers coordinates for the visual hover index and triggers a canvas redraw.
  * @param {number|null} idx - The focused data point index.
  */
 export function setHoveredIdx(idx) {
@@ -33,9 +33,9 @@ export function setHoveredIdx(idx) {
 }
 
 /**
- * Registers boundaries for the chart zoom drag interaction.
- * @param {number|null} startIdx - Initiation index.
- * @param {number|null} currentIdx - Current dragged index.
+ * Stores interactive drag parameters for the range zoom gesture.
+ * @param {number|null} startIdx - Boundary start.
+ * @param {number|null} currentIdx - Boundary current.
  */
 export function setDragState(startIdx, currentIdx) {
     dragStartIdx = startIdx;
@@ -53,8 +53,8 @@ let lastScale = null;
 let lastOffset = null;
 
 /**
- * Retrieves unquantized memory buffers from the WASM backend instance.
- * @returns {Float32Array} Float layout backing the visualization.
+ * Parses, transforms and scales raw buffer streams from UI.
+ * @returns {Float32Array} Floating array reference mapped to memory.
  */
 export function getBaseFloats() {
     if (!backend) return new Float32Array();
@@ -80,7 +80,7 @@ export function getBaseFloats() {
 }
 
 /**
- * Re-evaluates container visibility for dataset tools interface.
+ * Controls DOM display properties for the auxiliary dataset bar.
  */
 export function updateDbBarVisibility() {
     const checked = (elements.dbModeClip && elements.dbModeClip.checked) ||
@@ -92,10 +92,10 @@ export function updateDbBarVisibility() {
 }
 
 /**
- * Restricts quantitative analysis dynamically to an isolated subset domain.
- * @param {number} start - Dataset start index.
- * @param {number} end - Dataset end index.
- * @param {boolean} previewOnly - If true skips executing the deep quantification pipeline.
+ * Restricts unquantized mathematical boundaries to localized subsets.
+ * @param {number} start - Beginning index.
+ * @param {number} end - End index.
+ * @param {boolean} previewOnly - If true halts the full quantize execution pass.
  */
 export function setClipRange(start, end, previewOnly = false) {
     clipStart = start;
@@ -105,10 +105,10 @@ export function setClipRange(start, end, previewOnly = false) {
 }
 
 /**
- * Modifies visual viewport domain mapping.
- * @param {number} start - Render start index.
- * @param {number} end - Render end index.
- * @param {boolean} doRender - Invokes canvas update.
+ * Transforms horizontal zoom thresholds and triggers render updates.
+ * @param {number} start - Zoom start.
+ * @param {number} end - Zoom end.
+ * @param {boolean} doRender - Direct pass flag.
  */
 export function setZoomRange(start, end, doRender = true) {
     zoomRange = { start, end };
@@ -116,8 +116,8 @@ export function setZoomRange(start, end, doRender = true) {
 }
 
 /**
- * Strips active zoom mappings reverting canvas bounds to identity.
- * @param {boolean} doRender - Invokes canvas update.
+ * Clears horizontal zoom bounds reverting layout views to baseline default.
+ * @param {boolean} doRender - Direct pass flag.
  */
 export function resetZoom(doRender = true) {
     zoomRange = null;
@@ -130,7 +130,7 @@ export function toggleSRHT() {
 }
 
 /**
- * Dispatches active configurations to the backend logic.
+ * Requantizes the target memory array by dispatching options to WASM backend.
  * @param {boolean} overrideClipCheck - Opts out of UI modal protection checks.
  */
 export function requantize(overrideClipCheck = false) {
@@ -204,8 +204,7 @@ export function requantize(overrideClipCheck = false) {
 }
 
 /**
- * Handles core HTML5 Canvas 2D painting routines spanning data rendering, 
- * layout configuration overlays, boundary highlights, and interaction geometries.
+ * Processes layout transformations, active canvas painting routines and boundary overlays.
  */
 export function render() {
     if (!currentRenderData) return;
@@ -518,7 +517,7 @@ export function render() {
 }
 
 /**
- * Updates interactive elements on the auxiliary dataset minimap logic.
+ * Updates interactive markers and background hotspots on the dataset bar.
  */
 export function drawDatasetBar() {
     if (!elements.dbBar || elements.dbBar.style.display === 'none') return;
@@ -530,12 +529,12 @@ export function drawDatasetBar() {
     const zE = zoomRange ? zoomRange.end : N - 1;
     const zCount = zE - zS + 1;
 
-    const getGlobalPct = (idx) => {
-        if (N <= 1) return 0;
-        return Math.max(0, Math.min(100, (idx / (N - 1)) * 100));
+    const getZoomPct = (idx) => {
+        if (zCount <= 1) return 0;
+        return Math.max(0, Math.min(100, ((idx - zS) / (zCount - 1)) * 100));
     };
 
-    const getZoomPct = (idx) => {
+    const getZoomPctUnclamped = (idx) => {
         if (zCount <= 1) return 0;
         return ((idx - zS) / (zCount - 1)) * 100;
     };
@@ -545,8 +544,8 @@ export function drawDatasetBar() {
     const useHotspots = elements.dbModeHotspots && elements.dbModeHotspots.checked;
 
     if (useClip) {
-        let leftPct = getGlobalPct(clipStart);
-        let rightPct = getGlobalPct(clipEnd);
+        let leftPct = getZoomPct(clipStart);
+        let rightPct = getZoomPct(clipEnd);
         elements.dbActiveRegion.style.left = `${leftPct}%`;
         elements.dbActiveRegion.style.width = `${rightPct - leftPct}%`;
         elements.dbActiveRegion.style.background = 'rgba(79, 70, 229, 0.15)';
@@ -589,7 +588,7 @@ export function drawDatasetBar() {
             if (v > maxV) { maxV = v; maxIdx = i; }
         }
 
-        const minPct = getZoomPct(minIdx);
+        const minPct = getZoomPctUnclamped(minIdx);
         if (minPct >= 0 && minPct <= 100) {
             elements.dbMinArrow.style.display = 'block';
             elements.dbMinArrow.style.left = `${minPct}%`;
@@ -603,7 +602,7 @@ export function drawDatasetBar() {
             elements.dbMinArrow.style.display = 'none';
         }
 
-        const maxPct = getZoomPct(maxIdx);
+        const maxPct = getZoomPctUnclamped(maxIdx);
         if (maxPct >= 0 && maxPct <= 100) {
             elements.dbMaxArrow.style.display = 'block';
             elements.dbMaxArrow.style.left = `${maxPct}%`;
@@ -625,8 +624,8 @@ export function drawDatasetBar() {
         const floats = getF32Array(currentRenderData.actPtr, currentRenderData.actLen);
         const qFloats = getF32Array(currentRenderData.qPtr, currentRenderData.actLen);
 
-        let leftPct = useClip ? getGlobalPct(clipStart) : 0;
-        let rightPct = useClip ? getGlobalPct(clipEnd) : 100;
+        let leftPct = useClip ? getZoomPct(clipStart) : 0;
+        let rightPct = useClip ? getZoomPct(clipEnd) : 100;
 
         const startX = Math.max(0, (leftPct / 100) * rect.width);
         const endX = Math.min(rect.width, (rightPct / 100) * rect.width);
@@ -640,7 +639,7 @@ export function drawDatasetBar() {
 
             for (let b = 0; b < bins; b++) {
                 const px = startX + b;
-                let iGlobal = (px / rect.width) * (N - 1);
+                let iGlobal = zS + (px / rect.width) * (zCount - 1);
                 let sliceIdx = useClip ? Math.floor(iGlobal - clipStart) : Math.floor(iGlobal);
 
                 if (sliceIdx >= 0 && sliceIdx < activeLen) {
@@ -665,8 +664,8 @@ export function drawDatasetBar() {
 }
 
 /**
- * Synthesizes formatted telemetry corresponding to the evaluated coordinate block hierarchy.
- * @param {number} idx - Active array index binding mapped to the underlying dataset.
+ * Populates UI inspector nodes using the deserialized wasm metrics.
+ * @param {number} idx - Global array item index.
  */
 export function updateInspector(idx) {
     lastHoveredIdx = idx;
@@ -730,8 +729,9 @@ export function updateInspector(idx) {
         const states = currentRenderData.settings.trellisStates || 1;
 
         let candHtml = '';
+        const numCands = p.candidates ? p.candidates.length : 0;
 
-        if (p.candidates && p.candidates.length > 0) {
+        if (numCands > 0) {
             for (let c of p.candidates) {
                 if (c.isNone) {
                     candHtml += `
@@ -833,7 +833,7 @@ export function updateInspector(idx) {
 }
 
 /**
- * Triggers a minimal render pass specifically for evaluating styling changes.
+ * Triggers a render update bypass for visual axis scaling configurations.
  */
 export function updateVisualsOnly() {
     if (currentRenderData) {
