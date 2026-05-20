@@ -116,7 +116,7 @@ pub fn format_inspector(
     settings: &Settings,
 ) -> InspectorData {
     let b_idx = idx / settings.turbo_block_size;
-    let mut math_str = String::new();
+    let mut data = InspectorData::default();
     if let Some(bm) = blocks.get(b_idx) {
         let t_val = if settings.use_wht {
             out.t_floats.as_ref().unwrap()[idx]
@@ -142,7 +142,7 @@ pub fn format_inspector(
                 "".into()
             }
         );
-        math_str = if settings.use_wht {
+        data.math_str = Some(if settings.use_wht {
             format!(
                 "D({}) &times; FWHT( {} )[{}]",
                 if get_sign_flip(idx, settings.turbo_sign_seed) > 0.0 {
@@ -155,12 +155,12 @@ pub fn format_inspector(
             )
         } else {
             inner
-        };
+        });
+        data.block_idx = Some(b_idx);
+        data.mse = Some(bm.mse);
+        data.mae = Some(bm.mae);
+        data.scale = Some(bm.scale);
+        data.qjl_scale = Some(bm.qjl_scale);
     }
-    InspectorData {
-        math_str,
-        block_html: blocks.get(b_idx).map(|bm| format!("<div class=\"data-row\"><span>MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>Scale (FP16):</span> <span>{:.5}</span></div>{}", bm.mse, bm.mae, bm.scale, if settings.use_qjl && bm.qjl_scale > 0.0 { format!("<div class=\"data-row\"><span>QJL Scale (FP16):</span> <span>{:.5}</span></div>", bm.qjl_scale) } else { "".into() })).unwrap_or_default(),
-        block_idx_str: format!("[{}]", b_idx),
-        super_html: "".into(), super_idx_str: "".into(),
-    }
+    data
 }

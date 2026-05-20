@@ -1,4 +1,6 @@
 use half::{bf16 as half_bf16, f16 as half_f16};
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 /// Simulates FP16 quantization by casting f32 -> f16 -> f32
 pub fn fp16(val: f32) -> f32 {
@@ -109,8 +111,20 @@ pub fn get_sign_flip(index: usize, seed: u32) -> f32 {
     }
 }
 
+thread_local! {
+    static LLOYD_MAX_CACHE: RefCell<HashMap<(u32, String), Vec<f32>>> = RefCell::new(HashMap::new());
+}
+
 /// Computes centroids for Lloyd-Max quantization
 pub fn get_lloyd_max_centroids(bits: u32, dist: &str) -> Vec<f32> {
+    let key = (bits, dist.to_string());
+
+    // Check cache
+    if let Some(cached) = LLOYD_MAX_CACHE.with(|c| c.borrow().get(&key).cloned()) {
+        return cached;
+    }
+
+    // Not cached
     let levels = 1_usize << bits;
     let mut centroids = vec![0.0; levels];
     for i in 0..levels {
@@ -149,7 +163,14 @@ pub fn get_lloyd_max_centroids(bits: u32, dist: &str) -> Vec<f32> {
             }
         }
     }
-    centroids.iter().map(|&x| x as f32).collect()
+
+    let result: Vec<f32> = centroids.iter().map(|&x| x as f32).collect();
+
+    LLOYD_MAX_CACHE.with(|c| {
+        c.borrow_mut().insert(key, result.clone());
+    });
+
+    result
 }
 
 /// Snaps a value to the closest centroid in a codebook

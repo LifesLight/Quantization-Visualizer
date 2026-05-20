@@ -33,11 +33,5 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
 }
 
 pub fn format_inspector(_idx: usize, _out: &QuantizeOutput, _settings: &Settings) -> InspectorData {
-    InspectorData {
-        math_str: "".into(),
-        block_html: "".into(),
-        block_idx_str: "".into(),
-        super_html: "".into(),
-        super_idx_str: "".into(),
-    }
+    InspectorData::default()
 }

@@ -1,24 +1,45 @@
 import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
-import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility, updateVisualsOnly, setBackend } from './render.js';
+import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility, updateVisualsOnly, setBackend, setHoveredIdx, setDragState } from './render.js';
 import { initWasm, getWasm } from './wasmWrapper.js';
 
+/**
+ * Calculates the exact data index mapped to a specific horizontal pixel coordinate.
+ * @param {number} clientX - The absolute mouse X coordinate.
+ * @returns {number|null} The nearest global data index.
+ */
 function getNearestBarIdx(clientX) {
-    const bars = Array.from(elements.chartArea.querySelectorAll('.bar')).filter(b => b.style.display !== 'none');
-    let closest = null;
-    let minSub = Infinity;
-    bars.forEach(b => {
-        const r = b.getBoundingClientRect();
-        const center = r.left + r.width / 2;
-        const diff = Math.abs(center - clientX);
-        if (diff < minSub) {
-            minSub = diff;
-            closest = b;
-        }
-    });
-    return closest ? parseInt(closest.dataset.idx, 10) : null;
+    const baseFloats = getBaseFloats();
+    const N = baseFloats.length;
+    if (N === 0) return null;
+
+    const rect = elements.chartArea.getBoundingClientRect();
+    const px = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const zS = zoomRange ? zoomRange.start : 0;
+    const zE = zoomRange ? zoomRange.end : N - 1;
+    const zCount = zE - zS + 1;
+
+    let col = Math.floor((px / rect.width) * zCount);
+    if (col >= zCount) col = zCount - 1;
+
+    return Math.max(0, Math.min(N - 1, zS + col));
 }
+
+let requantizeTimeout = null;
+
+/**
+ * Debounces execution of the requantization engine to prevent UI freezes.
+ * @param {boolean} forceSync - Whether to bypass the timeout and execute instantly.
+ */
+const debouncedRequantize = (forceSync = false) => {
+    clearTimeout(requantizeTimeout);
+    if (forceSync) {
+        requantize();
+    } else {
+        requantizeTimeout = setTimeout(() => requantize(), 100);
+    }
+};
 
 document.addEventListener('DOMContentLoaded', async () => {
     await initWasm();
@@ -28,13 +49,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateDynamicSelectors();
     initUIListeners();
 
+    let resizeTimeout;
+    const resizeObserver = new ResizeObserver(() => {
+        cancelAnimationFrame(resizeTimeout);
+        resizeTimeout = requestAnimationFrame(() => render());
+    });
+    resizeObserver.observe(elements.chartArea);
+
     const processFile = (file) => {
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (evt) => {
             elements.inputEl.value = evt.target.result;
             resetZoom(false);
-            requantize();
+            debouncedRequantize(true);
         };
         reader.readAsText(file);
     };
@@ -44,7 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         elements.fileInput.addEventListener('change', (e) => {
             processFile(e.target.files[0]);
-            e.target.value = ''; // Reset input
+            e.target.value = '';
         });
 
         elements.fileDropZone.addEventListener('dragover', (e) => {
@@ -73,7 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.target.id.startsWith('gen-')) {
             generateData();
             resetZoom(false);
-            requantize();
+            debouncedRequantize();
         } else if (e.target.id === 'centering-mode') {
             updateVisualsOnly();
         } else {
@@ -81,7 +109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 elements.presetEl.value = 'custom';
                 updateUI();
             }
-            requantize();
+            debouncedRequantize();
         }
     }));
 
@@ -89,75 +117,74 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (elements.presetEl.value !== 'custom') {
             applyPreset(elements.presetEl.value);
             updateUI();
-            requantize();
+            debouncedRequantize();
         }
     });
 
     elements.genBtn.addEventListener('click', () => {
         generateData();
         resetZoom(false);
-        requantize();
+        debouncedRequantize();
     });
 
-    elements.inputEl.addEventListener('input', () => {
-        requantize();
+    elements.inputEl.addEventListener('input', () => debouncedRequantize());
+
+    let lastHoveredIdx = -1;
+    elements.chartArea.addEventListener('pointermove', (e) => {
+        const idx = getNearestBarIdx(e.clientX);
+        if (idx !== null && !isNaN(idx) && idx !== lastHoveredIdx) {
+            lastHoveredIdx = idx;
+            setHoveredIdx(idx);
+        }
     });
 
-    elements.chartArea.addEventListener('mouseover', (e) => {
-        const bar = e.target.closest('.bar');
-        if (!bar) return;
-        const idx = parseInt(bar.dataset.idx, 10);
-        if (!Number.isNaN(idx)) updateInspector(idx);
+    elements.chartArea.addEventListener('pointerleave', () => {
+        lastHoveredIdx = -1;
+        setHoveredIdx(null);
     });
 
     elements.btnResetZoom.addEventListener('click', () => resetZoom());
     elements.btnToggleSRHT.addEventListener('click', () => toggleSRHT());
 
-    let dragStartIdx = null;
+    let dragStartIdxTemp = null;
 
-    elements.chartArea.addEventListener('mousedown', (e) => {
+    elements.chartArea.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
         e.preventDefault();
 
-        let bar = e.target.closest('.bar');
-        dragStartIdx = bar ? parseInt(bar.dataset.idx, 10) : getNearestBarIdx(e.clientX);
-        if (dragStartIdx === null) return;
+        elements.chartArea.setPointerCapture(e.pointerId);
+        dragStartIdxTemp = getNearestBarIdx(e.clientX);
 
-        const rect = elements.chartArea.getBoundingClientRect();
-        const startX = e.clientX - rect.left;
+        if (dragStartIdxTemp === null) return;
+        setDragState(dragStartIdxTemp, dragStartIdxTemp);
 
-        const dragBox = document.getElementById('zoom-box');
-        if (!dragBox) return;
-        dragBox.style.display = 'block';
-        dragBox.style.left = `${startX}px`;
-        dragBox.style.width = '0px';
-
-        const onMouseMove = (moveEvt) => {
-            const currX = Math.max(0, Math.min(rect.width, moveEvt.clientX - rect.left));
-            dragBox.style.left = `${Math.min(startX, currX)}px`;
-            dragBox.style.width = `${Math.abs(startX - currX)}px`;
-        };
-
-        const onMouseUp = (upEvt) => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            dragBox.style.display = 'none';
-
-            dragBox.style.visibility = 'hidden';
-            const target = document.elementFromPoint(upEvt.clientX, upEvt.clientY);
-            dragBox.style.visibility = 'visible';
-
-            let barUp = target ? target.closest('.bar') : null;
-            let endIdx = barUp ? parseInt(barUp.dataset.idx, 10) : getNearestBarIdx(upEvt.clientX);
-
-            if (endIdx !== null && dragStartIdx !== null && endIdx !== dragStartIdx) {
-                setZoomRange(Math.min(dragStartIdx, endIdx), Math.max(dragStartIdx, endIdx));
+        const onPointerMove = (moveEvt) => {
+            const currIdx = getNearestBarIdx(moveEvt.clientX);
+            if (currIdx !== null && !isNaN(currIdx)) {
+                setDragState(dragStartIdxTemp, currIdx);
             }
-            dragStartIdx = null;
         };
 
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
+        const onPointerUp = (upEvt) => {
+            elements.chartArea.releasePointerCapture(upEvt.pointerId);
+            elements.chartArea.removeEventListener('pointermove', onPointerMove);
+            elements.chartArea.removeEventListener('pointerup', onPointerUp);
+
+            let startIdx = dragStartIdxTemp;
+            let endIdx = getNearestBarIdx(upEvt.clientX);
+            dragStartIdxTemp = null;
+
+            if (startIdx !== null && endIdx !== null && startIdx !== endIdx) {
+                setZoomRange(Math.min(startIdx, endIdx), Math.max(startIdx, endIdx), false);
+            }
+
+            const newHoverIdx = getNearestBarIdx(upEvt.clientX);
+            setHoveredIdx(newHoverIdx);
+            setDragState(null, null);
+        };
+
+        elements.chartArea.addEventListener('pointermove', onPointerMove);
+        elements.chartArea.addEventListener('pointerup', onPointerUp);
     });
 
     elements.chartArea.addEventListener('contextmenu', (e) => {
@@ -184,7 +211,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const N = getBaseFloats().length;
             if (!e.target.checked && N > 1048576 && !getHasWarnedLargeData()) {
                 e.preventDefault();
-                e.target.checked = true; // revert visually
+                e.target.checked = true;
                 if (elements.dbClipParams) elements.dbClipParams.style.display = 'flex';
                 pendingAction = { type: 'uncheck_clip' };
                 elements.modalLargeData.style.display = 'flex';
@@ -211,15 +238,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         start = Math.max(0, Math.min(start, N - 1));
         width = Math.max(1, width);
 
-        let end = start + width - 1;
-        if (end > N - 1) {
-            end = N - 1;
-        }
-
-        const diff = end - start + 1;
+        let end = Math.min(start + width - 1, N - 1);
         setUserModifiedClip(true);
-        if (diff > 1048576 && !getHasWarnedLargeData()) {
-            pendingAction = { type: 'slider', start: start, end: end };
+
+        if (end - start + 1 > 1048576 && !getHasWarnedLargeData()) {
+            pendingAction = { type: 'slider', start, end };
             elements.modalLargeData.style.display = 'flex';
         } else {
             setClipRange(start, end, false);
@@ -239,73 +262,54 @@ document.addEventListener('DOMContentLoaded', async () => {
     let initialMouseX = 0;
     const DRAG_THRESHOLD = 4;
 
-    const onDbMouseMove = (e) => {
+    const onDbPointerMove = (e) => {
         if (!isDraggingLeft && !isDraggingRight && !isDraggingCenter) return;
 
         if (!hasMoved) {
-            if (Math.abs(e.clientX - initialMouseX) >= DRAG_THRESHOLD) {
-                hasMoved = true;
-            } else {
-                return;
-            }
+            if (Math.abs(e.clientX - initialMouseX) >= DRAG_THRESHOLD) hasMoved = true;
+            else return;
         }
 
         const rect = elements.dbBar.getBoundingClientRect();
-        const baseFloats = getBaseFloats();
-        const N = baseFloats.length;
+        const N = getBaseFloats().length;
         if (N === 0) return;
-
-        let zS = zoomRange ? zoomRange.start : 0;
-        let zE = zoomRange ? zoomRange.end : N - 1;
-        const zCount = zE - zS + 1;
 
         let pxRatio = (e.clientX - rect.left) / rect.width;
 
         if (isDraggingCenter) {
-            let deltaRatio = pxRatio - dragStartXRatio;
-            let deltaIdx = Math.round(deltaRatio * (zCount - 1));
-
-            if (initialClipStart + deltaIdx < 0) {
-                deltaIdx = -initialClipStart;
-            }
-            if (initialClipEnd + deltaIdx > N - 1) {
-                deltaIdx = N - 1 - initialClipEnd;
-            }
-
-            let newStart = initialClipStart + deltaIdx;
-            let newEnd = initialClipEnd + deltaIdx;
-            setClipRange(newStart, newEnd, true);
+            let deltaIdx = Math.round((pxRatio - dragStartXRatio) * (N - 1));
+            if (initialClipStart + deltaIdx < 0) deltaIdx = -initialClipStart;
+            if (initialClipEnd + deltaIdx > N - 1) deltaIdx = N - 1 - initialClipEnd;
+            setClipRange(initialClipStart + deltaIdx, initialClipEnd + deltaIdx, true);
             return;
         }
 
-        let targetIdx = Math.round(zS + pxRatio * (zCount - 1));
-        targetIdx = Math.max(0, Math.min(N - 1, targetIdx));
-
+        let targetIdx = Math.max(0, Math.min(N - 1, Math.round(pxRatio * (N - 1))));
         const clip = getClipRange();
+
         if (isDraggingLeft) {
-            let newStart = Math.min(targetIdx, clip.end);
-            setClipRange(newStart, clip.end, true);
+            setClipRange(Math.min(targetIdx, clip.end), clip.end, true);
         } else if (isDraggingRight) {
-            let newEnd = Math.max(targetIdx, clip.start);
-            setClipRange(clip.start, newEnd, true);
+            setClipRange(clip.start, Math.max(targetIdx, clip.start), true);
         }
     };
 
-    const onDbMouseUp = (e) => {
+    const onDbPointerUp = (e) => {
         if (isDraggingLeft || isDraggingRight || isDraggingCenter) {
             isDraggingLeft = false;
             isDraggingRight = false;
             isDraggingCenter = false;
-            document.removeEventListener('mousemove', onDbMouseMove);
-            document.removeEventListener('mouseup', onDbMouseUp);
+
+            if (e.target.releasePointerCapture) e.target.releasePointerCapture(e.pointerId);
+            e.target.removeEventListener('pointermove', onDbPointerMove);
+            e.target.removeEventListener('pointerup', onDbPointerUp);
 
             if (hasMoved) {
                 setUserModifiedClip(true);
                 const clip = getClipRange();
-                const diff = clip.end - clip.start + 1;
-                if (diff > 1048576 && !getHasWarnedLargeData()) {
+                if (clip.end - clip.start + 1 > 1048576 && !getHasWarnedLargeData()) {
                     pendingAction = { type: 'slider', start: clip.start, end: clip.end };
-                    setClipRange(initialClipStart, initialClipEnd, true); // revert visually until accepted
+                    setClipRange(initialClipStart, initialClipEnd, true);
                     elements.modalLargeData.style.display = 'flex';
                 } else {
                     requantize(true);
@@ -317,55 +321,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     if (elements.dbActiveRegion) {
-        elements.dbActiveRegion.addEventListener('mousedown', (e) => {
+        elements.dbActiveRegion.addEventListener('pointerdown', (e) => {
             if (e.target === elements.dbHandleLeft || e.target === elements.dbHandleRight) return;
             e.preventDefault(); e.stopPropagation();
+            elements.dbActiveRegion.setPointerCapture(e.pointerId);
             isDraggingCenter = true;
             hasMoved = false;
             initialMouseX = e.clientX;
             const clip = getClipRange();
             initialClipStart = clip.start;
             initialClipEnd = clip.end;
-            const rect = elements.dbBar.getBoundingClientRect();
-            dragStartXRatio = (e.clientX - rect.left) / rect.width;
-            document.addEventListener('mousemove', onDbMouseMove);
-            document.addEventListener('mouseup', onDbMouseUp);
+            dragStartXRatio = (e.clientX - elements.dbBar.getBoundingClientRect().left) / elements.dbBar.getBoundingClientRect().width;
+            elements.dbActiveRegion.addEventListener('pointermove', onDbPointerMove);
+            elements.dbActiveRegion.addEventListener('pointerup', onDbPointerUp);
         });
 
         elements.dbActiveRegion.addEventListener('dblclick', (e) => {
             e.preventDefault(); e.stopPropagation();
             const clip = getClipRange();
-            if (clip.start !== null && clip.end !== null) {
-                setZoomRange(clip.start, clip.end);
-            }
+            if (clip.start !== null && clip.end !== null) setZoomRange(clip.start, clip.end);
         });
     }
 
     if (elements.dbHandleLeft) {
-        elements.dbHandleLeft.addEventListener('mousedown', (e) => {
+        elements.dbHandleLeft.addEventListener('pointerdown', (e) => {
             e.preventDefault(); e.stopPropagation();
+            elements.dbHandleLeft.setPointerCapture(e.pointerId);
             isDraggingLeft = true;
             hasMoved = false;
             initialMouseX = e.clientX;
             const clip = getClipRange();
             initialClipStart = clip.start;
             initialClipEnd = clip.end;
-            document.addEventListener('mousemove', onDbMouseMove);
-            document.addEventListener('mouseup', onDbMouseUp);
+            elements.dbHandleLeft.addEventListener('pointermove', onDbPointerMove);
+            elements.dbHandleLeft.addEventListener('pointerup', onDbPointerUp);
         });
     }
 
     if (elements.dbHandleRight) {
-        elements.dbHandleRight.addEventListener('mousedown', (e) => {
+        elements.dbHandleRight.addEventListener('pointerdown', (e) => {
             e.preventDefault(); e.stopPropagation();
+            elements.dbHandleRight.setPointerCapture(e.pointerId);
             isDraggingRight = true;
             hasMoved = false;
             initialMouseX = e.clientX;
             const clip = getClipRange();
             initialClipStart = clip.start;
             initialClipEnd = clip.end;
-            document.addEventListener('mousemove', onDbMouseMove);
-            document.addEventListener('mouseup', onDbMouseUp);
+            elements.dbHandleRight.addEventListener('pointermove', onDbPointerMove);
+            elements.dbHandleRight.addEventListener('pointerup', onDbPointerUp);
         });
     }
 
@@ -403,5 +407,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateUI();
     updateDbBarVisibility();
     generateData();
-    requantize();
+    debouncedRequantize(true);
 });

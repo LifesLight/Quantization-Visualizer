@@ -74,24 +74,24 @@ pub fn format_inspector(
     _settings: &Settings,
 ) -> InspectorData {
     let b_idx = idx / 16;
-    let mut math_str = String::new();
+    let mut data = InspectorData::default();
     if let Some(bm) = blocks.get(b_idx) {
         let norm_val = (active[idx] / gs) / bm.scale;
         let sign = if norm_val >= 0.0 { 1.0 } else { -1.0 };
         let cb = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0];
-        let best = snap_to_codebook(norm_val.abs(), &cb);
+        let best = crate::math_utils::snap_to_codebook(norm_val.abs(), &cb);
         let s_disp = if best == 0.0 || sign >= 0.0 { "+" } else { "-" };
-        math_str = format!(
+        data.math_str = Some(format!(
             "{}{:.1} &times; {:.4} &times; {:.4}",
             s_disp, best, bm.scale, gs
-        );
+        ));
+        data.block_idx = Some(bm.idx);
+        data.mse = Some(bm.mse);
+        data.mae = Some(bm.mae);
+        data.scale = Some(bm.scale);
+        data.global_scale = Some(gs);
+        data.global_mse = Some(gmse);
+        data.global_mae = Some(gmae);
     }
-
-    InspectorData {
-        math_str,
-        block_html: blocks.get(b_idx).map(|bm| format!("<div class=\"data-row\"><span>MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>Block Scale (FP8):</span> <span>{:.5}</span></div>", bm.mse, bm.mae, bm.scale)).unwrap_or_default(),
-        block_idx_str: format!("[{}]", b_idx),
-        super_html: format!("<div class=\"data-row\"><span>Global MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>Global MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>Global Scale (FP32):</span> <span>{:.6}</span></div>", gmse, gmae, gs),
-        super_idx_str: "[Global]".into(),
-    }
+    data
 }

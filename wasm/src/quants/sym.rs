@@ -44,9 +44,7 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
                 max_val / -max_q
             });
             for j in 0..chunk_len {
-                let q = ((chunk[j] / scale + max_q).round())
-                    .max(0.0)
-                    .min((max_q * 2.0) - 1.0);
+                let q = ((chunk[j] / scale + max_q).round()).clamp(0.0, (max_q * 2.0) - 1.0);
                 let q_val = (q - max_q) * scale;
                 chunk_q[j] = q_val;
                 q_floats[i + j] = q_val;
@@ -77,9 +75,10 @@ pub fn format_inspector(
     settings: &Settings,
 ) -> InspectorData {
     let b_idx = idx / settings.block_size;
+    let mut data = InspectorData::default();
     if let Some(bm) = blocks.get(b_idx) {
         let chunk_v = out.q_floats[idx];
-        let math_str = if settings.weight_bits == 1 {
+        data.math_str = Some(if settings.weight_bits == 1 {
             let sign = if chunk_v >= 0.0 { 1 } else { -1 };
             format!("{} &times; {:.4}", sign, bm.scale)
         } else {
@@ -88,21 +87,11 @@ pub fn format_inspector(
                 (chunk_v / bm.scale).round() as i32,
                 bm.scale
             )
-        };
-
-        InspectorData {
-            math_str,
-            block_html: format!("<div class=\"data-row\"><span>MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>Scale (FP16):</span> <span>{:.5}</span></div>", bm.mse, bm.mae, bm.scale),
-            block_idx_str: format!("[{}]", bm.idx),
-            super_html: "".to_string(), super_idx_str: "".to_string(),
-        }
-    } else {
-        InspectorData {
-            math_str: "".into(),
-            block_html: "".into(),
-            block_idx_str: "".into(),
-            super_html: "".into(),
-            super_idx_str: "".into(),
-        }
+        });
+        data.block_idx = Some(bm.idx);
+        data.mse = Some(bm.mse);
+        data.mae = Some(bm.mae);
+        data.scale = Some(bm.scale);
     }
+    data
 }

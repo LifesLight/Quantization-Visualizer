@@ -55,15 +55,10 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
 
             for k in 0..sub_scales.len() {
                 q_sub_scales.push(
-                    ((sub_scales[k] / super_scale).round())
-                        .max(0.0)
-                        .min(qmax_sub)
-                        * super_scale,
+                    ((sub_scales[k] / super_scale).round()).clamp(0.0, qmax_sub) * super_scale,
                 );
                 q_sub_mins.push(
-                    ((-sub_mins[k] / super_min_scale).round())
-                        .max(0.0)
-                        .min(qmax_sub)
+                    ((-sub_mins[k] / super_min_scale).round()).clamp(0.0, qmax_sub)
                         * super_min_scale,
                 );
             }
@@ -76,8 +71,7 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
                 };
                 let q = ((super_chunk[i] + q_sub_mins[sub_idx]) / qs)
                     .round()
-                    .max(0.0)
-                    .min(qmax_weight);
+                    .clamp(0.0, qmax_weight);
                 super_chunk_q[i] = q * q_sub_scales[sub_idx] - q_sub_mins[sub_idx];
                 q_floats[s + i] = super_chunk_q[i];
             }
@@ -102,10 +96,7 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
                 fp16(sub_scales.iter().cloned().fold(0.0_f32, f32::max) / qmax_sub).max(1e-5);
             for k in 0..sub_scales.len() {
                 q_sub_scales.push(
-                    ((sub_scales[k] / super_scale).round())
-                        .max(0.0)
-                        .min(qmax_sub)
-                        * super_scale,
+                    ((sub_scales[k] / super_scale).round()).clamp(0.0, qmax_sub) * super_scale,
                 );
             }
 
@@ -121,8 +112,7 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
                 } else {
                     let q = (super_chunk[i] / qs + max_q)
                         .round()
-                        .max(0.0)
-                        .min((max_q * 2.0) - 1.0);
+                        .clamp(0.0, (max_q * 2.0) - 1.0);
                     super_chunk_q[i] = (q - max_q) * qs;
                 }
                 q_floats[s + i] = super_chunk_q[i];
@@ -183,48 +173,55 @@ pub fn format_inspector(
     settings: &Settings,
 ) -> InspectorData {
     let (b_idx, s_idx) = (idx / settings.sub_size, idx / settings.sb_size);
-    let mut math_str = String::new();
+    let mut data = InspectorData::default();
     if let (Some(bm), Some(sm)) = (blocks.get(b_idx), supers.get(s_idx)) {
         let v = active[idx];
         if settings.has_offset {
             let qs = if bm.q_scale == 0.0 { 1e-5 } else { bm.q_scale };
             let qmax_weight = (1 << settings.weight_bits) as f32 - 1.0;
-            let q = ((v + bm.q_min) / qs).round().max(0.0).min(qmax_weight);
-            math_str = format!(
+            let q = ((v + bm.q_min) / qs).round().clamp(0.0, qmax_weight);
+            data.math_str = Some(format!(
                 "{} &times; ({} &times; {:.4}) - ({} &times; {:.4})",
                 q,
                 (bm.q_scale / sm.super_scale).round(),
                 sm.super_scale,
                 (bm.q_min / sm.super_min_scale).round(),
                 sm.super_min_scale
-            );
+            ));
         } else {
             if settings.weight_bits == 1 {
-                math_str = format!(
+                data.math_str = Some(format!(
                     "{} &times; ({} &times; {:.4})",
                     if v >= 0.0 { 1 } else { -1 },
                     (bm.q_scale / sm.super_scale).round(),
                     sm.super_scale
-                );
+                ));
             } else {
                 let max_q = 2.0_f32.powi(settings.weight_bits as i32 - 1);
                 let qs = if bm.q_scale == 0.0 { 1e-5 } else { bm.q_scale };
-                let q = (v / qs + max_q).round().max(0.0).min((max_q * 2.0) - 1.0);
-                math_str = format!(
+                let q = (v / qs + max_q).round().clamp(0.0, (max_q * 2.0) - 1.0);
+                data.math_str = Some(format!(
                     "{} &times; ({} &times; {:.4})",
                     q - max_q,
                     (bm.q_scale / sm.super_scale).round(),
                     sm.super_scale
-                );
+                ));
             }
         }
+        data.block_idx = Some(b_idx);
+        data.mse = Some(bm.mse);
+        data.mae = Some(bm.mae);
+        data.scale = Some(bm.q_scale);
+        if settings.has_offset {
+            data.min = Some(bm.q_min);
+        }
+        data.super_idx = Some(s_idx);
+        data.super_scale = Some(sm.super_scale);
+        if settings.has_offset {
+            data.super_min = Some(sm.super_min_scale);
+        }
+        data.super_mse = Some(sm.mse);
+        data.super_mae = Some(sm.mae);
     }
-
-    InspectorData {
-        math_str,
-        block_html: blocks.get(b_idx).map(|bm| format!("<div class=\"data-row\"><span>MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>SubScale (derived):</span> <span>{:.5}</span></div>{}", bm.mse, bm.mae, bm.q_scale, if settings.has_offset { format!("<div class=\"data-row\"><span>SubMin (derived):</span> <span>{:.5}</span></div>", bm.q_min) } else { "".to_string() })).unwrap_or_default(),
-        block_idx_str: format!("[{}]", b_idx),
-        super_html: supers.get(s_idx).map(|sm| format!("<div class=\"data-row\"><span>Super MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>Super MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>SuperScale (FP16):</span> <span>{:.6}</span></div>{}", sm.mse, sm.mae, sm.super_scale, if settings.has_offset { format!("<div class=\"data-row\"><span>SuperMinScale (FP16):</span> <span>{:.6}</span></div>", sm.super_min_scale) } else { "".to_string() })).unwrap_or_default(),
-        super_idx_str: format!("[{}]", s_idx),
-    }
+    data
 }

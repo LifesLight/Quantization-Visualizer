@@ -35,8 +35,7 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
         for j in 0..chunk_len {
             let q = ((chunk[j] - offset) / scale)
                 .round()
-                .max(0.0)
-                .min((1 << weight_bits) as f32 - 1.0);
+                .clamp(0.0, (1 << weight_bits) as f32 - 1.0);
             let q_val = q * scale + offset;
             chunk_q[j] = q_val;
             q_floats[i + j] = q_val;
@@ -67,22 +66,15 @@ pub fn format_inspector(
     settings: &Settings,
 ) -> InspectorData {
     let b_idx = idx / settings.block_size;
+    let mut data = InspectorData::default();
     if let Some(bm) = blocks.get(b_idx) {
         let q = ((out.q_floats[idx] - bm.min) / bm.scale).round() as i32;
-        let math_str = format!("{} &times; {:.4} + {:.4}", q, bm.scale, bm.min);
-        InspectorData {
-            math_str,
-            block_html: format!("<div class=\"data-row\"><span>MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>Scale (FP16):</span> <span>{:.5}</span></div><div class=\"data-row\"><span>Min (FP16):</span> <span>{:.5}</span></div>", bm.mse, bm.mae, bm.scale, bm.min),
-            block_idx_str: format!("[{}]", bm.idx),
-            super_html: "".to_string(), super_idx_str: "".to_string(),
-        }
-    } else {
-        InspectorData {
-            math_str: "".into(),
-            block_html: "".into(),
-            block_idx_str: "".into(),
-            super_html: "".into(),
-            super_idx_str: "".into(),
-        }
+        data.math_str = Some(format!("{} &times; {:.4} + {:.4}", q, bm.scale, bm.min));
+        data.block_idx = Some(bm.idx);
+        data.mse = Some(bm.mse);
+        data.mae = Some(bm.mae);
+        data.scale = Some(bm.scale);
+        data.min = Some(bm.min);
     }
+    data
 }

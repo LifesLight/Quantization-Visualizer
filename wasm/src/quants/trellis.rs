@@ -660,18 +660,19 @@ pub fn format_inspector(
     blocks: &[TrellisBlockMeta],
     settings: &Settings,
 ) -> InspectorData {
-    let b_idx = idx / settings.trellis_block_size;
-    let local_idx = idx % settings.trellis_block_size;
-    let mut data = InspectorData {
-        math_str: "Hidden".into(),
-        block_html: "".into(),
-        block_idx_str: "".into(),
-        super_html: "".into(),
-        super_idx_str: "".into(),
-    };
+    let t_bsize = settings.trellis_block_size.max(1);
+    let b_idx = idx / t_bsize;
+    let local_idx = idx % t_bsize;
+    let mut data = InspectorData::default();
+
     if let Some(bm) = blocks.get(b_idx) {
-        data.block_idx_str = format!("[{}]", bm.idx);
-        data.block_html = format!("<div class=\"data-row\"><span>MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>{}:</span> <span>{:.5}</span></div>", bm.mse, bm.mae, if settings.trellis_use_wht && settings.trellis_wht_scope == "global" { "Global Scale (FP16)" } else { "Scale (FP16)" }, bm.scale);
+        data.block_idx = Some(bm.idx);
+        data.mse = Some(bm.mse);
+        data.mae = Some(bm.mae);
+        data.scale = Some(bm.scale);
+        if settings.trellis_use_wht && settings.trellis_wht_scope == "global" {
+            data.global_scale = Some(bm.scale);
+        }
 
         let states = if vec![1, 4, 8, 16, 64, 256].contains(&settings.trellis_states) {
             settings.trellis_states
@@ -695,8 +696,7 @@ pub fn format_inspector(
         };
 
         let transitions_opt = get_transitions(states);
-        let dummy_trans = vec![];
-        let transitions = transitions_opt.as_ref().unwrap_or(&dummy_trans);
+        let transitions = transitions_opt.as_deref().unwrap_or(&[]);
 
         let res = trellis_quantize_block(
             &bm.chunk_w,
@@ -716,35 +716,33 @@ pub fn format_inspector(
                     p.prevState, p.state, p.subset, p.cbIdx
                 )
             };
-            data.math_str = if settings.trellis_use_wht {
+            data.math_str = Some(if settings.trellis_use_wht {
                 format!(
                     "D({}) &times; FWHT( {} )[{}]",
-                    if get_sign_flip(idx, settings.trellis_sign_seed) > 0.0 {
-                        "+1"
-                    } else {
-                        "-1"
-                    },
+                    if get_sign_flip(idx, settings.trellis_sign_seed) > 0.0 { "+1" } else { "-1" },
                     base_eq,
                     idx
                 )
             } else {
                 base_eq
-            };
-            let mut cand_html = String::new();
-            for c in &p.candidates {
-                let active =
-                    c.prevState == p.prevState && c.subset == p.subset && c.cbIdx == p.cbIdx;
-                cand_html.push_str(&format!("<div style=\"display:flex; justify-content:space-between; gap:8px; align-items:center; padding:5px 8px; border-radius:6px; border:1px solid {}; {}\"><div style=\"display:flex; gap:6px; align-items:center; font-size:11px; {}\"><span>S{} &rarr; D{}</span></div><div style=\"font-size:11px; display:flex; gap:8px;\"><span style=\"width:45px; text-align:right;\">q={:.3}</span><span style=\"opacity:0.6; width:65px; text-align:right;\">(c={:.3})</span></div></div>", if active { "var(--primary-color)" } else { "var(--border-color)" }, if active { "background:var(--card-bg);" } else { "opacity:0.6;" }, if active { "color:var(--primary-color); font-weight:bold;" } else { "" }, c.prevState, c.subset, c.cbVal, c.cost));
-            }
-            data.super_idx_str = format!("[t={}]", local_idx);
-            data.super_html = format!(
-                "<div style=\"display:flex; flex-direction:column; gap:12px;\">{}</div>",
-                if settings.trellis_states > 1 {
-                    format!("<div><div style=\"display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;\"><div style=\"font-size:10px; font-weight:600; opacity:0.6; text-transform:uppercase; letter-spacing:0.5px;\">Viterbi State Transition</div><div style=\"font-size:10px; opacity:0.8;\">Codebook Idx: <strong style=\"color:var(--text-color);\">{}</strong></div></div><div style=\"display:flex; align-items:center; justify-content:space-between; background: var(--card-bg); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color);\"><div style=\"text-align:center; flex: 0 0 auto;\"><div style=\"font-size:9px; opacity:0.6; margin-bottom:6px; letter-spacing:0.5px;\">PREV</div><div style=\"background:transparent; border:2px solid var(--border-color); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:11px; margin:0 auto;\">S{}</div></div><div style=\"flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 0 10px;\"><div style=\"font-size:10px; font-weight:bold; color:var(--primary-color); margin-bottom:4px;\">Subset D{}</div><div style=\"width:100%; height:2px; background:var(--primary-color); position:relative;\"><div style=\"position:absolute; right:0; top:-4px; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:6px solid var(--primary-color);\"></div></div><div style=\"font-size:9px; opacity:0.6; margin-top:6px;\">Path Cost: {}</div></div><div style=\"text-align:center; flex: 0 0 auto;\"><div style=\"font-size:9px; opacity:0.6; margin-bottom:6px; letter-spacing:0.5px;\">CURR</div><div style=\"background:var(--primary-color); color:white; border:2px solid var(--primary-color); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:11px; margin:0 auto;\">S{}</div></div></div></div><div><div style=\"font-size:10px; font-weight:600; opacity:0.6; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;\">Evaluated Branches (to S{})</div><div style=\"display:flex; flex-direction:column; gap:4px; max-height:140px; overflow-y:scroll; padding-right:4px;\">{}</div></div>", p.cbIdx, p.prevState, p.subset, if p.cost.is_finite() { format!("{:.3}", p.cost) } else { "∞".into() }, p.state, p.state, if cand_html.is_empty() { "<div style=\"opacity:0.6; font-size:11px;\">No candidates</div>".into() } else { cand_html })
-                } else {
-                    format!("<div style=\"display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;\"><div style=\"font-size:10px; font-weight:600; opacity:0.6; text-transform:uppercase; letter-spacing:0.5px;\">Scalar Quantization</div><div style=\"font-size:10px; opacity:0.8;\">Codebook Idx: <strong style=\"color:var(--text-color);\">{}</strong></div></div><div style=\"font-size:11px; line-height:1.4; color:var(--text-muted); padding:10px; border:1px dashed var(--border-color); border-radius:6px; text-align:center;\">Values are snapped to the closest level in the codebook independently, without path memory.</div>", p.cbIdx)
-                }
-            );
+            });
+
+            let cands_str = p.candidates.iter().map(|c| {
+                let cost = if c.cost.is_infinite() { 1e9 } else if c.cost.is_nan() { 0.0 } else { c.cost };
+                let dist = if c.dist.is_infinite() { 1e9 } else if c.dist.is_nan() { 0.0 } else { c.dist };
+                let val = if c.cbVal.is_infinite() { 1e9 } else if c.cbVal.is_nan() { 0.0 } else { c.cbVal };
+
+                format!(r#"{{"prevState":{},"subset":{},"cbIdx":{},"cbVal":{},"dist":{},"cost":{}}}"#, 
+                    c.prevState, c.subset, c.cbIdx, val, dist, cost)
+            }).collect::<Vec<_>>().join(",");
+
+            let p_cost = if p.cost.is_infinite() { 1e9 } else if p.cost.is_nan() { 0.0 } else { p.cost };
+            let p_val = if p.cwVal.is_infinite() { 1e9 } else if p.cwVal.is_nan() { 0.0 } else { p.cwVal };
+
+            data.trellis_json = Some(format!(
+                r#"{{"cbIdx":{},"prevState":{},"state":{},"subset":{},"cbVal":{},"cost":{},"candidates":[{}]}}"#,
+                p.cbIdx, p.prevState, p.state, p.subset, p_val, p_cost, cands_str
+            ));
         }
     }
     data

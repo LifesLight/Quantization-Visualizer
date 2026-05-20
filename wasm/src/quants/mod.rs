@@ -59,14 +59,26 @@ pub enum QuantMeta {
     Trellis(Vec<TrellisBlockMeta>),
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct InspectorData {
-    pub math_str: String,
-    pub block_html: String,
-    pub block_idx_str: String,
-    pub super_html: String,
-    pub super_idx_str: String,
+    pub math_str: Option<String>,
+    pub block_idx: Option<usize>,
+    pub super_idx: Option<usize>,
+    pub mse: Option<f64>,
+    pub mae: Option<f64>,
+    pub scale: Option<f32>,
+    pub min: Option<f32>,
+    pub scale_e: Option<i32>,
+    pub qjl_scale: Option<f32>,
+    pub super_scale: Option<f32>,
+    pub super_min: Option<f32>,
+    pub super_mse: Option<f64>,
+    pub super_mae: Option<f64>,
+    pub global_scale: Option<f32>,
+    pub global_mse: Option<f64>,
+    pub global_mae: Option<f64>,
+    pub trellis_json: Option<String>,
 }
 
 pub struct SymBlockMeta {

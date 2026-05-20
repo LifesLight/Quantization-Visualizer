@@ -97,7 +97,7 @@ pub fn format_inspector(
     _settings: &Settings,
 ) -> InspectorData {
     let b_idx = idx / 32;
-    let mut math_str = String::new();
+    let mut data = InspectorData::default();
     if let Some(bm) = blocks.get(b_idx) {
         let q_val = active[idx] / bm.scale;
         let s_disp = if q_val < 0.0 || active[idx] < 0.0 {
@@ -105,17 +105,17 @@ pub fn format_inspector(
         } else {
             "+"
         };
-        math_str = format!(
+        data.math_str = Some(format!(
             "{}{:.4} &times; 2<sup>{}</sup>",
             s_disp,
             q_val.abs(),
             bm.scale_e
-        );
+        ));
+        data.block_idx = Some(bm.idx);
+        data.mse = Some(bm.mse);
+        data.mae = Some(bm.mae);
+        data.scale = Some(bm.scale);
+        data.scale_e = Some(bm.scale_e);
     }
-    InspectorData {
-        math_str,
-        block_html: blocks.get(b_idx).map(|bm| format!("<div class=\"data-row\"><span>MSE:</span> <span class=\"val-hl\">{:.6}</span></div><div class=\"data-row\"><span>MAE:</span> <span>{:.6}</span></div><div class=\"data-row\" style=\"margin-top:4px\"><span>Block Scale (E8M0):</span> <span>2<sup>{}</sup> ({:.2e})</span></div>", bm.mse, bm.mae, bm.scale_e, bm.scale)).unwrap_or_default(),
-        block_idx_str: format!("[{}]", b_idx),
-        super_html: "".into(), super_idx_str: "".into(),
-    }
+    data
 }
