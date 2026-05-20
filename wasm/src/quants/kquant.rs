@@ -1,6 +1,7 @@
 use crate::math_utils::*;
 use crate::quants::{InspectorData, KBlockMeta, KSuperMeta, QuantMeta, QuantizeOutput, Settings};
 
+/// Replicates the GGUF `K-Quant` hierarchical (super-block & sub-block) scale aggregation logic.
 pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     let (weight_bits, sb_size, sub_size, sub_bits, has_offset) = (
         settings.weight_bits,
@@ -167,13 +168,15 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
 pub fn format_inspector(
     idx: usize,
     active: &[f32],
-    _out: &QuantizeOutput,
-    blocks: &[KBlockMeta],
-    supers: &[KSuperMeta],
+    out: &QuantizeOutput,
     settings: &Settings,
 ) -> InspectorData {
+    let QuantMeta::KQuant(blocks, supers) = &out.meta else {
+        return InspectorData::default();
+    };
     let (b_idx, s_idx) = (idx / settings.sub_size, idx / settings.sb_size);
     let mut data = InspectorData::default();
+
     if let (Some(bm), Some(sm)) = (blocks.get(b_idx), supers.get(s_idx)) {
         let v = active[idx];
         if settings.has_offset {

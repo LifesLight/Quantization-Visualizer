@@ -3,6 +3,7 @@ use crate::quants::*;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
+/// Output statistics sent back to the frontend after quantization.
 #[derive(Serialize)]
 pub struct QuantStats {
     pub bpw: f32,
@@ -30,6 +31,7 @@ pub struct MinMaxInfo {
     pub max_v: f32,
 }
 
+/// A unique signature for a specific render payload, preventing identical render requests.
 #[derive(PartialEq)]
 struct RenderCacheKey {
     data_version: u64,
@@ -46,6 +48,7 @@ struct RenderCacheKey {
     manual_max_bits: u32,
 }
 
+/// The core application state object maintained between Javascript boundaries.
 #[wasm_bindgen]
 pub struct AppBackend {
     raw_floats: Vec<f32>,
@@ -86,6 +89,7 @@ impl AppBackend {
         }
     }
 
+    /// Invalidates all render and minmax caches indicating underlying data mutated.
     fn bump_version(&mut self) {
         self.data_version = self.data_version.wrapping_add(1);
         self.best_key = None;
@@ -138,8 +142,10 @@ impl AppBackend {
         self.best_range_cache = None;
     }
 
+    /// Primary entry point that dynamically routes and triggers specific algorithm quantization.
     pub fn quantize(&mut self, settings_js: JsValue) -> JsValue {
         let settings: Settings = serde_wasm_bindgen::from_value(settings_js).unwrap();
+
         let output = match settings.q_type.as_str() {
             "primitive" => primitive::quantize(&self.active_floats, &settings),
             "sym" => sym::quantize(&self.active_floats, &settings),
@@ -179,7 +185,6 @@ impl AppBackend {
         };
 
         self.last_output = Some(output);
-
         self.best_key = None;
         self.best_range_cache = None;
 
@@ -199,6 +204,7 @@ impl AppBackend {
         self.base_floats[g]
     }
 
+    /// Evaluates and filters min-max limits of bounds, managing artificial dataset extremes.
     fn calculate_bounds(
         &self,
         zs: usize,
@@ -390,9 +396,9 @@ impl AppBackend {
         }
 
         self.best_indices.resize(w, 0);
-
         let z_count = (ze - zs + 1) as f64;
 
+        // Perform maximum magnitude mipmapping per pixel width.
         for x in 0..w {
             let fx0 = (x as f64) / width_css;
             let fx1 = ((x + 1) as f64) / width_css;
@@ -498,6 +504,7 @@ impl AppBackend {
         serde_wasm_bindgen::to_value(&mm).unwrap()
     }
 
+    // Standardized memory-bridge getters for JavaScript interop.
     pub fn get_base_floats_ptr(&self) -> *const f32 {
         self.base_floats.as_ptr()
     }
@@ -531,35 +538,22 @@ impl AppBackend {
             .unwrap_or(std::ptr::null())
     }
 
+    /// Uniform interface to fetch rendering metadata about specific index interactions.
     pub fn get_inspector_data(&self, idx: usize, settings_js: JsValue) -> JsValue {
         let settings: Settings = serde_wasm_bindgen::from_value(settings_js).unwrap();
         if let Some(out) = &self.last_output {
-            let data = match &out.meta {
-                QuantMeta::Primitive => primitive::format_inspector(idx, out, &settings),
-                QuantMeta::Sym(m) => sym::format_inspector(idx, out, m, &settings),
-                QuantMeta::Asym(m) => asym::format_inspector(idx, out, m, &settings),
-                QuantMeta::KQuant(b, s) => {
-                    kquant::format_inspector(idx, &self.active_floats, out, b, s, &settings)
+            let data = match settings.q_type.as_str() {
+                "primitive" => {
+                    primitive::format_inspector(idx, &self.active_floats, out, &settings)
                 }
-                QuantMeta::Nvfp4(b, gs, mse, mae) => nvfp4::format_inspector(
-                    idx,
-                    &self.active_floats,
-                    out,
-                    b,
-                    *gs,
-                    *mse,
-                    *mae,
-                    &settings,
-                ),
-                QuantMeta::Mxfp(b) => {
-                    mxfp::format_inspector(idx, &self.active_floats, out, b, &settings)
-                }
-                QuantMeta::Turbo(b) => {
-                    turbo::format_inspector(idx, &self.active_floats, out, b, &settings)
-                }
-                QuantMeta::Trellis(b) => {
-                    trellis::format_inspector(idx, &self.active_floats, out, b, &settings)
-                }
+                "sym" => sym::format_inspector(idx, &self.active_floats, out, &settings),
+                "asym" => asym::format_inspector(idx, &self.active_floats, out, &settings),
+                "kquant" => kquant::format_inspector(idx, &self.active_floats, out, &settings),
+                "nvfp4" => nvfp4::format_inspector(idx, &self.active_floats, out, &settings),
+                "mxfp" => mxfp::format_inspector(idx, &self.active_floats, out, &settings),
+                "turbo" => turbo::format_inspector(idx, &self.active_floats, out, &settings),
+                "trellis" => trellis::format_inspector(idx, &self.active_floats, out, &settings),
+                _ => primitive::format_inspector(idx, &self.active_floats, out, &settings),
             };
             serde_wasm_bindgen::to_value(&data).unwrap()
         } else {

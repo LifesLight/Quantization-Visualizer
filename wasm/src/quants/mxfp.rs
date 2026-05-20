@@ -1,6 +1,7 @@
 use crate::math_utils::*;
 use crate::quants::{InspectorData, MxfpBlockMeta, QuantMeta, QuantizeOutput, Settings};
 
+/// OCP MX Block format emulation.
 pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     let (bits, max_fmt, is_fp8, cb) = match settings.mxfp_format.as_str() {
         "mxfp6_e2m3" => {
@@ -92,12 +93,15 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
 pub fn format_inspector(
     idx: usize,
     active: &[f32],
-    _out: &QuantizeOutput,
-    blocks: &[MxfpBlockMeta],
+    out: &QuantizeOutput,
     _settings: &Settings,
 ) -> InspectorData {
+    let QuantMeta::Mxfp(blocks) = &out.meta else {
+        return InspectorData::default();
+    };
     let b_idx = idx / 32;
     let mut data = InspectorData::default();
+
     if let Some(bm) = blocks.get(b_idx) {
         let q_val = active[idx] / bm.scale;
         let s_disp = if q_val < 0.0 || active[idx] < 0.0 {

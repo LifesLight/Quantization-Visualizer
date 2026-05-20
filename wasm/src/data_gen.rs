@@ -3,11 +3,12 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {
+    /// Bind to JavaScript's `Math.random` for fast pseudo-random number generation.
     #[wasm_bindgen(js_namespace = Math)]
     fn random() -> f64;
 }
 
-/// Generates a random non-zero float
+/// Generates a random non-zero float to prevent division-by-zero or math domain errors.
 fn rand_nonzero() -> f64 {
     let mut r = random();
     while r == 0.0 {
@@ -16,6 +17,12 @@ fn rand_nonzero() -> f64 {
     r
 }
 
+/// Generates a mock dataset conforming to a specific statistical distribution.
+///
+/// # Arguments
+/// * `dist` - The type of distribution to generate ("uniform", "laplace", "bimodal", "outliers", or normal fallback)
+/// * `count` - The number of data points to generate
+/// * `uni_range`, `lap_scale`, `bim_dist`, `bim_spread`, `out_prob`, `out_mult`, `norm_std` - Distribution tuning parameters
 #[wasm_bindgen]
 pub fn generate_dataset(
     dist: &str,
@@ -34,14 +41,15 @@ pub fn generate_dataset(
         let val = match dist {
             "uniform" => (random() * uni_range) - (uni_range / 2.0),
             "laplace" => {
+                // Inverse transform sampling for Laplace distribution
                 let u = random() - 0.5;
                 -lap_scale * u.signum() * (1.0 - 2.0 * u.abs()).ln()
             }
             "bimodal" => {
                 let peak = if random() > 0.5 { bim_dist } else { -bim_dist };
+                // Box-Muller transform for normal distribution around the peak
                 let u = rand_nonzero();
                 let v = rand_nonzero();
-                // Box-Muller transform
                 let norm = (-2.0 * u.ln()).sqrt() * (2.0 * PI * v).cos();
                 peak + norm * bim_spread
             }
@@ -49,19 +57,22 @@ pub fn generate_dataset(
                 let u = rand_nonzero();
                 let v = rand_nonzero();
                 let mut norm = (-2.0 * u.ln()).sqrt() * (2.0 * PI * v).cos();
+
+                // Inject massive artificial outliers
                 if random() < out_prob {
                     norm *= if random() > 0.5 { out_mult } else { -out_mult };
                 }
                 norm
             }
             _ => {
-                // Standard normal distribution via Box-Muller
+                // Fallback to Standard Normal Distribution via Box-Muller transform
                 let u = rand_nonzero();
                 let v = rand_nonzero();
                 let norm = (-2.0 * u.ln()).sqrt() * (2.0 * PI * v).cos();
                 norm * norm_std
             }
         };
+        // Format to 5 decimal places to reduce payload size over WASM boundary
         arr.push(format!("{:.5}", val));
     }
 

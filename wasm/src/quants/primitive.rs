@@ -1,6 +1,7 @@
 use crate::math_utils::*;
 use crate::quants::{InspectorData, QuantMeta, QuantizeOutput, Settings};
 
+/// Applies baseline data-type truncations mirroring industry primitive sizes.
 pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     let (bpw, format_name) = match settings.primitive_format.as_str() {
         "fp16" | "bf16" => (16.0, settings.primitive_format.to_uppercase()),
@@ -32,6 +33,12 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     }
 }
 
-pub fn format_inspector(_idx: usize, _out: &QuantizeOutput, _settings: &Settings) -> InspectorData {
+/// Primitive quantizer has no underlying block parameters to format.
+pub fn format_inspector(
+    _idx: usize,
+    _active: &[f32],
+    _out: &QuantizeOutput,
+    _settings: &Settings,
+) -> InspectorData {
     InspectorData::default()
 }

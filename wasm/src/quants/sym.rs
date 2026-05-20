@@ -1,6 +1,7 @@
 use crate::math_utils::*;
 use crate::quants::{InspectorData, QuantMeta, QuantizeOutput, Settings, SymBlockMeta};
 
+/// Applies standard symmetrical block quantization (e.g., NF4-style or INT8).
 pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     let weight_bits = settings.weight_bits;
     let block_size = settings.block_size;
@@ -70,12 +71,16 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
 
 pub fn format_inspector(
     idx: usize,
+    _active: &[f32],
     out: &QuantizeOutput,
-    blocks: &[SymBlockMeta],
     settings: &Settings,
 ) -> InspectorData {
+    let QuantMeta::Sym(blocks) = &out.meta else {
+        return InspectorData::default();
+    };
     let b_idx = idx / settings.block_size;
     let mut data = InspectorData::default();
+
     if let Some(bm) = blocks.get(b_idx) {
         let chunk_v = out.q_floats[idx];
         data.math_str = Some(if settings.weight_bits == 1 {

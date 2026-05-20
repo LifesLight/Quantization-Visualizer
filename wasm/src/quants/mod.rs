@@ -1,3 +1,5 @@
+//! Contains all implemented quantization schemes and shared types.
+
 pub mod asym;
 pub mod kquant;
 pub mod mxfp;
@@ -9,6 +11,11 @@ pub mod turbo;
 
 use serde::{Deserialize, Serialize};
 
+/// Identical functional signatures enforced across all quantizer algorithms.
+pub type QuantizeFn = fn(&[f32], &Settings) -> QuantizeOutput;
+pub type FormatInspectorFn = fn(usize, &[f32], &QuantizeOutput, &Settings) -> InspectorData;
+
+/// Global quantization settings payload passed directly from the JavaScript frontend.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -41,6 +48,7 @@ pub struct Settings {
     pub axis_manual_max: f32,
 }
 
+/// The standardized output containing the quantized data arrays and computed stats.
 pub struct QuantizeOutput {
     pub q_floats: Vec<f32>,
     pub t_floats: Option<Vec<f32>>,
@@ -52,17 +60,19 @@ pub struct QuantizeOutput {
     pub meta: QuantMeta,
 }
 
+/// Holds all possible underlying metadata implementations for specific quantization schemes.
 pub enum QuantMeta {
     Primitive,
     Sym(Vec<SymBlockMeta>),
     Asym(Vec<AsymBlockMeta>),
     KQuant(Vec<KBlockMeta>, Vec<KSuperMeta>),
-    Nvfp4(Vec<Nvfp4BlockMeta>, f32, f64, f64),
+    Nvfp4(Vec<Nvfp4BlockMeta>, f32, f64, f64), // Nvfp4BlockMeta, global_scale, gmse, gmae
     Mxfp(Vec<MxfpBlockMeta>),
     Turbo(Vec<TurboBlockMeta>),
     Trellis(Vec<TrellisBlockMeta>),
 }
 
+/// Individual block inspection data retrieved via UI interactions. Serialized to JS Object.
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct InspectorData {
@@ -84,6 +94,8 @@ pub struct InspectorData {
     pub global_mae: Option<f64>,
     pub trellis_json: Option<String>,
 }
+
+// Below are the specific metadata block structs for various algorithms.
 
 pub struct SymBlockMeta {
     pub idx: usize,

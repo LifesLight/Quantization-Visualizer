@@ -1,6 +1,7 @@
 use crate::math_utils::*;
 use crate::quants::{AsymBlockMeta, InspectorData, QuantMeta, QuantizeOutput, Settings};
 
+/// Applies asymmetrical block quantization (includes both scale and offset limits).
 pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     let weight_bits = settings.weight_bits;
     let block_size = settings.block_size;
@@ -61,12 +62,16 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
 
 pub fn format_inspector(
     idx: usize,
+    _active: &[f32],
     out: &QuantizeOutput,
-    blocks: &[AsymBlockMeta],
     settings: &Settings,
 ) -> InspectorData {
+    let QuantMeta::Asym(blocks) = &out.meta else {
+        return InspectorData::default();
+    };
     let b_idx = idx / settings.block_size;
     let mut data = InspectorData::default();
+
     if let Some(bm) = blocks.get(b_idx) {
         let q = ((out.q_floats[idx] - bm.min) / bm.scale).round() as i32;
         data.math_str = Some(format!("{} &times; {:.4} + {:.4}", q, bm.scale, bm.min));

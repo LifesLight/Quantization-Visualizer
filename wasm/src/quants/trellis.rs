@@ -8,6 +8,7 @@ pub struct Edge {
     pub sub: usize,
 }
 
+/// Generates valid transition edges mapping Trellis Coded Quantization (TCQ) state branches.
 pub fn get_transitions(states: usize) -> Option<Vec<Vec<Edge>>> {
     if states == 1 {
         return None;
@@ -48,6 +49,7 @@ pub fn get_transitions(states: usize) -> Option<Vec<Vec<Edge>>> {
     Some(transitions)
 }
 
+/// Helper function to locate the closest codeword index within a given state subset.
 pub fn find_closest_idx(target: f64, subset_idxs: &[usize], levels: &[f64]) -> (f64, usize) {
     let mut best_idx = subset_idxs[0];
     let mut best_dist = (target - levels[best_idx]).abs();
@@ -101,7 +103,6 @@ pub struct TrellisBlockResult {
     pub cost: f64,
 }
 
-/// Represents a single step in the Viterbi path.
 #[derive(Clone, Copy)]
 struct StateInfo {
     prev_state: isize,
@@ -111,6 +112,7 @@ struct StateInfo {
     cost: f64,
 }
 
+/// Optimizes scaling factor iteratively mimicking Golden Section Search logic.
 pub fn trellis_opt_scale(
     samples: &[f64],
     base_levels: &[f64],
@@ -127,7 +129,6 @@ pub fn trellis_opt_scale(
         subset_indices[i % 4].push(i);
     }
 
-    // Pre-allocate to prevent dynamic allocations in the inner loop
     let mut prev_costs = vec![f64::INFINITY; states];
     let mut next_costs = vec![0.0; states];
 
@@ -197,6 +198,7 @@ pub fn trellis_opt_scale(
     let mut d = b - resphi * (b - a);
     let mut fc = eval(c, &mut scaled_buf);
     let mut fd = eval(d, &mut scaled_buf);
+
     for _ in 0..iters {
         if fc < fd {
             b = d;
@@ -219,6 +221,7 @@ pub fn trellis_opt_scale(
     }
 }
 
+/// Dispatches Viterbi-style dynamic programming decoding to map elements to the graph.
 pub fn trellis_quantize_block(
     samples: &[f64],
     base_levels: &[f64],
@@ -231,10 +234,12 @@ pub fn trellis_quantize_block(
     for i in 0..base_levels.len() {
         scaled_buf[i] = base_levels[i] * scale;
     }
+
     let mut subset_indices = vec![vec![]; 4];
     for i in 0..base_levels.len() {
         subset_indices[i % 4].push(i);
     }
+
     let all_idxs: Vec<usize> = (0..base_levels.len()).collect();
     let mut chunk_q = vec![0.0; samples.len()];
     let mut path_data = vec![];
@@ -283,13 +288,13 @@ pub fn trellis_quantize_block(
                 cb_val: 0.0,
                 cb_idx: 0,
                 subset: 0,
-                cost: f64::INFINITY,
+                cost: f64::INFINITY
             };
             samples.len() * states
         ];
-
         let mut step_costs = vec![];
         let mut all_candidates = vec![];
+
         if keep_candidates {
             step_costs = vec![vec![0.0; states]; samples.len()];
             all_candidates = vec![vec![]; samples.len() * states];
@@ -306,7 +311,6 @@ pub fn trellis_quantize_block(
             for curr_state in 0..states {
                 let (mut best_prev, mut best_cb_val, mut best_cb_idx, mut best_sub, mut min_cost) =
                     (-1, 0.0, 0, 0, f64::INFINITY);
-
                 let mut state_cands = vec![];
 
                 for edge in &transitions[curr_state] {
@@ -386,7 +390,6 @@ pub fn trellis_quantize_block(
         let mut curr_state = final_state;
         for t in (0..samples.len()).rev() {
             let st = &path_memory[t * states + curr_state];
-
             if st.prev_state == -1 {
                 let (val, idx) = find_closest_idx(samples[t], &all_idxs, &scaled_buf);
                 chunk_q[t] = val;
@@ -551,7 +554,6 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
             }
             chunk_wht_buf[..actual_len].copy_from_slice(chunk);
             chunk_wht_buf[actual_len..pad_len].fill(0.0);
-
             for j in 0..pad_len {
                 chunk_wht_buf[j] *= get_sign_flip(i + j, seed);
             }
@@ -656,10 +658,12 @@ pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
 pub fn format_inspector(
     idx: usize,
     _active: &[f32],
-    _out: &QuantizeOutput,
-    blocks: &[TrellisBlockMeta],
+    out: &QuantizeOutput,
     settings: &Settings,
 ) -> InspectorData {
+    let QuantMeta::Trellis(blocks) = &out.meta else {
+        return InspectorData::default();
+    };
     let t_bsize = settings.trellis_block_size.max(1);
     let b_idx = idx / t_bsize;
     let local_idx = idx % t_bsize;
@@ -719,7 +723,11 @@ pub fn format_inspector(
             data.math_str = Some(if settings.trellis_use_wht {
                 format!(
                     "D({}) &times; FWHT( {} )[{}]",
-                    if get_sign_flip(idx, settings.trellis_sign_seed) > 0.0 { "+1" } else { "-1" },
+                    if get_sign_flip(idx, settings.trellis_sign_seed) > 0.0 {
+                        "+1"
+                    } else {
+                        "-1"
+                    },
                     base_eq,
                     idx
                 )
@@ -731,13 +739,23 @@ pub fn format_inspector(
                 let cost = if c.cost.is_infinite() { 1e9 } else if c.cost.is_nan() { 0.0 } else { c.cost };
                 let dist = if c.dist.is_infinite() { 1e9 } else if c.dist.is_nan() { 0.0 } else { c.dist };
                 let val = if c.cbVal.is_infinite() { 1e9 } else if c.cbVal.is_nan() { 0.0 } else { c.cbVal };
-
-                format!(r#"{{"prevState":{},"subset":{},"cbIdx":{},"cbVal":{},"dist":{},"cost":{}}}"#, 
-                    c.prevState, c.subset, c.cbIdx, val, dist, cost)
+                format!(r#"{{"prevState":{},"subset":{},"cbIdx":{},"cbVal":{},"dist":{},"cost":{}}}"#, c.prevState, c.subset, c.cbIdx, val, dist, cost)
             }).collect::<Vec<_>>().join(",");
 
-            let p_cost = if p.cost.is_infinite() { 1e9 } else if p.cost.is_nan() { 0.0 } else { p.cost };
-            let p_val = if p.cwVal.is_infinite() { 1e9 } else if p.cwVal.is_nan() { 0.0 } else { p.cwVal };
+            let p_cost = if p.cost.is_infinite() {
+                1e9
+            } else if p.cost.is_nan() {
+                0.0
+            } else {
+                p.cost
+            };
+            let p_val = if p.cwVal.is_infinite() {
+                1e9
+            } else if p.cwVal.is_nan() {
+                0.0
+            } else {
+                p.cwVal
+            };
 
             data.trellis_json = Some(format!(
                 r#"{{"cbIdx":{},"prevState":{},"state":{},"subset":{},"cbVal":{},"cost":{},"candidates":[{}]}}"#,

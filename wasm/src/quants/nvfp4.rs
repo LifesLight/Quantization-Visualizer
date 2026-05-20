@@ -1,6 +1,7 @@
 use crate::math_utils::*;
 use crate::quants::{InspectorData, Nvfp4BlockMeta, QuantMeta, QuantizeOutput, Settings};
 
+/// Emulates NVIDIA's NVFP4 tensor format.
 pub fn quantize(floats: &[f32], _settings: &Settings) -> QuantizeOutput {
     let block_size = 16;
     let bpw = 4.0 + (8.0 / 16.0) + (32.0 / floats.len().max(1) as f32);
@@ -58,7 +59,7 @@ pub fn quantize(floats: &[f32], _settings: &Settings) -> QuantizeOutput {
 
     QuantizeOutput {
         q_floats, t_floats: None, t_q_floats: None, bpw,
-        formula_html: "<span>Weight = <span class=\"eq-pill\">Global_FP32<span class=\"bits\">32b</span></span> &times; ( <span class=\"eq-pill\">NVFP4_Value<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">FP8_Scale<span class=\"bits\">8b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">NVFP4: 16 weights share one FP8 scale. All weights share one global FP32 scale.</span>".into(),
+        formula_html: "<span>Weight = <span class=\"eq-pill\">Global_FP32<span class=\"bits\">32b</span></span> &times; ( <span class=\"eq-pill\">NVFP4_Value<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">FP8_Scale<span class=\"bits\">8b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">NVFP4: 16 weights share one FP8 (E4) scale. All weights share one global FP32 scale.</span>".into(),
         block_size, super_block_size: floats.len(), meta: QuantMeta::Nvfp4(blocks, global_scale, 0.0, 0.0),
     }
 }
@@ -66,21 +67,22 @@ pub fn quantize(floats: &[f32], _settings: &Settings) -> QuantizeOutput {
 pub fn format_inspector(
     idx: usize,
     active: &[f32],
-    _out: &QuantizeOutput,
-    blocks: &[Nvfp4BlockMeta],
-    gs: f32,
-    gmse: f64,
-    gmae: f64,
+    out: &QuantizeOutput,
     _settings: &Settings,
 ) -> InspectorData {
+    let QuantMeta::Nvfp4(blocks, gs, gmse, gmae) = &out.meta else {
+        return InspectorData::default();
+    };
     let b_idx = idx / 16;
     let mut data = InspectorData::default();
+
     if let Some(bm) = blocks.get(b_idx) {
         let norm_val = (active[idx] / gs) / bm.scale;
         let sign = if norm_val >= 0.0 { 1.0 } else { -1.0 };
         let cb = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0];
         let best = crate::math_utils::snap_to_codebook(norm_val.abs(), &cb);
         let s_disp = if best == 0.0 || sign >= 0.0 { "+" } else { "-" };
+
         data.math_str = Some(format!(
             "{}{:.1} &times; {:.4} &times; {:.4}",
             s_disp, best, bm.scale, gs
@@ -89,9 +91,9 @@ pub fn format_inspector(
         data.mse = Some(bm.mse);
         data.mae = Some(bm.mae);
         data.scale = Some(bm.scale);
-        data.global_scale = Some(gs);
-        data.global_mse = Some(gmse);
-        data.global_mae = Some(gmae);
+        data.global_scale = Some(*gs);
+        data.global_mse = Some(*gmse);
+        data.global_mae = Some(*gmae);
     }
     data
 }

@@ -1,6 +1,7 @@
 use crate::math_utils::*;
 use crate::quants::{InspectorData, QuantMeta, QuantizeOutput, Settings, TurboBlockMeta};
 
+/// Quantization technique combining Lloyd-Max, Optional FWHT, and Optional QJL Error correction.
 pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
     let (t_bits, t_bsize, use_wht, use_qjl, seed) = (
         settings.turbo_bits,
@@ -112,11 +113,14 @@ pub fn format_inspector(
     idx: usize,
     active: &[f32],
     out: &QuantizeOutput,
-    blocks: &[TurboBlockMeta],
     settings: &Settings,
 ) -> InspectorData {
+    let QuantMeta::Turbo(blocks) = &out.meta else {
+        return InspectorData::default();
+    };
     let b_idx = idx / settings.turbo_block_size;
     let mut data = InspectorData::default();
+
     if let Some(bm) = blocks.get(b_idx) {
         let t_val = if settings.use_wht {
             out.t_floats.as_ref().unwrap()[idx]
@@ -125,6 +129,7 @@ pub fn format_inspector(
         };
         let centroids = get_lloyd_max_centroids(settings.turbo_bits, "normal");
         let best_c = snap_to_codebook(t_val / bm.scale, &centroids);
+
         let inner = format!(
             "C({:.2}) &times; {:.2}{}",
             best_c,
@@ -142,6 +147,7 @@ pub fn format_inspector(
                 "".into()
             }
         );
+
         data.math_str = Some(if settings.use_wht {
             format!(
                 "D({}) &times; FWHT( {} )[{}]",
@@ -156,6 +162,7 @@ pub fn format_inspector(
         } else {
             inner
         });
+
         data.block_idx = Some(b_idx);
         data.mse = Some(bm.mse);
         data.mae = Some(bm.mae);
