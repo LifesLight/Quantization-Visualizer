@@ -73,7 +73,7 @@ main {
     flex-direction: row;
     gap: 24px;
     align-items: stretch;
-    min-height: calc(100vh - 100px);
+    min-height: calc(100vh - 40px);
 }
 
 .panel-wrapper {
@@ -645,8 +645,8 @@ button.action-btn:hover:not(.secondary) {
     text-align: center;
     font-size: 0.8rem;
     color: var(--text-muted);
-    margin-top: -5px;
-    padding-bottom: 10px;
+    margin: 0;
+    padding: 0;
 }
 
 @media (max-width: 1200px) {
