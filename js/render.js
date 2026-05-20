@@ -502,9 +502,16 @@ export function drawDatasetBar() {
     const canvas = elements.dbCanvas;
     const ctx = canvas.getContext('2d');
     const rect = elements.dbBar.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, rect.width, rect.height);
 
     elements.dbMinArrow.style.display = 'none';
     elements.dbMaxArrow.style.display = 'none';
