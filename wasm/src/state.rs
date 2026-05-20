@@ -16,6 +16,21 @@ pub struct QuantStats {
     pub global_sum_abs: f64,
 }
 
+#[derive(Serialize, Clone)]
+pub struct RangeStats {
+    pub d_min: f32,
+    pub d_max: f32,
+    pub abs_max: f32,
+}
+
+#[derive(Serialize, Clone)]
+pub struct MinMaxInfo {
+    pub min_idx: usize,
+    pub max_idx: usize,
+    pub min_v: f32,
+    pub max_v: f32,
+}
+
 #[wasm_bindgen]
 pub struct AppBackend {
     raw_floats: Vec<f32>,
@@ -24,6 +39,14 @@ pub struct AppBackend {
     last_output: Option<QuantizeOutput>,
     clip_start: usize,
     clip_end: usize,
+
+    data_version: u64,
+    minmax_version: u64,
+    minmax_cache: Option<MinMaxInfo>,
+
+    best_indices: Vec<i32>,
+    best_key: Option<(u64, usize, usize, u64, bool, usize, usize)>, // (ver,zs,ze,width_bits,use_srht,clipS,clipE)
+    best_range_cache: Option<RangeStats>,
 }
 
 #[wasm_bindgen]
@@ -37,7 +60,23 @@ impl AppBackend {
             last_output: None,
             clip_start: 0,
             clip_end: 0,
+
+            data_version: 1,
+            minmax_version: 0,
+            minmax_cache: None,
+
+            best_indices: vec![],
+            best_key: None,
+            best_range_cache: None,
         }
+    }
+
+    fn bump_version(&mut self) {
+        self.data_version = self.data_version.wrapping_add(1);
+        self.best_key = None;
+        self.best_range_cache = None;
+        self.minmax_cache = None;
+        self.minmax_version = 0;
     }
 
     pub fn parse_floats(&mut self, text: &str) -> usize {
@@ -46,6 +85,8 @@ impl AppBackend {
             .filter(|s| !s.is_empty())
             .filter_map(|s| s.parse::<f32>().ok())
             .collect();
+
+        self.bump_version();
         self.raw_floats.len()
     }
 
@@ -55,13 +96,31 @@ impl AppBackend {
             .iter()
             .map(|&v| v * scale + offset)
             .collect();
+
+        self.bump_version();
     }
 
     pub fn set_clip(&mut self, start: usize, end: usize) {
         let n = self.base_floats.len();
+        if n == 0 {
+            self.clip_start = 0;
+            self.clip_end = 0;
+            self.active_floats.clear();
+
+            self.best_key = None;
+            self.best_range_cache = None;
+            return;
+        }
+
         self.clip_start = start.min(n.saturating_sub(1));
         self.clip_end = end.min(n.saturating_sub(1)).max(self.clip_start);
-        self.active_floats = self.base_floats[self.clip_start..=self.clip_end].to_vec();
+
+        self.active_floats.clear();
+        self.active_floats
+            .extend_from_slice(&self.base_floats[self.clip_start..=self.clip_end]);
+
+        self.best_key = None;
+        self.best_range_cache = None;
     }
 
     pub fn quantize(&mut self, settings_js: JsValue) -> JsValue {
@@ -105,7 +164,242 @@ impl AppBackend {
         };
 
         self.last_output = Some(output);
+
+        self.best_key = None;
+        self.best_range_cache = None;
+
         serde_wasm_bindgen::to_value(&stats).unwrap()
+    }
+
+    fn get_val_for_global_idx(&self, g: usize, use_srht: bool) -> f32 {
+        if use_srht {
+            if let Some(out) = &self.last_output {
+                if let Some(t) = out.t_floats.as_ref() {
+                    if g >= self.clip_start && g <= self.clip_end {
+                        return t[g - self.clip_start];
+                    }
+                }
+            }
+        }
+        self.base_floats[g]
+    }
+
+    pub fn get_range_stats(&self, z_start: usize, z_end: usize, use_srht: bool) -> JsValue {
+        let n = self.base_floats.len();
+        if n == 0 {
+            let rs = RangeStats {
+                d_min: 0.0,
+                d_max: 0.0,
+                abs_max: 0.0,
+            };
+            return serde_wasm_bindgen::to_value(&rs).unwrap();
+        }
+
+        let zs = z_start.min(n - 1);
+        let ze = z_end.min(n - 1).max(zs);
+
+        let effective_srht = use_srht
+            && self
+                .last_output
+                .as_ref()
+                .and_then(|o| o.t_floats.as_ref())
+                .is_some();
+
+        let mut d_min = f32::INFINITY;
+        let mut d_max = f32::NEG_INFINITY;
+        let mut abs_max = 0.0f32;
+
+        for i in zs..=ze {
+            let v = self.get_val_for_global_idx(i, effective_srht);
+            if v < d_min {
+                d_min = v;
+            }
+            if v > d_max {
+                d_max = v;
+            }
+            let av = v.abs();
+            if av > abs_max {
+                abs_max = av;
+            }
+        }
+
+        let rs = RangeStats {
+            d_min,
+            d_max,
+            abs_max,
+        };
+        serde_wasm_bindgen::to_value(&rs).unwrap()
+    }
+
+    pub fn prepare_render(
+        &mut self,
+        z_start: usize,
+        z_end: usize,
+        width_css: f64,
+        use_srht: bool,
+    ) -> JsValue {
+        let n = self.base_floats.len();
+        if n == 0 || width_css <= 0.0 {
+            self.best_indices.clear();
+            self.best_key = None;
+            self.best_range_cache = Some(RangeStats {
+                d_min: 0.0,
+                d_max: 0.0,
+                abs_max: 0.0,
+            });
+            return serde_wasm_bindgen::to_value(self.best_range_cache.as_ref().unwrap()).unwrap();
+        }
+
+        let zs = z_start.min(n - 1);
+        let ze = z_end.min(n - 1).max(zs);
+
+        let effective_srht = use_srht
+            && self
+                .last_output
+                .as_ref()
+                .and_then(|o| o.t_floats.as_ref())
+                .is_some();
+
+        let w = width_css.ceil().max(1.0) as usize;
+        let width_bits = width_css.to_bits();
+
+        let key = (
+            self.data_version,
+            zs,
+            ze,
+            width_bits,
+            effective_srht,
+            self.clip_start,
+            self.clip_end,
+        );
+        if self.best_key == Some(key) {
+            if let Some(rs) = &self.best_range_cache {
+                return serde_wasm_bindgen::to_value(rs).unwrap();
+            }
+        }
+
+        self.best_indices.resize(w, 0);
+
+        let z_count = (ze - zs + 1) as f64;
+
+        let mut d_min = f32::INFINITY;
+        let mut d_max = f32::NEG_INFINITY;
+        let mut abs_max = 0.0f32;
+
+        for x in 0..w {
+            let fx0 = (x as f64) / width_css;
+            let fx1 = ((x + 1) as f64) / width_css;
+
+            let mut bin_s = zs + (fx0 * z_count).floor() as usize;
+            let mut bin_e_excl = zs + (fx1 * z_count).floor() as usize;
+
+            if bin_s > ze {
+                bin_s = ze;
+            }
+            if bin_e_excl > (ze + 1) {
+                bin_e_excl = ze + 1;
+            }
+
+            let mut bin_e = if bin_e_excl > zs {
+                bin_e_excl.saturating_sub(1)
+            } else {
+                bin_s
+            };
+            if bin_e < bin_s {
+                bin_e = bin_s;
+            }
+            if bin_e > ze {
+                bin_e = ze;
+            }
+
+            let mut best_idx = bin_s;
+            let mut max_mag = -1.0f32;
+
+            for j in bin_s..=bin_e {
+                let v = self.get_val_for_global_idx(j, effective_srht);
+
+                if v < d_min {
+                    d_min = v;
+                }
+                if v > d_max {
+                    d_max = v;
+                }
+                let av = v.abs();
+                if av > abs_max {
+                    abs_max = av;
+                }
+
+                let mag = av;
+                if mag > max_mag {
+                    max_mag = mag;
+                    best_idx = j;
+                }
+            }
+
+            self.best_indices[x] = best_idx as i32;
+        }
+
+        let rs = RangeStats {
+            d_min,
+            d_max,
+            abs_max,
+        };
+        self.best_range_cache = Some(rs.clone());
+        self.best_key = Some(key);
+
+        serde_wasm_bindgen::to_value(&rs).unwrap()
+    }
+
+    pub fn get_best_indices_ptr(&self) -> *const i32 {
+        self.best_indices.as_ptr()
+    }
+    pub fn get_best_indices_len(&self) -> usize {
+        self.best_indices.len()
+    }
+
+    pub fn get_global_minmax(&mut self) -> JsValue {
+        if self.base_floats.is_empty() {
+            let mm = MinMaxInfo {
+                min_idx: 0,
+                max_idx: 0,
+                min_v: 0.0,
+                max_v: 0.0,
+            };
+            return serde_wasm_bindgen::to_value(&mm).unwrap();
+        }
+
+        if self.minmax_version == self.data_version {
+            if let Some(mm) = &self.minmax_cache {
+                return serde_wasm_bindgen::to_value(mm).unwrap();
+            }
+        }
+
+        let mut min_idx = 0usize;
+        let mut max_idx = 0usize;
+        let mut min_v = f32::INFINITY;
+        let mut max_v = f32::NEG_INFINITY;
+
+        for (i, &v) in self.base_floats.iter().enumerate() {
+            if v < min_v {
+                min_v = v;
+                min_idx = i;
+            }
+            if v > max_v {
+                max_v = v;
+                max_idx = i;
+            }
+        }
+
+        let mm = MinMaxInfo {
+            min_idx,
+            max_idx,
+            min_v,
+            max_v,
+        };
+        self.minmax_cache = Some(mm.clone());
+        self.minmax_version = self.data_version;
+
+        serde_wasm_bindgen::to_value(&mm).unwrap()
     }
 
     pub fn get_base_floats_ptr(&self) -> *const f32 {

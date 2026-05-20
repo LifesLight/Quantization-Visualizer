@@ -1,14 +1,15 @@
 import './theme.js';
 import { elements, initUIListeners, updateUI, applyPreset, populateDynamicSelectors } from './ui.js';
 import { generateData } from './dataGen.js';
-import { render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT, getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData, setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip, updateDbBarVisibility, updateVisualsOnly, setBackend, setHoveredIdx, setDragState, updateOverlays } from './render.js';
+import {
+    render, requantize, updateInspector, setZoomRange, resetZoom, toggleSRHT,
+    getBaseFloats, getClipRange, setClipRange, getHasWarnedLargeData,
+    setHasWarnedLargeData, drawDatasetBar, zoomRange, setUserModifiedClip,
+    updateDbBarVisibility, updateVisualsOnly, setBackend, setHoveredIdx,
+    setDragState, updateOverlays, resizeCanvasCssOnly
+} from './render.js';
 import { initWasm, getWasm } from './wasmWrapper.js';
 
-/**
- * Maps a horizontal screen coordinate to the nearest data index relative to current zoom bounds.
- * @param {number} clientX - The horizontal screen coordinate.
- * @returns {number|null} The mapped index.
- */
 function getNearestBarIdx(clientX) {
     const baseFloats = getBaseFloats();
     const N = baseFloats.length;
@@ -27,11 +28,6 @@ function getNearestBarIdx(clientX) {
 }
 
 let requantizeTimeout = null;
-
-/**
- * Debounces the requantization process.
- * @param {boolean} forceSync - Skips the debounce delay.
- */
 const debouncedRequantize = (forceSync = false) => {
     clearTimeout(requantizeTimeout);
     if (forceSync) {
@@ -49,23 +45,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateDynamicSelectors();
     initUIListeners();
 
-let resizeRaf = null;
-let resizeDebounce = null;
+    let resizeRaf = null;
+    let resizeFinalDebounce = null;
 
-const resizeObserver = new ResizeObserver(() => {
-    // Keep hover/drag overlays aligned during resize without expensive redraw
-    if (resizeRaf) cancelAnimationFrame(resizeRaf);
-    resizeRaf = requestAnimationFrame(() => updateOverlays());
+    const resizeObserver = new ResizeObserver(() => {
+        if (resizeRaf) cancelAnimationFrame(resizeRaf);
+        resizeRaf = requestAnimationFrame(() => {
+            resizeCanvasCssOnly();
+            updateOverlays();
+        });
 
-    // Do ONE expensive redraw after resize settles
-    clearTimeout(resizeDebounce);
-    resizeDebounce = setTimeout(() => {
-        // Skip inspector updates here; hover will refresh it on next pointermove anyway
-        render({ updateInspector: false });
-    }, 150); // tune 100–250ms
-});
-
-resizeObserver.observe(elements.chartArea);
+        clearTimeout(resizeFinalDebounce);
+        resizeFinalDebounce = setTimeout(() => {
+            render({ updateInspector: false });
+        }, 180);
+    });
     resizeObserver.observe(elements.chartArea);
 
     const processFile = (file) => {

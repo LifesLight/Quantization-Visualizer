@@ -21,3 +21,10 @@ export function getF32Array(ptr, len) {
 
     return new Float32Array(wasmInstance.memory.buffer, ptr, len);
 }
+
+export function getI32Array(ptr, len) {
+    if (!isReady || !wasmInstance) throw new Error("Wasm not initialized yet");
+    if (len === 0 || ptr === 0) return new Int32Array();
+
+    return new Int32Array(wasmInstance.memory.buffer, ptr, len);
+}

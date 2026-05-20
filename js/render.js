@@ -1,6 +1,6 @@
 import { elements, getSettings } from './ui.js';
 import registry from './quants/registry.js';
-import { getF32Array } from './wasmWrapper.js';
+import { getF32Array, getI32Array } from './wasmWrapper.js';
 
 export let backend = null;
 export function setBackend(b) { backend = b; }
@@ -22,9 +22,15 @@ export let dragCurrentIdx = null;
 let cachedPattern = null;
 let cachedPatternIsDark = null;
 
-/**
- * Syncs the position and sizes of the DOM highlight overlays without redrawing the canvas.
- */
+export function resizeCanvasCssOnly() {
+    const canvas = document.getElementById('main-canvas');
+    if (!canvas || !elements.chartArea) return;
+    const rect = elements.chartArea.getBoundingClientRect();
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    updateOverlays();
+}
+
 export function updateOverlays() {
     const hoverEl = document.getElementById('hover-overlay');
     const blockEl = document.getElementById('block-overlay');
@@ -43,7 +49,6 @@ export function updateOverlays() {
     const useClip = elements.dbModeClip && elements.dbModeClip.checked;
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
-    // Helper to calculate pixel position and width
     const getXW = (dStart, dEnd) => {
         let x, w;
         if (barW >= 1) {
@@ -73,7 +78,6 @@ export function updateOverlays() {
         dragEl.style.display = 'none';
     }
 
-    // Hide Hover Overlays initially
     hoverEl.style.display = 'none';
     blockEl.style.display = 'none';
     superEl.style.display = 'none';
@@ -81,14 +85,12 @@ export function updateOverlays() {
     const primaryIdx = hoveredIdx !== null ? hoveredIdx : dragStartIdx;
 
     if (primaryIdx !== null && primaryIdx >= zStart && primaryIdx <= zEnd) {
-        // Individual Bar Hover
         const { x, w } = getXW(primaryIdx, primaryIdx);
         hoverEl.style.display = 'block';
         hoverEl.style.left = `${x}px`;
         hoverEl.style.width = `${w}px`;
         hoverEl.style.backgroundColor = isDark ? 'rgba(248, 250, 252, 0.15)' : 'rgba(15, 23, 42, 0.15)';
 
-        // Block / Super Block Highlights
         const sliceIdx = useClip ? primaryIdx - clipStart : primaryIdx;
         if (sliceIdx >= 0 && sliceIdx < currentRenderData.actLen) {
             const actBlockSize = stats.block_size || 0;
@@ -124,7 +126,6 @@ export function updateOverlays() {
                     blockEl.style.width = `${xw.w}px`;
                     blockEl.style.backgroundColor = isDark ? 'rgba(79, 70, 229, 0.15)' : 'rgba(79, 70, 229, 0.05)';
 
-                    // FIXED: Explicitly set the border color inside the shorthand string so it doesn't default to white text color
                     const borderColor = isDark ? 'rgba(79, 70, 229, 0.5)' : 'rgba(79, 70, 229, 0.3)';
                     blockEl.style.borderLeft = dStart >= zStart ? `1px solid ${borderColor}` : 'none';
                     blockEl.style.borderRight = dEnd + 1 <= zEnd ? `1px solid ${borderColor}` : 'none';
@@ -134,10 +135,6 @@ export function updateOverlays() {
     }
 }
 
-/**
- * Registers coordinates for the visual hover index and triggers DOM overlay redraw.
- * @param {number|null} idx - The focused data point index.
- */
 export function setHoveredIdx(idx) {
     if (hoveredIdx === idx) return;
     hoveredIdx = idx;
@@ -148,15 +145,9 @@ export function setHoveredIdx(idx) {
             updateInspector(idx);
         }
     }
-    // Only update overlays - skip the heavy canvas rendering!
     updateOverlays();
 }
 
-/**
- * Stores interactive drag parameters for the range zoom gesture.
- * @param {number|null} startIdx - Boundary start.
- * @param {number|null} currentIdx - Boundary current.
- */
 export function setDragState(startIdx, currentIdx) {
     if (dragStartIdx === startIdx && dragCurrentIdx === currentIdx) return;
     dragStartIdx = startIdx;
@@ -172,20 +163,7 @@ export function setUserModifiedClip(val) { userModifiedClip = val; }
 let rawFloatsStr = "";
 let lastScale = null;
 let lastOffset = null;
-let baseDataVersion = 0;
 
-let minMaxCache = {
-    version: -1,
-    minIdx: 0,
-    maxIdx: 0,
-    minV: Infinity,
-    maxV: -Infinity
-};
-
-/**
- * Parses, transforms and scales raw buffer streams from UI.
- * @returns {Float32Array} Floating array reference mapped to memory.
- */
 export function getBaseFloats() {
     if (!backend) return new Float32Array();
     const text = elements.inputEl.value;
@@ -198,18 +176,12 @@ export function getBaseFloats() {
         rawFloatsStr = text;
         backend.parse_floats(text);
         lastScale = null;
-
-        baseDataVersion++;
-        minMaxCache.version = -1;
     }
 
     if (finalScale !== lastScale || finalOffset !== lastOffset) {
         backend.set_scale_offset(finalScale, finalOffset);
         lastScale = finalScale;
         lastOffset = finalOffset;
-
-        baseDataVersion++;
-        minMaxCache.version = -1;
     }
 
     return getF32Array(backend.get_base_floats_ptr(), backend.get_base_floats_len());
@@ -310,23 +282,19 @@ export function requantize(overrideClipCheck = false) {
         settings, quant: registry[settings.qType],
         bpw: stats.bpw,
         formulaHTML: stats.formula_html,
-        stats,
-
-        _rangeCache: null
+        stats
     };
 
     render();
 }
 
-/**
- * Processes layout transformations, active canvas painting routines and boundary overlays.
- */
 export function render(opts = {}) {
+    if (!currentRenderData) return;
+
     const {
         updateInspector: doInspector = true,
-        drawDbBar: doDbBar = true,
+        drawDbBar: doDbBar = true
     } = opts;
-    if (!currentRenderData) return;
 
     const {
         baseLen, basePtr, actLen, actPtr, qPtr, tPtr, tQPtr, settings, bpw, formulaHTML, stats
@@ -359,45 +327,6 @@ export function render(opts = {}) {
     const zEnd = zoomRange ? zoomRange.end : baseLen - 1;
     const zCount = zEnd - zStart + 1;
 
-    const useSRHTForRange = showSRHT && tFloats;
-
-    const rangeKey = `${zStart}:${zEnd}:${useSRHTForRange ? 1 : 0}:${clipStart}:${clipEnd}`;
-    let dMax, dMin, absMax;
-
-    const rc = currentRenderData._rangeCache;
-    if (!rc || rc.key !== rangeKey) {
-        dMax = -Infinity; dMin = Infinity; absMax = 0;
-
-        for (let i = zStart; i <= zEnd; i++) {
-            const v = (useSRHTForRange && i >= clipStart && i <= clipEnd)
-                ? tFloats[i - clipStart]
-                : baseFloats[i];
-
-            if (v > dMax) dMax = v;
-            if (v < dMin) dMin = v;
-            const av = v < 0 ? -v : v;
-            if (av > absMax) absMax = av;
-        }
-
-        currentRenderData._rangeCache = { key: rangeKey, dMax, dMin, absMax };
-    } else {
-        ({ dMax, dMin, absMax } = rc);
-    }
-
-    if (dMax === dMin) { dMax += 0.1; dMin -= 0.1; }
-    const spread = dMax - dMin;
-    const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.05 : (absMax === 0 ? 0.1 : absMax) * 1.1;
-    const sMin = settings.centeringMode === 'mid' ? dMin - spread * 0.05 : -sMax;
-
-    let baselineValue = 0;
-    if (settings.centeringMode === 'mid') {
-        if (dMin >= 0) baselineValue = sMin;
-        else if (dMax <= 0) baselineValue = sMax;
-    }
-
-    elements.chartMaxLbl.textContent = `Max: ${sMax.toFixed(2)}`;
-    elements.chartMinLbl.textContent = `Min: ${sMin.toFixed(2)}`;
-
     let canvas = document.getElementById('main-canvas');
     if (!canvas) {
         elements.chartArea.innerHTML = `
@@ -414,12 +343,51 @@ export function render(opts = {}) {
     const ctx = canvas.getContext('2d');
     const rect = elements.chartArea.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
+
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     canvas.style.width = `${rect.width}px`;
     canvas.style.height = `${rect.height}px`;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, rect.width, rect.height);
+
+    const useClip = elements.dbModeClip && elements.dbModeClip.checked;
+    const barW = rect.width / zCount;
+
+    const useSRHTForRange = !!(showSRHT && tFloats);
+
+    let dMax = -Infinity, dMin = Infinity, absMax = 0;
+    let bestIdxArr = null;
+
+    if (barW < 1) {
+        const rs = backend.prepare_render(zStart, zEnd, rect.width, useSRHTForRange);
+        dMin = rs.d_min;
+        dMax = rs.d_max;
+        absMax = rs.abs_max;
+
+        bestIdxArr = getI32Array(backend.get_best_indices_ptr(), backend.get_best_indices_len());
+    } else {
+        const rs = backend.get_range_stats(zStart, zEnd, useSRHTForRange);
+        dMin = rs.d_min;
+        dMax = rs.d_max;
+        absMax = rs.abs_max;
+    }
+
+    if (dMax === dMin) { dMax += 0.1; dMin -= 0.1; }
+    const spread = dMax - dMin;
+    const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.05 : (absMax === 0 ? 0.1 : absMax) * 1.1;
+    const sMin = settings.centeringMode === 'mid' ? dMin - spread * 0.05 : -sMax;
+
+    let baselineValue = 0;
+    if (settings.centeringMode === 'mid') {
+        if (dMin >= 0) baselineValue = sMin;
+        else if (dMax <= 0) baselineValue = sMax;
+    }
+
+    elements.chartMaxLbl.textContent = `Max: ${sMax.toFixed(2)}`;
+    elements.chartMinLbl.textContent = `Min: ${sMin.toFixed(2)}`;
 
     const baselineY = ((baselineValue - sMin) / (sMax - sMin)) * 100;
     const baselineEl = document.getElementById('baseline');
@@ -453,9 +421,6 @@ export function render(opts = {}) {
     const getY = (v) => clampY(((sMax - v) / (sMax - sMin)) * rect.height);
     const yCenter = getY(baselineValue);
 
-    const useClip = elements.dbModeClip && elements.dbModeClip.checked;
-    const barW = rect.width / zCount;
-
     const actBlockSize = stats.block_size || 0;
     const actSbSize = stats.super_block_size || 0;
 
@@ -467,15 +432,8 @@ export function render(opts = {}) {
 
     if (barW < 1) {
         for (let i = 0; i < rect.width; i++) {
-            const binS = zStart + Math.floor((i / rect.width) * zCount);
-            const binE = Math.max(binS, zStart + Math.floor(((i + 1) / rect.width) * zCount) - 1);
-            let bestIdx = binS, maxMag = -1;
-
-            for (let j = binS; j <= binE; j++) {
-                let v = (useSRHTForRange && j >= clipStart && j <= clipEnd) ? tFloats[j - clipStart] : baseFloats[j];
-                let m = v < 0 ? -v : v;
-                if (m > maxMag) { maxMag = m; bestIdx = j; }
-            }
+            const bestIdx = bestIdxArr ? bestIdxArr[i] : (zStart + Math.floor((i / rect.width) * zCount));
+            if (bestIdx < zStart || bestIdx > zEnd) continue;
 
             const isActive = !useClip || (bestIdx >= clipStart && bestIdx <= clipEnd);
             const vO = useSRHTForRange && isActive ? tFloats[bestIdx - clipStart] : baseFloats[bestIdx];
@@ -611,24 +569,16 @@ export function drawDatasetBar() {
     canvas.style.width = `${rect.width}px`;
     canvas.style.height = `${rect.height}px`;
 
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, rect.width, rect.height);
 
     if (useMinMax) {
-        if (minMaxCache.version !== baseDataVersion) {
-            let minIdx = 0, maxIdx = 0;
-            let minV = Infinity, maxV = -Infinity;
+        const mm = backend.get_global_minmax();
+        const minIdx = mm.min_idx;
+        const maxIdx = mm.max_idx;
 
-            for (let i = 0; i < N; i++) {
-                const v = baseFloats[i];
-                if (v < minV) { minV = v; minIdx = i; }
-                if (v > maxV) { maxV = v; maxIdx = i; }
-            }
-
-            minMaxCache = { version: baseDataVersion, minIdx, maxIdx, minV, maxV };
-        }
-
-        const minPct = getZoomPctUnclamped(minMaxCache.minIdx);
+        const minPct = getZoomPctUnclamped(minIdx);
         if (minPct >= 0 && minPct <= 100) {
             elements.dbMinArrow.style.display = 'block';
             elements.dbMinArrow.style.left = `${minPct}%`;
@@ -642,7 +592,7 @@ export function drawDatasetBar() {
             elements.dbMinArrow.style.display = 'none';
         }
 
-        const maxPct = getZoomPctUnclamped(minMaxCache.maxIdx);
+        const maxPct = getZoomPctUnclamped(maxIdx);
         if (maxPct >= 0 && maxPct <= 100) {
             elements.dbMaxArrow.style.display = 'block';
             elements.dbMaxArrow.style.left = `${maxPct}%`;
