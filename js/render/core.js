@@ -206,7 +206,6 @@ export function render(opts = {}) {
     const getY = (v) => clampY(((sMax - v) / (sMax - sMin)) * rect.height);
     const yCenter = getY(baselineValue);
 
-    // --- RESTORED SEPARATE HIGH/LOW DENSITY DRAW LOOP ---
     if (barW < 1) {
         for (let i = 0; i < rect.width; i++) {
             const bestIdx = bestIdxArr ? bestIdxArr[i] : (zStart + Math.floor((i / rect.width) * zCount));
