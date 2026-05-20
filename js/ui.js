@@ -34,6 +34,17 @@ export const elements = {
     get qBitsEl() { return document.getElementById('quant-bits'); },
     get presetEl() { return document.getElementById('preset-select'); },
 
+    // --- Chart Y-Axis Settings ---
+    get axisToggleBtn() { return document.getElementById('chart-axis-toggle'); },
+    get axisPanel() { return document.getElementById('chart-axis-panel'); },
+    get axisOutliersWrap() { return document.getElementById('axis-outliers-wrap'); },
+    get axisIgnoreOutliers() { return document.getElementById('axis-ignore-outliers'); },
+    get axisOutlierPctWrap() { return document.getElementById('axis-outlier-pct-wrap'); },
+    get axisOutlierPct() { return document.getElementById('axis-outlier-pct'); },
+    get axisManualWrap() { return document.getElementById('axis-manual-wrap'); },
+    get axisManualMin() { return document.getElementById('axis-manual-min'); },
+    get axisManualMax() { return document.getElementById('axis-manual-max'); },
+
     // --- Chart & Visualization ---
     get chartArea() { return document.getElementById('chart-area'); },
     get formulaBox() { return document.getElementById('equation-box'); },
@@ -134,7 +145,8 @@ export const elements = {
             this.turboSignSeedEl,
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
             this.trellisWhtEl, this.trellisWhtScopeEl, this.trellisOptItersEl, this.trellisSignSeedEl,
-            this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl
+            this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl,
+            this.axisIgnoreOutliers, this.axisOutlierPct, this.axisManualMin, this.axisManualMax
         ].filter(el => el !== null);
     }
 };
@@ -236,7 +248,12 @@ export function getSettings() {
 
         mxfpFormat: elements.mxfpFormatEl?.value || 'mxfp4_e2m1',
         primitiveFormat: elements.primitiveFormatEl?.value || 'fp32',
-        centeringMode: elements.modeEl.value
+        
+        centeringMode: elements.modeEl.value,
+        axisIgnoreOutliers: elements.axisIgnoreOutliers ? elements.axisIgnoreOutliers.checked : false,
+        axisOutlierPct: elements.axisOutlierPct ? (parseFloat(elements.axisOutlierPct.value) || 0.0) : 0.0,
+        axisManualMin: elements.axisManualMin ? (parseFloat(elements.axisManualMin.value) || 0.0) : 0.0,
+        axisManualMax: elements.axisManualMax ? (parseFloat(elements.axisManualMax.value) || 0.0) : 0.0
     };
 }
 
@@ -295,6 +312,23 @@ export function initUIListeners() {
     setupToggle(elements.rawAdvToggleBtn, elements.rawAdvPanel);
     setupToggle(elements.turboAdvToggle, elements.turboAdvPanel);
     setupToggle(elements.trellisAdvToggle, elements.trellisAdvPanel);
+    setupToggle(elements.axisToggleBtn, elements.axisPanel);
+
+    const updateAxisUI = () => {
+        if (!elements.modeEl) return;
+        const mode = elements.modeEl.value;
+        if (mode === 'manual') {
+            elements.axisOutliersWrap.style.display = 'none';
+            elements.axisManualWrap.style.display = 'flex';
+        } else {
+            elements.axisOutliersWrap.style.display = 'flex';
+            elements.axisManualWrap.style.display = 'none';
+            elements.axisOutlierPctWrap.style.display = elements.axisIgnoreOutliers.checked ? 'flex' : 'none';
+        }
+    };
+    if (elements.modeEl) elements.modeEl.addEventListener('change', updateAxisUI);
+    if (elements.axisIgnoreOutliers) elements.axisIgnoreOutliers.addEventListener('change', updateAxisUI);
+    updateAxisUI();
 
     elements.distEl.addEventListener('change', (e) => {
         document.querySelectorAll('.dist-params').forEach(el => el.style.display = 'none');

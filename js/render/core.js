@@ -151,27 +151,24 @@ export function render(opts = {}) {
     const barW = rect.width / zCount;
     const useSRHTForRange = !!(state.showSRHT && tFloats);
 
-    let dMax = -Infinity, dMin = Infinity, absMax = 0;
+    let sMin = 0, sMax = 0;
     let bestIdxArr = null;
 
     if (barW < 1) {
-        const rs = state.backend.prepare_render(zStart, zEnd, rect.width, useSRHTForRange);
-        dMin = rs.d_min; dMax = rs.d_max; absMax = rs.abs_max;
+        const rs = state.backend.prepare_render(zStart, zEnd, rect.width, useSRHTForRange, settings);
+        sMin = rs.render_min; sMax = rs.render_max;
         bestIdxArr = getI32Array(state.backend.get_best_indices_ptr(), state.backend.get_best_indices_len());
     } else {
-        const rs = state.backend.get_range_stats(zStart, zEnd, useSRHTForRange);
-        dMin = rs.d_min; dMax = rs.d_max; absMax = rs.abs_max;
+        const rs = state.backend.get_range_stats(zStart, zEnd, useSRHTForRange, settings);
+        sMin = rs.render_min; sMax = rs.render_max;
     }
 
-    if (dMax === dMin) { dMax += 0.1; dMin -= 0.1; }
-    const spread = dMax - dMin;
-    const sMax = settings.centeringMode === 'mid' ? dMax + spread * 0.05 : (absMax === 0 ? 0.1 : absMax) * 1.1;
-    const sMin = settings.centeringMode === 'mid' ? dMin - spread * 0.05 : -sMax;
+    if (sMax === sMin) { sMax += 0.1; sMin -= 0.1; }
 
     let baselineValue = 0;
-    if (settings.centeringMode === 'mid') {
-        if (dMin >= 0) baselineValue = sMin;
-        else if (dMax <= 0) baselineValue = sMax;
+    if (settings.centeringMode === 'data' || settings.centeringMode === 'manual') {
+        if (sMin >= 0) baselineValue = sMin;
+        else if (sMax <= 0) baselineValue = sMax;
     }
 
     elements.chartMaxLbl.textContent = `Max: ${sMax.toFixed(2)}`;
@@ -303,7 +300,7 @@ export function render(opts = {}) {
 
 export function updateVisualsOnly() {
     if (state.currentRenderData) {
-        state.currentRenderData.settings.centeringMode = elements.modeEl.value;
+        Object.assign(state.currentRenderData.settings, getSettings());
         render();
     }
 }

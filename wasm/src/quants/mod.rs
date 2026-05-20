@@ -35,6 +35,10 @@ pub struct Settings {
     pub mxfp_format: String,
     pub primitive_format: String,
     pub centering_mode: String,
+    pub axis_ignore_outliers: bool,
+    pub axis_outlier_pct: f64,
+    pub axis_manual_min: f32,
+    pub axis_manual_max: f32,
 }
 
 pub struct QuantizeOutput {

@@ -18,9 +18,8 @@ pub struct QuantStats {
 
 #[derive(Serialize, Clone)]
 pub struct RangeStats {
-    pub d_min: f32,
-    pub d_max: f32,
-    pub abs_max: f32,
+    pub render_min: f32,
+    pub render_max: f32,
 }
 
 #[derive(Serialize, Clone)]
@@ -29,6 +28,22 @@ pub struct MinMaxInfo {
     pub max_idx: usize,
     pub min_v: f32,
     pub max_v: f32,
+}
+
+#[derive(PartialEq)]
+struct RenderCacheKey {
+    data_version: u64,
+    zs: usize,
+    ze: usize,
+    width_bits: u64,
+    effective_srht: bool,
+    clip_start: usize,
+    clip_end: usize,
+    centering_mode: String,
+    ignore_outliers: bool,
+    outlier_pct_bits: u64,
+    manual_min_bits: u32,
+    manual_max_bits: u32,
 }
 
 #[wasm_bindgen]
@@ -45,7 +60,7 @@ pub struct AppBackend {
     minmax_cache: Option<MinMaxInfo>,
 
     best_indices: Vec<i32>,
-    best_key: Option<(u64, usize, usize, u64, bool, usize, usize)>, // (ver,zs,ze,width_bits,use_srht,clipS,clipE)
+    best_key: Option<RenderCacheKey>,
     best_range_cache: Option<RangeStats>,
 }
 
@@ -184,16 +199,121 @@ impl AppBackend {
         self.base_floats[g]
     }
 
-    pub fn get_range_stats(&self, z_start: usize, z_end: usize, use_srht: bool) -> JsValue {
+    fn calculate_bounds(
+        &self,
+        zs: usize,
+        ze: usize,
+        effective_srht: bool,
+        settings: &Settings,
+    ) -> (f32, f32) {
+        if settings.centering_mode == "manual" {
+            return (settings.axis_manual_min, settings.axis_manual_max);
+        }
+
+        let n = ze.saturating_sub(zs) + 1;
+        if n == 0 {
+            return (-1.0, 1.0);
+        }
+
+        let mut d_min = f32::INFINITY;
+        let mut d_max = f32::NEG_INFINITY;
+
+        if settings.axis_ignore_outliers && settings.axis_outlier_pct > 0.0 && n > 2 {
+            let mut vals = Vec::with_capacity(n);
+            for i in zs..=ze {
+                vals.push(self.get_val_for_global_idx(i, effective_srht));
+            }
+
+            let pct = (settings.axis_outlier_pct.clamp(0.0, 49.9) / 100.0) as f32;
+            let mut k_low = ((n as f32) * pct).floor() as usize;
+            let mut k_high = ((n as f32) * (1.0 - pct)).ceil() as usize;
+
+            k_low = k_low.clamp(0, n.saturating_sub(1));
+            k_high = k_high.clamp(0, n.saturating_sub(1)).max(k_low);
+
+            if k_low == 0 && k_high >= n - 1 {
+                d_min = *vals
+                    .iter()
+                    .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or(&0.0);
+                d_max = *vals
+                    .iter()
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or(&0.0);
+            } else {
+                let (_, low_val, upper_slice) = vals.select_nth_unstable_by(k_low, |a, b| {
+                    a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                d_min = *low_val;
+
+                let k_high_rel = k_high - k_low;
+                if k_high_rel < upper_slice.len() {
+                    let (_, high_val, _) = upper_slice
+                        .select_nth_unstable_by(k_high_rel, |a, b| {
+                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                    d_max = *high_val;
+                } else {
+                    d_max = *upper_slice
+                        .iter()
+                        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                        .unwrap_or(&d_min);
+                }
+            }
+        } else {
+            for i in zs..=ze {
+                let v = self.get_val_for_global_idx(i, effective_srht);
+                if v < d_min {
+                    d_min = v;
+                }
+                if v > d_max {
+                    d_max = v;
+                }
+            }
+        }
+
+        if d_min > d_max {
+            d_min = 0.0;
+            d_max = 0.0;
+        }
+        if d_min == d_max {
+            d_min -= 0.1;
+            d_max += 0.1;
+        }
+
+        match settings.centering_mode.as_str() {
+            "data" => {
+                let spread = d_max - d_min;
+                (d_min - spread * 0.05, d_max + spread * 0.05)
+            }
+            "zero" | _ => {
+                let mut abs_max = d_max.abs().max(d_min.abs());
+                if abs_max == 0.0 {
+                    abs_max = 0.1;
+                }
+                let spread = abs_max * 1.1;
+                (-spread, spread)
+            }
+        }
+    }
+
+    pub fn get_range_stats(
+        &self,
+        z_start: usize,
+        z_end: usize,
+        use_srht: bool,
+        settings_js: JsValue,
+    ) -> JsValue {
         let n = self.base_floats.len();
         if n == 0 {
             let rs = RangeStats {
-                d_min: 0.0,
-                d_max: 0.0,
-                abs_max: 0.0,
+                render_min: -1.0,
+                render_max: 1.0,
             };
             return serde_wasm_bindgen::to_value(&rs).unwrap();
         }
+
+        let settings: Settings = serde_wasm_bindgen::from_value(settings_js).unwrap();
 
         let zs = z_start.min(n - 1);
         let ze = z_end.min(n - 1).max(zs);
@@ -205,28 +325,11 @@ impl AppBackend {
                 .and_then(|o| o.t_floats.as_ref())
                 .is_some();
 
-        let mut d_min = f32::INFINITY;
-        let mut d_max = f32::NEG_INFINITY;
-        let mut abs_max = 0.0f32;
-
-        for i in zs..=ze {
-            let v = self.get_val_for_global_idx(i, effective_srht);
-            if v < d_min {
-                d_min = v;
-            }
-            if v > d_max {
-                d_max = v;
-            }
-            let av = v.abs();
-            if av > abs_max {
-                abs_max = av;
-            }
-        }
+        let (render_min, render_max) = self.calculate_bounds(zs, ze, effective_srht, &settings);
 
         let rs = RangeStats {
-            d_min,
-            d_max,
-            abs_max,
+            render_min,
+            render_max,
         };
         serde_wasm_bindgen::to_value(&rs).unwrap()
     }
@@ -237,18 +340,20 @@ impl AppBackend {
         z_end: usize,
         width_css: f64,
         use_srht: bool,
+        settings_js: JsValue,
     ) -> JsValue {
         let n = self.base_floats.len();
         if n == 0 || width_css <= 0.0 {
             self.best_indices.clear();
             self.best_key = None;
             self.best_range_cache = Some(RangeStats {
-                d_min: 0.0,
-                d_max: 0.0,
-                abs_max: 0.0,
+                render_min: -1.0,
+                render_max: 1.0,
             });
             return serde_wasm_bindgen::to_value(self.best_range_cache.as_ref().unwrap()).unwrap();
         }
+
+        let settings: Settings = serde_wasm_bindgen::from_value(settings_js).unwrap();
 
         let zs = z_start.min(n - 1);
         let ze = z_end.min(n - 1).max(zs);
@@ -263,16 +368,22 @@ impl AppBackend {
         let w = width_css.ceil().max(1.0) as usize;
         let width_bits = width_css.to_bits();
 
-        let key = (
-            self.data_version,
+        let key = RenderCacheKey {
+            data_version: self.data_version,
             zs,
             ze,
             width_bits,
             effective_srht,
-            self.clip_start,
-            self.clip_end,
-        );
-        if self.best_key == Some(key) {
+            clip_start: self.clip_start,
+            clip_end: self.clip_end,
+            centering_mode: settings.centering_mode.clone(),
+            ignore_outliers: settings.axis_ignore_outliers,
+            outlier_pct_bits: settings.axis_outlier_pct.to_bits(),
+            manual_min_bits: settings.axis_manual_min.to_bits(),
+            manual_max_bits: settings.axis_manual_max.to_bits(),
+        };
+
+        if self.best_key.as_ref() == Some(&key) {
             if let Some(rs) = &self.best_range_cache {
                 return serde_wasm_bindgen::to_value(rs).unwrap();
             }
@@ -281,10 +392,6 @@ impl AppBackend {
         self.best_indices.resize(w, 0);
 
         let z_count = (ze - zs + 1) as f64;
-
-        let mut d_min = f32::INFINITY;
-        let mut d_max = f32::NEG_INFINITY;
-        let mut abs_max = 0.0f32;
 
         for x in 0..w {
             let fx0 = (x as f64) / width_css;
@@ -317,19 +424,7 @@ impl AppBackend {
 
             for j in bin_s..=bin_e {
                 let v = self.get_val_for_global_idx(j, effective_srht);
-
-                if v < d_min {
-                    d_min = v;
-                }
-                if v > d_max {
-                    d_max = v;
-                }
-                let av = v.abs();
-                if av > abs_max {
-                    abs_max = av;
-                }
-
-                let mag = av;
+                let mag = v.abs();
                 if mag > max_mag {
                     max_mag = mag;
                     best_idx = j;
@@ -339,10 +434,11 @@ impl AppBackend {
             self.best_indices[x] = best_idx as i32;
         }
 
+        let (render_min, render_max) = self.calculate_bounds(zs, ze, effective_srht, &settings);
+
         let rs = RangeStats {
-            d_min,
-            d_max,
-            abs_max,
+            render_min,
+            render_max,
         };
         self.best_range_cache = Some(rs.clone());
         self.best_key = Some(key);

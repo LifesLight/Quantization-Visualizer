@@ -70,7 +70,7 @@ export function setupAutoUpdateListeners() {
             generateData();
             resetZoom(false);
             debouncedRequantize();
-        } else if (e.target.id === 'centering-mode') {
+        } else if (e.target.id === 'centering-mode' || e.target.id.startsWith('axis-')) {
             updateVisualsOnly();
         } else {
             if (e.target.id !== 'data-scale' && e.target.id !== 'data-offset') {
