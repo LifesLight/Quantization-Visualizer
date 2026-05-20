@@ -277,29 +277,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const rect = elements.dbBar.getBoundingClientRect();
+        if (rect.width <= 0) return;
+
         const N = getBaseFloats().length;
         if (N === 0) return;
 
         const zS = zoomRange ? zoomRange.start : 0;
         const zE = zoomRange ? zoomRange.end : N - 1;
         const zCount = zE - zS + 1;
+
         let pxRatio = (e.clientX - rect.left) / rect.width;
+        pxRatio = Math.max(0, Math.min(1, pxRatio));
+
+        const clampToZoom = (idx) => Math.max(zS, Math.min(zE, idx));
 
         if (isDraggingCenter) {
             let deltaIdx = Math.round((pxRatio - dragStartXRatio) * (zCount - 1));
-            if (initialClipStart + deltaIdx < 0) deltaIdx = -initialClipStart;
-            if (initialClipEnd + deltaIdx > N - 1) deltaIdx = N - 1 - initialClipEnd;
+
+            const minDelta = zS - initialClipStart;
+            const maxDelta = zE - initialClipEnd;
+            if (deltaIdx < minDelta) deltaIdx = minDelta;
+            if (deltaIdx > maxDelta) deltaIdx = maxDelta;
+
             setClipRange(initialClipStart + deltaIdx, initialClipEnd + deltaIdx, true);
             return;
         }
 
-        let targetIdx = Math.max(0, Math.min(N - 1, Math.round(zS + pxRatio * (zCount - 1))));
+        let targetIdx = Math.round(zS + pxRatio * (zCount - 1));
+        targetIdx = clampToZoom(targetIdx);
+
         const clip = getClipRange();
 
+        const cS = clampToZoom(clip.start);
+        const cE = clampToZoom(clip.end);
+
         if (isDraggingLeft) {
-            setClipRange(Math.min(targetIdx, clip.end), clip.end, true);
+            setClipRange(Math.min(targetIdx, cE), cE, true);
         } else if (isDraggingRight) {
-            setClipRange(clip.start, Math.max(targetIdx, clip.start), true);
+            setClipRange(cS, Math.max(targetIdx, cS), true);
         }
     };
 
@@ -340,7 +355,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             const clip = getClipRange();
             initialClipStart = clip.start;
             initialClipEnd = clip.end;
-            dragStartXRatio = (e.clientX - elements.dbBar.getBoundingClientRect().left) / elements.dbBar.getBoundingClientRect().width;
+            const barRect = elements.dbBar.getBoundingClientRect();
+            dragStartXRatio = (e.clientX - barRect.left) / barRect.width;
+            dragStartXRatio = Math.max(0, Math.min(1, dragStartXRatio));
             elements.dbActiveRegion.addEventListener('pointermove', onDbPointerMove);
             elements.dbActiveRegion.addEventListener('pointerup', onDbPointerUp);
         });
