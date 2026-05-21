@@ -12,7 +12,7 @@ pub mod turbo;
 use serde::{Deserialize, Serialize};
 
 /// Identical functional signatures enforced across all quantizer algorithms.
-pub type QuantizeFn = fn(&[f32], &Settings) -> QuantizeOutput;
+pub type QuantizeFn = fn(&[f32], Option<&[f32]>, &Settings) -> QuantizeOutput;
 pub type FormatInspectorFn = fn(usize, &[f32], &QuantizeOutput, &Settings) -> InspectorData;
 
 /// Global quantization settings payload passed directly from the JavaScript frontend.
@@ -46,6 +46,7 @@ pub struct Settings {
     pub axis_outlier_pct: f64,
     pub axis_manual_min: f32,
     pub axis_manual_max: f32,
+    pub use_importance: bool,
 }
 
 /// The standardized output containing the quantized data arrays and computed stats.
@@ -93,6 +94,7 @@ pub struct InspectorData {
     pub global_mse: Option<f64>,
     pub global_mae: Option<f64>,
     pub trellis_json: Option<String>,
+    pub importance: Option<f32>,
 }
 
 // Below are the specific metadata block structs for various algorithms.

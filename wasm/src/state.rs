@@ -15,6 +15,9 @@ pub struct QuantStats {
     pub global_mae: f64,
     pub global_variance: f64,
     pub global_sum_abs: f64,
+    pub has_importance: bool,
+    pub weighted_mse: f64,
+    pub weighted_mae: f64,
 }
 
 #[derive(Serialize, Clone)]
@@ -54,6 +57,11 @@ pub struct AppBackend {
     raw_floats: Vec<f32>,
     base_floats: Vec<f32>,
     active_floats: Vec<f32>,
+
+    raw_importance: Vec<f32>,
+    base_importance: Vec<f32>,
+    active_importance: Vec<f32>,
+
     last_output: Option<QuantizeOutput>,
     clip_start: usize,
     clip_end: usize,
@@ -75,6 +83,11 @@ impl AppBackend {
             raw_floats: vec![],
             base_floats: vec![],
             active_floats: vec![],
+
+            raw_importance: vec![],
+            base_importance: vec![],
+            active_importance: vec![],
+
             last_output: None,
             clip_start: 0,
             clip_end: 0,
@@ -109,6 +122,27 @@ impl AppBackend {
         self.raw_floats.len()
     }
 
+    pub fn parse_importance(&mut self, text: &str) -> usize {
+        let mut raw: Vec<f32> = text
+            .split(|c: char| c.is_whitespace() || c == ',')
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| s.parse::<f32>().ok())
+            .map(|v| v.max(0.0)) // Importance arrays should be strictly non-negative
+            .collect();
+
+        let sum: f32 = raw.iter().sum();
+        if sum > 1e-12 {
+            for v in raw.iter_mut() {
+                *v /= sum;
+            }
+        }
+
+        self.raw_importance = raw;
+        self.base_importance = self.raw_importance.clone();
+        self.bump_version();
+        self.base_importance.len()
+    }
+
     pub fn set_scale_offset(&mut self, scale: f32, offset: f32) {
         self.base_floats = self
             .raw_floats
@@ -125,6 +159,7 @@ impl AppBackend {
             self.clip_start = 0;
             self.clip_end = 0;
             self.active_floats.clear();
+            self.active_importance.clear();
 
             self.best_key = None;
             self.best_range_cache = None;
@@ -138,6 +173,12 @@ impl AppBackend {
         self.active_floats
             .extend_from_slice(&self.base_floats[self.clip_start..=self.clip_end]);
 
+        self.active_importance.clear();
+        if self.base_importance.len() == self.base_floats.len() {
+            self.active_importance
+                .extend_from_slice(&self.base_importance[self.clip_start..=self.clip_end]);
+        }
+
         self.best_key = None;
         self.best_range_cache = None;
     }
@@ -146,16 +187,29 @@ impl AppBackend {
     pub fn quantize(&mut self, settings_js: JsValue) -> JsValue {
         let settings: Settings = serde_wasm_bindgen::from_value(settings_js).unwrap();
 
+        let mut has_importance = false;
+        let mut weighted_mse = 0.0;
+        let mut weighted_mae = 0.0;
+
+        let importance_opt = if settings.use_importance
+            && self.active_importance.len() == self.active_floats.len()
+        {
+            has_importance = true;
+            Some(self.active_importance.as_slice())
+        } else {
+            None
+        };
+
         let output = match settings.q_type.as_str() {
-            "primitive" => primitive::quantize(&self.active_floats, &settings),
-            "sym" => sym::quantize(&self.active_floats, &settings),
-            "asym" => asym::quantize(&self.active_floats, &settings),
-            "kquant" => kquant::quantize(&self.active_floats, &settings),
-            "nvfp4" => nvfp4::quantize(&self.active_floats, &settings),
-            "mxfp" => mxfp::quantize(&self.active_floats, &settings),
-            "turbo" => turbo::quantize(&self.active_floats, &settings),
-            "trellis" => trellis::quantize(&self.active_floats, &settings),
-            _ => primitive::quantize(&self.active_floats, &settings),
+            "primitive" => primitive::quantize(&self.active_floats, importance_opt, &settings),
+            "sym" => sym::quantize(&self.active_floats, importance_opt, &settings),
+            "asym" => asym::quantize(&self.active_floats, importance_opt, &settings),
+            "kquant" => kquant::quantize(&self.active_floats, importance_opt, &settings),
+            "nvfp4" => nvfp4::quantize(&self.active_floats, importance_opt, &settings),
+            "mxfp" => mxfp::quantize(&self.active_floats, importance_opt, &settings),
+            "turbo" => turbo::quantize(&self.active_floats, importance_opt, &settings),
+            "trellis" => trellis::quantize(&self.active_floats, importance_opt, &settings),
+            _ => primitive::quantize(&self.active_floats, importance_opt, &settings),
         };
 
         let (global_mse, global_mae) = get_err_stats(&self.active_floats, &output.q_floats);
@@ -172,6 +226,23 @@ impl AppBackend {
             sig_power / self.active_floats.len() as f64
         };
 
+        if has_importance {
+            let mut w_mse = 0.0;
+            let mut w_mae = 0.0;
+            let mut w_sum = 0.0;
+            for i in 0..self.active_floats.len() {
+                let diff = (self.active_floats[i] - output.q_floats[i]) as f64;
+                let w = self.active_importance[i] as f64;
+                w_mse += diff * diff * w;
+                w_mae += diff.abs() * w;
+                w_sum += w;
+            }
+            if w_sum > 1e-12 {
+                weighted_mse = w_mse / w_sum;
+                weighted_mae = w_mae / w_sum;
+            }
+        }
+
         let stats = QuantStats {
             bpw: output.bpw,
             formula_html: output.formula_html.clone(),
@@ -182,6 +253,9 @@ impl AppBackend {
             global_mae,
             global_variance,
             global_sum_abs: sum_abs,
+            has_importance,
+            weighted_mse,
+            weighted_mae,
         };
 
         self.last_output = Some(output);
@@ -517,6 +591,18 @@ impl AppBackend {
     pub fn get_active_floats_len(&self) -> usize {
         self.active_floats.len()
     }
+    pub fn get_active_importance_ptr(&self) -> *const f32 {
+        self.active_importance.as_ptr()
+    }
+    pub fn get_base_importance_ptr(&self) -> *const f32 {
+        self.base_importance.as_ptr()
+    }
+    pub fn get_base_importance_len(&self) -> usize {
+        self.base_importance.len()
+    }
+    pub fn get_global_max_importance(&self) -> f32 {
+        self.base_importance.iter().cloned().fold(0.0_f32, f32::max)
+    }
     pub fn get_q_floats_ptr(&self) -> *const f32 {
         self.last_output
             .as_ref()
@@ -542,7 +628,7 @@ impl AppBackend {
     pub fn get_inspector_data(&self, idx: usize, settings_js: JsValue) -> JsValue {
         let settings: Settings = serde_wasm_bindgen::from_value(settings_js).unwrap();
         if let Some(out) = &self.last_output {
-            let data = match settings.q_type.as_str() {
+            let mut data = match settings.q_type.as_str() {
                 "primitive" => {
                     primitive::format_inspector(idx, &self.active_floats, out, &settings)
                 }
@@ -555,6 +641,9 @@ impl AppBackend {
                 "trellis" => trellis::format_inspector(idx, &self.active_floats, out, &settings),
                 _ => primitive::format_inspector(idx, &self.active_floats, out, &settings),
             };
+            if settings.use_importance && self.active_importance.len() == self.active_floats.len() {
+                data.importance = Some(self.active_importance[idx]);
+            }
             serde_wasm_bindgen::to_value(&data).unwrap()
         } else {
             JsValue::NULL

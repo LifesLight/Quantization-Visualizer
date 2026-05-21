@@ -445,7 +445,11 @@ pub fn trellis_quantize_block(
     }
 }
 
-pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
+pub fn quantize(
+    floats: &[f32],
+    _importance: Option<&[f32]>,
+    settings: &Settings,
+) -> QuantizeOutput {
     let (t_bits, t_bsize, states, cb_type, use_wht, is_global, iters, seed) = (
         settings.trellis_bits,
         settings.trellis_block_size.max(1),

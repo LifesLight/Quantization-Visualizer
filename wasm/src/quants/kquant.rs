@@ -2,7 +2,11 @@ use crate::math_utils::*;
 use crate::quants::{InspectorData, KBlockMeta, KSuperMeta, QuantMeta, QuantizeOutput, Settings};
 
 /// Replicates the GGUF `K-Quant` hierarchical (super-block & sub-block) scale aggregation logic.
-pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
+pub fn quantize(
+    floats: &[f32],
+    _importance: Option<&[f32]>,
+    settings: &Settings,
+) -> QuantizeOutput {
     let (weight_bits, sb_size, sub_size, sub_bits, has_offset) = (
         settings.weight_bits,
         settings.sb_size,

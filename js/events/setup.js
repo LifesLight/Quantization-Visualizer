@@ -3,7 +3,7 @@
  * Wires up form inputs, file drops, window resizing, and warning modals.
  */
 import { elements, applyPreset, updateUI } from '../ui.js';
-import { generateData } from '../dataGen.js';
+import { generateData, generateImportanceData } from '../dataGen.js';
 import { debouncedRequantize, requantize, render, updateVisualsOnly } from '../render/core.js';
 import { resetZoom, setClipRange } from '../render/actions.js';
 import { resizeCanvasCssOnly, updateOverlays, updateDbBarVisibility } from '../render/components.js';
@@ -73,7 +73,7 @@ export function setupAutoUpdateListeners() {
         } else if (e.target.id === 'centering-mode' || e.target.id.startsWith('axis-')) {
             updateVisualsOnly();
         } else {
-            if (e.target.id !== 'data-scale' && e.target.id !== 'data-offset') {
+            if (e.target.id !== 'data-scale' && e.target.id !== 'data-offset' && e.target.id !== 'use-importance') {
                 elements.presetEl.value = 'custom';
                 updateUI();
             }
@@ -95,7 +95,17 @@ export function setupAutoUpdateListeners() {
         debouncedRequantize();
     });
 
+    if (elements.impGenBtn) {
+        elements.impGenBtn.addEventListener('click', () => {
+            generateImportanceData();
+            debouncedRequantize();
+        });
+    }
+
     elements.inputEl.addEventListener('input', () => debouncedRequantize());
+    if (elements.inputImportanceEl) {
+        elements.inputImportanceEl.addEventListener('input', () => debouncedRequantize());
+    }
 }
 
 export function setupModals() {

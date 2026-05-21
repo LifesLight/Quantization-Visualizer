@@ -1,5 +1,6 @@
 export default {
     id: 'primitive',
+    importance: 'unused',
     setupUI(ui) {
         ui.showBlockSettings(false);
         ui.showKQuantSettings(false);

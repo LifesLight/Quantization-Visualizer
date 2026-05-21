@@ -2,7 +2,11 @@ use crate::math_utils::*;
 use crate::quants::{InspectorData, MxfpBlockMeta, QuantMeta, QuantizeOutput, Settings};
 
 /// OCP MX Block format emulation.
-pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
+pub fn quantize(
+    floats: &[f32],
+    _importance: Option<&[f32]>,
+    settings: &Settings,
+) -> QuantizeOutput {
     let (bits, max_fmt, is_fp8, cb) = match settings.mxfp_format.as_str() {
         "mxfp6_e2m3" => {
             let mut c = vec![];

@@ -131,7 +131,9 @@ export function updateDbBarVisibility() {
 
     if (elements.dbContainer) elements.dbContainer.style.display = checked ? 'flex' : 'none';
     if (elements.dbBar) elements.dbBar.style.display = checked ? 'block' : 'none';
-    if (checked) drawDatasetBar();
+    if (checked) {
+        requestAnimationFrame(() => drawDatasetBar());
+    }
 }
 
 /**
@@ -299,7 +301,13 @@ export function updateInspector(idx) {
     const lblQuant = state.showSRHT ? "Quantized (WHT):" : "Quantized:";
     const errVal = Math.abs(val - valQ);
 
-    elements.insWData.innerHTML = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl" title="${val}">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl" title="${valQ}">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span title="${errVal}">${errVal.toFixed(6)}</span></div>`;
+    let baseHtml = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl" title="${val}">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl" title="${valQ}">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span title="${errVal}">${errVal.toFixed(6)}</span></div>`;
+
+    if (insData.importance !== undefined && insData.importance !== null) {
+        baseHtml += `<div class="data-row" style="margin-top:4px; border-top:1px solid var(--border-color); padding-top:4px;"><span>Importance Base:</span> <span>${(insData.importance * 100).toFixed(4)}%</span></div>`;
+    }
+
+    elements.insWData.innerHTML = baseHtml;
 
     let blockHtml = '';
     if (insData.mse !== undefined) blockHtml += `<div class="data-row"><span>MSE:</span> <span class="val-hl">${insData.mse.toFixed(6)}</span></div>`;

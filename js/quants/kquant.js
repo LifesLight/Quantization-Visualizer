@@ -1,5 +1,6 @@
 export default {
     id: 'kquant',
+    importance: 'optional',
     setupUI(ui) {
         ui.showBlockSettings(false);
         ui.showKQuantSettings(true);

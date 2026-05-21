@@ -2,7 +2,11 @@ use crate::math_utils::*;
 use crate::quants::{InspectorData, QuantMeta, QuantizeOutput, Settings, TurboBlockMeta};
 
 /// Quantization technique combining Lloyd-Max, Optional FWHT, and Optional QJL Error correction.
-pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
+pub fn quantize(
+    floats: &[f32],
+    _importance: Option<&[f32]>,
+    settings: &Settings,
+) -> QuantizeOutput {
     let (t_bits, t_bsize, use_wht, use_qjl, seed) = (
         settings.turbo_bits,
         settings.turbo_block_size,

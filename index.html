@@ -98,6 +98,81 @@
                         </div>
                     </div>
 
+                    <div class="raw-floats-wrapper settings-group" style="margin-top: 10px;">
+                        <button id="raw-importance-adv-toggle" class="adv-toggle-btn">
+                            <span>Importance Weights</span>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
+                        </button>
+                        <div id="raw-importance-adv-panel" class="adv-panel" style="display: none;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="checkbox" id="use-importance"
+                                        style="width: auto; margin: 0; cursor: pointer;">
+                                    <label for="use-importance" style="margin: 0; cursor: pointer;">Use
+                                        Importance</label>
+                                </div>
+                                <span id="importance-warning"
+                                    style="color: var(--negative-color); font-size: 0.75rem; display: none;">Mismatch
+                                    length</span>
+                            </div>
+
+                            <textarea id="float-input-importance" placeholder="e.g. 0.1, 0.05, 0.3, 0.55"></textarea>
+
+                            <div class="settings-group" style="margin-top: 8px;">
+                                <label style="font-size: 0.8rem;">Generate Synthetic Importance</label>
+                                <select id="imp-gen-dist">
+                                    <option value="uniform" selected>Uniform Random</option>
+                                    <option value="normal">Normal Dist. (Gaussian)</option>
+                                    <option value="laplace">Laplace</option>
+                                    <option value="bimodal">Bimodal</option>
+                                    <option value="outliers">Normal + Outliers</option>
+                                </select>
+                                <div class="gen-advanced-wrapper">
+                                    <button id="imp-gen-adv-toggle" class="adv-toggle-btn">
+                                        <span>Advanced Parameters</span>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                            <path d="M7 10l5 5 5-5z" />
+                                        </svg>
+                                    </button>
+                                    <div id="imp-gen-adv-panel" class="adv-panel" style="display: none;">
+                                        <div id="imp-param-normal" class="imp-dist-params" style="display:none;">
+                                            <label>Standard Deviation</label>
+                                            <input type="number" id="imp-gen-std" value="1.0" step="0.1" min="0.1">
+                                        </div>
+                                        <div id="imp-param-laplace" class="imp-dist-params" style="display:none;">
+                                            <label>Scale (Diversity)</label>
+                                            <input type="number" id="imp-gen-scale" value="1.0" step="0.1" min="0.1">
+                                        </div>
+                                        <div id="imp-param-bimodal" class="imp-dist-params" style="display:none;">
+                                            <label>Peak Distance</label>
+                                            <input type="number" id="imp-gen-bimodal-dist" value="4.0" step="0.5">
+                                            <label style="margin-top:4px;">Spread (Std Dev)</label>
+                                            <input type="number" id="imp-gen-bimodal-spread" value="1.2" step="0.1"
+                                                min="0.1">
+                                        </div>
+                                        <div id="imp-param-outliers" class="imp-dist-params" style="display:none;">
+                                            <label>Outlier Probability</label>
+                                            <input type="number" id="imp-gen-outlier-prob" value="0.02" step="0.01"
+                                                min="0" max="1">
+                                            <label style="margin-top:4px;">Outlier Scale Multiplier</label>
+                                            <input type="number" id="imp-gen-outlier-mult" value="5.0" step="0.5"
+                                                min="1.0">
+                                        </div>
+                                        <div id="imp-param-uniform" class="imp-dist-params" style="display:flex;">
+                                            <label>Range (Spread)</label>
+                                            <input type="number" id="imp-gen-uni-range" value="10.0" step="1.0"
+                                                min="0.1">
+                                        </div>
+                                    </div>
+                                </div>
+                                <button id="imp-gen-btn" class="action-btn secondary" style="margin-top: 4px;">Generate
+                                    to Match</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="settings-group" style="margin-top: 10px;">
                         <button id="data-transform-toggle" class="adv-toggle-btn">
                             <span>Data Scaling & Offset</span>

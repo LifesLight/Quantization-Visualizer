@@ -19,6 +19,7 @@ export const state = {
     dragStartIdx: null,
     dragCurrentIdx: null,
     rawFloatsStr: "",
+    rawImportanceStr: "",
     lastScale: null,
     lastOffset: null
 };
@@ -59,4 +60,19 @@ export function getBaseFloats() {
     }
 
     return getF32Array(state.backend.get_base_floats_ptr(), state.backend.get_base_floats_len());
+}
+
+/**
+ * Parses and returns the global importance weights string mapping it over WASM boundary.
+ */
+export function getImportanceFloats() {
+    if (!state.backend) return new Float32Array();
+    const text = elements.inputImportanceEl.value;
+
+    if (text !== state.rawImportanceStr) {
+        state.rawImportanceStr = text;
+        state.backend.parse_importance(text);
+    }
+
+    return getF32Array(state.backend.get_base_importance_ptr(), state.backend.get_base_importance_len());
 }

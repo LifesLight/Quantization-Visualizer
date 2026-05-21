@@ -2,8 +2,8 @@
  * Render Core
  * Contains the main WASM quantization caller and the primary Canvas2D drawing loop.
  */
-import { state, getBaseFloats } from './state.js';
-import { elements, getSettings } from '../ui.js';
+import { state, getBaseFloats, getImportanceFloats } from './state.js';
+import { elements, getSettings, validateImportance } from '../ui.js';
 import registry from '../quants/registry.js';
 import { updateDbBarVisibility, drawDatasetBar, updateInspector, updateOverlays } from './components.js';
 import { getF32Array, getI32Array } from '../wasmWrapper.js';
@@ -23,12 +23,16 @@ export const debouncedRequantize = (forceSync = false) => {
 
 export function requantize(overrideClipCheck = false) {
     const baseFloats = getBaseFloats();
+    const impFloats = getImportanceFloats();
     const N = baseFloats.length;
 
     if (N === 0) {
         state.currentRenderData = null;
+        render();
         return;
     }
+
+    validateImportance(N, impFloats.length);
 
     if (elements.dbModeClip && !elements.dbModeClip.checked) {
         state.clipStart = 0;
@@ -81,6 +85,8 @@ export function requantize(overrideClipCheck = false) {
         qPtr: state.backend.get_q_floats_ptr(),
         tPtr: state.backend.get_t_floats_ptr(),
         tQPtr: state.backend.get_t_q_floats_ptr(),
+        impPtr: state.backend.get_active_importance_ptr(),
+        globalMaxImp: state.backend.get_global_max_importance(),
         settings,
         quant: registry[settings.qType],
         bpw: stats.bpw,
@@ -92,15 +98,35 @@ export function requantize(overrideClipCheck = false) {
 }
 
 export function render(opts = {}) {
-    if (!state.currentRenderData) return;
+    let canvas = document.getElementById('main-canvas');
+
+    if (!state.currentRenderData) {
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        elements.quantStats.textContent = "Waiting...";
+        elements.chartMaxLbl.textContent = "Max: 0";
+        elements.chartMinLbl.textContent = "Min: 0";
+        elements.formulaBox.innerHTML = "";
+
+        const baselineEl = document.getElementById('baseline');
+        if (baselineEl) baselineEl.style.display = 'none';
+
+        updateOverlays();
+        return;
+    }
+
     const { updateInspector: doInspector = true, drawDbBar: doDbBar = true } = opts;
 
-    const { baseLen, basePtr, actLen, actPtr, qPtr, tPtr, tQPtr, settings, bpw, formulaHTML, stats } = state.currentRenderData;
+    const { baseLen, basePtr, actLen, actPtr, qPtr, tPtr, tQPtr, impPtr, globalMaxImp, settings, bpw, formulaHTML, stats } = state.currentRenderData;
 
     const baseFloats = getF32Array(basePtr, baseLen);
     const qFloats = getF32Array(qPtr, actLen);
     const tFloats = stats.has_srht ? getF32Array(tPtr, actLen) : null;
     const tQFloats = stats.has_srht ? getF32Array(tQPtr, actLen) : null;
+    const useImportance = stats.has_importance && globalMaxImp > 1e-9;
+    const actImp = useImportance ? getF32Array(impPtr, actLen) : null;
 
     if (!stats.has_srht) {
         state.showSRHT = false;
@@ -114,7 +140,12 @@ export function render(opts = {}) {
     const sqnr = (stats.global_mse === 0 || stats.global_variance === 0) ? Infinity : 10 * Math.log10(stats.global_variance / stats.global_mse);
     const relError = stats.global_sum_abs === 0 ? 0 : ((stats.global_mae * actLen) / stats.global_sum_abs) * 100;
 
-    elements.quantStats.textContent = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
+    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
+    if (stats.has_importance) {
+        statsText = `[Importance Enabled]\nWeighted MSE: ${stats.weighted_mse.toFixed(6)}\nWeighted MAE: ${stats.weighted_mae.toFixed(6)}\n\n` + statsText;
+    }
+
+    elements.quantStats.textContent = statsText;
     elements.formulaBox.innerHTML = formulaHTML;
     elements.btnResetZoom.style.display = state.zoomRange ? 'flex' : 'none';
 
@@ -122,7 +153,6 @@ export function render(opts = {}) {
     const zEnd = state.zoomRange ? state.zoomRange.end : baseLen - 1;
     const zCount = zEnd - zStart + 1;
 
-    let canvas = document.getElementById('main-canvas');
     if (!canvas) {
         elements.chartArea.innerHTML = `
             <canvas id="main-canvas" style="position:absolute; width:100%; height:100%; left:0; top:0; pointer-events:none;"></canvas>
@@ -206,6 +236,9 @@ export function render(opts = {}) {
     const getY = (v) => clampY(((sMax - v) / (sMax - sMin)) * rect.height);
     const yCenter = getY(baselineValue);
 
+    const impH = 4;
+    const bottomY = rect.height - impH;
+
     if (barW < 1) {
         for (let i = 0; i < rect.width; i++) {
             const bestIdx = bestIdxArr ? bestIdxArr[i] : (zStart + Math.floor((i / rect.width) * zCount));
@@ -226,6 +259,13 @@ export function render(opts = {}) {
                 ctx.fillStyle = errPattern;
                 ctx.fillRect(i, Math.min(yV, yVQ), 1, Math.abs(yV - yVQ));
             }
+
+            if (useImportance && isActive) {
+                const wVal = actImp[bestIdx - state.clipStart];
+                const intensity = Math.min(1, Math.max(0, wVal / globalMaxImp));
+                ctx.fillStyle = isDark ? `rgba(250, 204, 21, ${0.1 + 0.9 * intensity})` : `rgba(234, 179, 8, ${0.1 + 0.9 * intensity})`;
+                ctx.fillRect(i, bottomY, 1, impH);
+            }
         }
     } else {
         for (let i = 0; i < zCount; i++) {
@@ -245,6 +285,13 @@ export function render(opts = {}) {
             if (isActive && Math.abs(yV - yVQ) > 1) {
                 ctx.fillStyle = errPattern;
                 ctx.fillRect(x, Math.min(yV, yVQ), barW, Math.abs(yV - yVQ));
+            }
+
+            if (useImportance && isActive) {
+                const wVal = actImp[gIdx - state.clipStart];
+                const intensity = Math.min(1, Math.max(0, wVal / globalMaxImp));
+                ctx.fillStyle = isDark ? `rgba(250, 204, 21, ${0.1 + 0.9 * intensity})` : `rgba(234, 179, 8, ${0.1 + 0.9 * intensity})`;
+                ctx.fillRect(x, bottomY, barW, impH);
             }
         }
     }

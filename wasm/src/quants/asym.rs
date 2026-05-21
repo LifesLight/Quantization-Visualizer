@@ -2,7 +2,11 @@ use crate::math_utils::*;
 use crate::quants::{AsymBlockMeta, InspectorData, QuantMeta, QuantizeOutput, Settings};
 
 /// Applies asymmetrical block quantization (includes both scale and offset limits).
-pub fn quantize(floats: &[f32], settings: &Settings) -> QuantizeOutput {
+pub fn quantize(
+    floats: &[f32],
+    _importance: Option<&[f32]>,
+    settings: &Settings,
+) -> QuantizeOutput {
     let weight_bits = settings.weight_bits;
     let block_size = settings.block_size;
     let base_precision = 16.0;

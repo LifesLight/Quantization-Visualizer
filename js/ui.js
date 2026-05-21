@@ -4,11 +4,12 @@
  */
 import { presetGroups, getPresetById } from './templates/presets.js';
 import registry from './quants/registry.js';
-import { drawDatasetBar } from './render/components.js'; // <-- Updated Import
+import { drawDatasetBar } from './render/components.js';
 
 export const elements = {
     // --- Data Input & Generation ---
     get inputEl() { return document.getElementById('float-input'); },
+    get inputImportanceEl() { return document.getElementById('float-input-importance'); },
     get fileDropZone() { return document.getElementById('file-drop-zone'); },
     get fileInput() { return document.getElementById('file-input'); },
     get dataScaleEl() { return document.getElementById('data-scale'); },
@@ -27,6 +28,21 @@ export const elements = {
     get advPanel() { return document.getElementById('gen-adv-panel'); },
     get rawAdvToggleBtn() { return document.getElementById('raw-adv-toggle'); },
     get rawAdvPanel() { return document.getElementById('raw-adv-panel'); },
+    get rawImportanceAdvToggleBtn() { return document.getElementById('raw-importance-adv-toggle'); },
+    get rawImportanceAdvPanel() { return document.getElementById('raw-importance-adv-panel'); },
+    get useImportance() { return document.getElementById('use-importance'); },
+    get importanceWarning() { return document.getElementById('importance-warning'); },
+    get impGenDist() { return document.getElementById('imp-gen-dist'); },
+    get impGenAdvToggle() { return document.getElementById('imp-gen-adv-toggle'); },
+    get impGenAdvPanel() { return document.getElementById('imp-gen-adv-panel'); },
+    get impGenStd() { return document.getElementById('imp-gen-std'); },
+    get impGenScale() { return document.getElementById('imp-gen-scale'); },
+    get impGenBimodalDist() { return document.getElementById('imp-gen-bimodal-dist'); },
+    get impGenBimodalSpread() { return document.getElementById('imp-gen-bimodal-spread'); },
+    get impGenOutlierProb() { return document.getElementById('imp-gen-outlier-prob'); },
+    get impGenOutlierMult() { return document.getElementById('imp-gen-outlier-mult'); },
+    get impGenUniRange() { return document.getElementById('imp-gen-uni-range'); },
+    get impGenBtn() { return document.getElementById('imp-gen-btn'); },
     get dataTransformToggle() { return document.getElementById('data-transform-toggle'); },
     get dataTransformPanel() { return document.getElementById('data-transform-panel'); },
 
@@ -148,7 +164,8 @@ export const elements = {
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
             this.trellisWhtEl, this.trellisWhtScopeEl, this.trellisOptItersEl, this.trellisSignSeedEl,
             this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl,
-            this.axisIgnoreOutliers, this.axisOutlierPct, this.axisManualMin, this.axisManualMax
+            this.axisIgnoreOutliers, this.axisOutlierPct, this.axisManualMin, this.axisManualMax,
+            this.useImportance
         ].filter(el => el !== null);
     }
 };
@@ -193,6 +210,45 @@ export function applyPreset(presetId) {
         if (el.type === 'checkbox') el.checked = val;
         else el.value = val;
     }
+}
+
+/**
+ * Validates the currently loaded importance floats mismatch errors and requirement locking.
+ */
+export function validateImportance(floatsLen, impLen) {
+    const qType = elements.qTypeEl.value;
+    const quant = registry[qType];
+    const impMode = quant ? quant.importance : 'unused';
+
+    if (impMode === 'unused') {
+        elements.useImportance.disabled = true;
+        elements.useImportance.checked = false;
+        elements.importanceWarning.style.display = 'inline-block';
+        elements.importanceWarning.textContent = 'Not supported by algo';
+        elements.importanceWarning.style.color = 'var(--text-muted)';
+        return false;
+    }
+
+    if (floatsLen > 0 && impLen > 0 && floatsLen !== impLen) {
+        elements.useImportance.disabled = true;
+        elements.importanceWarning.style.display = 'inline-block';
+        elements.importanceWarning.textContent = `Mismatch (${floatsLen} vs ${impLen})`;
+        elements.importanceWarning.style.color = 'var(--negative-color)';
+        if (impMode === 'needs') {
+            elements.useImportance.checked = false;
+        }
+        return false;
+    }
+
+    elements.useImportance.disabled = false;
+    elements.importanceWarning.style.display = 'none';
+
+    if (impMode === 'needs') {
+        elements.useImportance.checked = true;
+        elements.useImportance.disabled = true;
+    }
+
+    return elements.useImportance.checked;
 }
 
 /**
@@ -255,7 +311,9 @@ export function getSettings() {
         axisIgnoreOutliers: elements.axisIgnoreOutliers ? elements.axisIgnoreOutliers.checked : false,
         axisOutlierPct: elements.axisOutlierPct ? (parseFloat(elements.axisOutlierPct.value) || 0.0) : 0.0,
         axisManualMin: elements.axisManualMin ? (parseFloat(elements.axisManualMin.value) || 0.0) : 0.0,
-        axisManualMax: elements.axisManualMax ? (parseFloat(elements.axisManualMax.value) || 0.0) : 0.0
+        axisManualMax: elements.axisManualMax ? (parseFloat(elements.axisManualMax.value) || 0.0) : 0.0,
+
+        useImportance: elements.useImportance ? elements.useImportance.checked : false,
     };
 }
 
@@ -312,6 +370,8 @@ export function initUIListeners() {
 
     setupToggle(elements.advToggleBtn, elements.advPanel);
     setupToggle(elements.rawAdvToggleBtn, elements.rawAdvPanel);
+    setupToggle(elements.rawImportanceAdvToggleBtn, elements.rawImportanceAdvPanel);
+    setupToggle(elements.impGenAdvToggle, elements.impGenAdvPanel);
     setupToggle(elements.turboAdvToggle, elements.turboAdvPanel);
     setupToggle(elements.trellisAdvToggle, elements.trellisAdvPanel);
     setupToggle(elements.axisToggleBtn, elements.axisPanel);
@@ -336,6 +396,12 @@ export function initUIListeners() {
     elements.distEl.addEventListener('change', (e) => {
         document.querySelectorAll('.dist-params').forEach(el => el.style.display = 'none');
         const targetParams = document.getElementById(`param-${e.target.value}`);
+        if (targetParams) targetParams.style.display = 'flex';
+    });
+
+    elements.impGenDist.addEventListener('change', (e) => {
+        document.querySelectorAll('.imp-dist-params').forEach(el => el.style.display = 'none');
+        const targetParams = document.getElementById(`imp-param-${e.target.value}`);
         if (targetParams) targetParams.style.display = 'flex';
     });
 }

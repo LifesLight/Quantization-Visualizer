@@ -2,7 +2,11 @@ use crate::math_utils::*;
 use crate::quants::{InspectorData, Nvfp4BlockMeta, QuantMeta, QuantizeOutput, Settings};
 
 /// Emulates NVIDIA's NVFP4 tensor format.
-pub fn quantize(floats: &[f32], _settings: &Settings) -> QuantizeOutput {
+pub fn quantize(
+    floats: &[f32],
+    _importance: Option<&[f32]>,
+    _settings: &Settings,
+) -> QuantizeOutput {
     let block_size = 16;
     let bpw = 4.0 + (8.0 / 16.0) + (32.0 / floats.len().max(1) as f32);
     let mut q_floats = vec![0.0; floats.len()];
