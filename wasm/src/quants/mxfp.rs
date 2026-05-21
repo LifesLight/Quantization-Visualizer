@@ -90,7 +90,7 @@ pub fn quantize(
     QuantizeOutput {
         q_floats, t_floats: None, t_q_floats: None, bpw,
         formula_html: format!("<span>Weight = <span class=\"eq-pill\">Micro_Value<span class=\"bits\">{}b</span></span> &times; <span class=\"eq-pill\" title=\"8-Bit E8M0 scaling factor\">2^E<span class=\"bits\">8b</span></span></span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">OCP {}: Every 32 weights share one block scale.</span>", bits, settings.mxfp_format.to_uppercase().replace('_', " ")),
-        block_size, super_block_size: 0, meta: QuantMeta::Mxfp(blocks),
+        block_size, super_block_size: 0, imp_size: block_size, meta: QuantMeta::Mxfp(blocks),
     }
 }
 

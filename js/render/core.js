@@ -28,11 +28,12 @@ export function requantize(overrideClipCheck = false) {
 
     if (N === 0) {
         state.currentRenderData = null;
+        validateImportance(0, 0, "");
         render();
         return;
     }
 
-    validateImportance(N, impFloats.length);
+    validateImportance(N, impFloats.length, elements.inputImportanceEl.value);
 
     if (elements.dbModeClip && !elements.dbModeClip.checked) {
         state.clipStart = 0;
@@ -86,7 +87,6 @@ export function requantize(overrideClipCheck = false) {
         tPtr: state.backend.get_t_floats_ptr(),
         tQPtr: state.backend.get_t_q_floats_ptr(),
         impPtr: state.backend.get_active_importance_ptr(),
-        globalMaxImp: state.backend.get_global_max_importance(),
         settings,
         quant: registry[settings.qType],
         bpw: stats.bpw,
@@ -119,13 +119,13 @@ export function render(opts = {}) {
 
     const { updateInspector: doInspector = true, drawDbBar: doDbBar = true } = opts;
 
-    const { baseLen, basePtr, actLen, actPtr, qPtr, tPtr, tQPtr, impPtr, globalMaxImp, settings, bpw, formulaHTML, stats } = state.currentRenderData;
+    const { baseLen, basePtr, actLen, actPtr, qPtr, tPtr, tQPtr, impPtr, settings, bpw, formulaHTML, stats } = state.currentRenderData;
 
     const baseFloats = getF32Array(basePtr, baseLen);
     const qFloats = getF32Array(qPtr, actLen);
     const tFloats = stats.has_srht ? getF32Array(tPtr, actLen) : null;
     const tQFloats = stats.has_srht ? getF32Array(tQPtr, actLen) : null;
-    const useImportance = stats.has_importance && globalMaxImp > 1e-9;
+    const useImportance = stats.has_importance;
     const actImp = useImportance ? getF32Array(impPtr, actLen) : null;
 
     if (!stats.has_srht) {
@@ -239,6 +239,18 @@ export function render(opts = {}) {
     const impH = 4;
     const bottomY = rect.height - impH;
 
+    const impBlockSize = stats.imp_block_size > 0 ? stats.imp_block_size : actLen;
+    const impBlockMax = [];
+    if (useImportance) {
+        for (let i = 0; i < actLen; i += impBlockSize) {
+            let max = 0;
+            for (let j = 0; j < impBlockSize && i + j < actLen; j++) {
+                if (actImp[i + j] > max) max = actImp[i + j];
+            }
+            impBlockMax.push(max);
+        }
+    }
+
     if (barW < 1) {
         for (let i = 0; i < rect.width; i++) {
             const bestIdx = bestIdxArr ? bestIdxArr[i] : (zStart + Math.floor((i / rect.width) * zCount));
@@ -261,8 +273,10 @@ export function render(opts = {}) {
             }
 
             if (useImportance && isActive) {
-                const wVal = actImp[bestIdx - state.clipStart];
-                const intensity = Math.min(1, Math.max(0, wVal / globalMaxImp));
+                const sliceIdx = bestIdx - state.clipStart;
+                const wVal = actImp[sliceIdx];
+                const bMax = impBlockMax[Math.floor(sliceIdx / impBlockSize)];
+                const intensity = bMax > 0 ? Math.min(1, Math.max(0, wVal / bMax)) : 0;
                 ctx.fillStyle = isDark ? `rgba(250, 204, 21, ${0.1 + 0.9 * intensity})` : `rgba(234, 179, 8, ${0.1 + 0.9 * intensity})`;
                 ctx.fillRect(i, bottomY, 1, impH);
             }
@@ -288,8 +302,10 @@ export function render(opts = {}) {
             }
 
             if (useImportance && isActive) {
-                const wVal = actImp[gIdx - state.clipStart];
-                const intensity = Math.min(1, Math.max(0, wVal / globalMaxImp));
+                const sliceIdx = gIdx - state.clipStart;
+                const wVal = actImp[sliceIdx];
+                const bMax = impBlockMax[Math.floor(sliceIdx / impBlockSize)];
+                const intensity = bMax > 0 ? Math.min(1, Math.max(0, wVal / bMax)) : 0;
                 ctx.fillStyle = isDark ? `rgba(250, 204, 21, ${0.1 + 0.9 * intensity})` : `rgba(234, 179, 8, ${0.1 + 0.9 * intensity})`;
                 ctx.fillRect(x, bottomY, barW, impH);
             }

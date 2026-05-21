@@ -287,11 +287,14 @@ export function updateInspector(idx) {
 
     const sliceIdx = useClip ? idx - state.clipStart : idx;
     const insData = state.backend.get_inspector_data(sliceIdx, state.currentRenderData.settings);
+    const { stats, actLen, impPtr } = state.currentRenderData;
 
-    const floats = getF32Array(state.currentRenderData.actPtr, state.currentRenderData.actLen);
-    const qFloats = getF32Array(state.currentRenderData.qPtr, state.currentRenderData.actLen);
-    const tFloats = state.currentRenderData.stats.has_srht ? getF32Array(state.currentRenderData.tPtr, state.currentRenderData.actLen) : null;
-    const tQFloats = state.currentRenderData.stats.has_srht ? getF32Array(state.currentRenderData.tQPtr, state.currentRenderData.actLen) : null;
+    const floats = getF32Array(state.currentRenderData.actPtr, actLen);
+    const qFloats = getF32Array(state.currentRenderData.qPtr, actLen);
+    const tFloats = stats.has_srht ? getF32Array(state.currentRenderData.tPtr, actLen) : null;
+    const tQFloats = stats.has_srht ? getF32Array(state.currentRenderData.tQPtr, actLen) : null;
+    const useImportance = stats.has_importance;
+    const actImp = useImportance ? getF32Array(impPtr, actLen) : null;
 
     const val = state.showSRHT && tFloats ? tFloats[sliceIdx] : floats[sliceIdx];
     const valQ = state.showSRHT && tQFloats ? tQFloats[sliceIdx] : qFloats[sliceIdx];
@@ -303,8 +306,23 @@ export function updateInspector(idx) {
 
     let baseHtml = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl" title="${val}">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl" title="${valQ}">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span title="${errVal}">${errVal.toFixed(6)}</span></div>`;
 
-    if (insData.importance !== undefined && insData.importance !== null) {
-        baseHtml += `<div class="data-row" style="margin-top:4px; border-top:1px solid var(--border-color); padding-top:4px;"><span>Importance Base:</span> <span>${(insData.importance * 100).toFixed(4)}%</span></div>`;
+    if (useImportance && actImp) {
+        const impBlockSize = stats.imp_block_size > 0 ? stats.imp_block_size : actLen;
+        const blockStart = Math.floor(sliceIdx / impBlockSize) * impBlockSize;
+
+        let blockSum = 0;
+        let blockMax = 0;
+        for (let i = 0; i < impBlockSize && blockStart + i < actLen; i++) {
+            const iv = actImp[blockStart + i];
+            blockSum += iv;
+            if (iv > blockMax) blockMax = iv;
+        }
+
+        const wVal = actImp[sliceIdx];
+        const pctSum = blockSum > 0 ? (wVal / blockSum) * 100 : 0;
+        const pctMax = blockMax > 0 ? (wVal / blockMax) * 100 : 0;
+
+        baseHtml += `<div class="data-row" style="margin-top:4px" title="Relative to the max value in the block: ${pctMax.toFixed(2)}%"><span>Importance:</span> <span>${pctSum.toFixed(2)}%</span></div>`;
     }
 
     elements.insWData.innerHTML = baseHtml;

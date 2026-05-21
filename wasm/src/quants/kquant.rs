@@ -165,6 +165,7 @@ pub fn quantize(
         },
         block_size: sub_size,
         super_block_size: sb_size,
+        imp_size: sub_size,
         meta: QuantMeta::KQuant(block_meta, super_meta),
     }
 }

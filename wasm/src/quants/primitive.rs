@@ -33,6 +33,7 @@ pub fn quantize(
         formula_html: format!("Weights in {} precision.", format_name),
         block_size: 0,
         super_block_size: 0,
+        imp_size: 0, // 0 signifies Global
         meta: QuantMeta::Primitive,
     }
 }

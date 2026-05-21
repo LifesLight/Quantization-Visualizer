@@ -18,6 +18,7 @@ pub struct QuantStats {
     pub has_importance: bool,
     pub weighted_mse: f64,
     pub weighted_mae: f64,
+    pub imp_block_size: usize,
 }
 
 #[derive(Serialize, Clone)]
@@ -123,19 +124,12 @@ impl AppBackend {
     }
 
     pub fn parse_importance(&mut self, text: &str) -> usize {
-        let mut raw: Vec<f32> = text
+        let raw: Vec<f32> = text
             .split(|c: char| c.is_whitespace() || c == ',')
             .filter(|s| !s.is_empty())
             .filter_map(|s| s.parse::<f32>().ok())
-            .map(|v| v.max(0.0)) // Importance arrays should be strictly non-negative
+            .map(|v| v.max(0.0))
             .collect();
-
-        let sum: f32 = raw.iter().sum();
-        if sum > 1e-12 {
-            for v in raw.iter_mut() {
-                *v /= sum;
-            }
-        }
 
         self.raw_importance = raw;
         self.base_importance = self.raw_importance.clone();
@@ -256,6 +250,7 @@ impl AppBackend {
             has_importance,
             weighted_mse,
             weighted_mae,
+            imp_block_size: output.imp_size,
         };
 
         self.last_output = Some(output);

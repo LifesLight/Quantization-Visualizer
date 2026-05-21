@@ -28,10 +28,18 @@ export const elements = {
     get advPanel() { return document.getElementById('gen-adv-panel'); },
     get rawAdvToggleBtn() { return document.getElementById('raw-adv-toggle'); },
     get rawAdvPanel() { return document.getElementById('raw-adv-panel'); },
+
+    // --- Importance Settings ---
     get rawImportanceAdvToggleBtn() { return document.getElementById('raw-importance-adv-toggle'); },
     get rawImportanceAdvPanel() { return document.getElementById('raw-importance-adv-panel'); },
+    get useImportanceWrapper() { return document.getElementById('use-importance-wrapper'); },
     get useImportance() { return document.getElementById('use-importance'); },
     get importanceWarning() { return document.getElementById('importance-warning'); },
+    get importanceNegativeWarning() { return document.getElementById('importance-negative-warning'); },
+    get impFileDropZone() { return document.getElementById('imp-file-drop-zone'); },
+    get impFileInput() { return document.getElementById('imp-file-input'); },
+    get impRawToggle() { return document.getElementById('imp-raw-toggle'); },
+    get impRawPanel() { return document.getElementById('imp-raw-panel'); },
     get impGenDist() { return document.getElementById('imp-gen-dist'); },
     get impGenAdvToggle() { return document.getElementById('imp-gen-adv-toggle'); },
     get impGenAdvPanel() { return document.getElementById('imp-gen-adv-panel'); },
@@ -43,6 +51,7 @@ export const elements = {
     get impGenOutlierMult() { return document.getElementById('imp-gen-outlier-mult'); },
     get impGenUniRange() { return document.getElementById('imp-gen-uni-range'); },
     get impGenBtn() { return document.getElementById('imp-gen-btn'); },
+
     get dataTransformToggle() { return document.getElementById('data-transform-toggle'); },
     get dataTransformPanel() { return document.getElementById('data-transform-panel'); },
 
@@ -213,39 +222,63 @@ export function applyPreset(presetId) {
 }
 
 /**
- * Validates the currently loaded importance floats mismatch errors and requirement locking.
+ * Validates importance input data arrays against float blocks, handling lock state and clipping warnings.
  */
-export function validateImportance(floatsLen, impLen) {
+export function validateImportance(floatsLen, impLen, rawText) {
     const qType = elements.qTypeEl.value;
     const quant = registry[qType];
     const impMode = quant ? quant.importance : 'unused';
 
+    const wrapper = elements.useImportanceWrapper;
+
+    // Failsafe 1: Algorithm support check
     if (impMode === 'unused') {
         elements.useImportance.disabled = true;
         elements.useImportance.checked = false;
-        elements.importanceWarning.style.display = 'inline-block';
-        elements.importanceWarning.textContent = 'Not supported by algo';
-        elements.importanceWarning.style.color = 'var(--text-muted)';
+        wrapper.title = "Importance weighting is not supported by this algorithm.";
+        elements.importanceWarning.style.display = 'none';
+        elements.importanceNegativeWarning.style.display = 'none';
         return false;
     }
 
-    if (floatsLen > 0 && impLen > 0 && floatsLen !== impLen) {
+    // Failsafe 2: Empty state / 0 count check (either is 0 or empty)
+    if (floatsLen === 0 || impLen === 0) {
         elements.useImportance.disabled = true;
-        elements.importanceWarning.style.display = 'inline-block';
+        elements.useImportance.checked = false;
+        elements.importanceWarning.style.display = 'block';
+        elements.importanceWarning.textContent = floatsLen === 0 ? "No raw floats provided" : "No importance weights provided";
+        elements.importanceWarning.style.color = 'var(--negative-color)';
+        elements.importanceNegativeWarning.style.display = 'none';
+        wrapper.title = "Please provide both raw floats and importance weights.";
+        return false;
+    }
+
+    // Quick check for negative values
+    let hasNegative = /-\d/.test(rawText);
+
+    // Failsafe 3: Count mismatch check
+    if (floatsLen !== impLen) {
+        elements.useImportance.disabled = true;
+        elements.useImportance.checked = false;
+        elements.importanceWarning.style.display = 'block';
         elements.importanceWarning.textContent = `Mismatch (${floatsLen} vs ${impLen})`;
         elements.importanceWarning.style.color = 'var(--negative-color)';
-        if (impMode === 'needs') {
-            elements.useImportance.checked = false;
-        }
+        elements.importanceNegativeWarning.style.display = 'none';
+        wrapper.title = `Mismatch: ${floatsLen} floats vs ${impLen} importance weights.`;
         return false;
     }
 
+    // If validation passes, unlock the option
     elements.useImportance.disabled = false;
     elements.importanceWarning.style.display = 'none';
+    elements.importanceNegativeWarning.style.display = hasNegative ? 'block' : 'none';
 
     if (impMode === 'needs') {
         elements.useImportance.checked = true;
         elements.useImportance.disabled = true;
+        wrapper.title = "This algorithm requires importance weights.";
+    } else {
+        wrapper.title = "";
     }
 
     return elements.useImportance.checked;
@@ -371,6 +404,7 @@ export function initUIListeners() {
     setupToggle(elements.advToggleBtn, elements.advPanel);
     setupToggle(elements.rawAdvToggleBtn, elements.rawAdvPanel);
     setupToggle(elements.rawImportanceAdvToggleBtn, elements.rawImportanceAdvPanel);
+    setupToggle(elements.impRawToggle, elements.impRawPanel);
     setupToggle(elements.impGenAdvToggle, elements.impGenAdvPanel);
     setupToggle(elements.turboAdvToggle, elements.turboAdvPanel);
     setupToggle(elements.trellisAdvToggle, elements.trellisAdvPanel);
@@ -394,7 +428,7 @@ export function initUIListeners() {
     updateAxisUI();
 
     elements.distEl.addEventListener('change', (e) => {
-        document.querySelectorAll('.dist-params').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.dist-params:not(.imp-dist-params)').forEach(el => el.style.display = 'none');
         const targetParams = document.getElementById(`param-${e.target.value}`);
         if (targetParams) targetParams.style.display = 'flex';
     });

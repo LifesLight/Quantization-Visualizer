@@ -43,27 +43,31 @@
                                 </svg>
                             </button>
                             <div id="gen-adv-panel" class="adv-panel" style="display: none;">
-                                <div id="param-normal" class="dist-params" style="display:flex;">
+                                <div id="param-normal" class="dist-params" style="display:flex; flex-direction:column;">
                                     <label>Standard Deviation</label>
                                     <input type="number" id="gen-std" value="1.0" step="0.1" min="0.1">
                                 </div>
-                                <div id="param-laplace" class="dist-params" style="display:none;">
+                                <div id="param-laplace" class="dist-params"
+                                    style="display:none; flex-direction:column;">
                                     <label>Scale (Diversity)</label>
                                     <input type="number" id="gen-scale" value="1.0" step="0.1" min="0.1">
                                 </div>
-                                <div id="param-bimodal" class="dist-params" style="display:none;">
+                                <div id="param-bimodal" class="dist-params"
+                                    style="display:none; flex-direction:column;">
                                     <label>Peak Distance</label>
                                     <input type="number" id="gen-bimodal-dist" value="4.0" step="0.5">
                                     <label style="margin-top:4px;">Spread (Std Dev)</label>
                                     <input type="number" id="gen-bimodal-spread" value="1.2" step="0.1" min="0.1">
                                 </div>
-                                <div id="param-outliers" class="dist-params" style="display:none;">
+                                <div id="param-outliers" class="dist-params"
+                                    style="display:none; flex-direction:column;">
                                     <label>Outlier Probability</label>
                                     <input type="number" id="gen-outlier-prob" value="0.02" step="0.01" min="0" max="1">
                                     <label style="margin-top:4px;">Outlier Scale Multiplier</label>
                                     <input type="number" id="gen-outlier-mult" value="5.0" step="0.5" min="1.0">
                                 </div>
-                                <div id="param-uniform" class="dist-params" style="display:none;">
+                                <div id="param-uniform" class="dist-params"
+                                    style="display:none; flex-direction:column;">
                                     <label>Range (Spread)</label>
                                     <input type="number" id="gen-uni-range" value="10.0" step="1.0" min="0.1">
                                 </div>
@@ -106,19 +110,44 @@
                             </svg>
                         </button>
                         <div id="raw-importance-adv-panel" class="adv-panel" style="display: none;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                                <div style="display: flex; align-items: center; gap: 6px;">
+
+                            <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 6px;" id="use-importance-wrapper">
                                     <input type="checkbox" id="use-importance"
                                         style="width: auto; margin: 0; cursor: pointer;">
-                                    <label for="use-importance" style="margin: 0; cursor: pointer;">Use
-                                        Importance</label>
+                                    <label for="use-importance"
+                                        style="margin: 0; cursor: pointer; font-weight: bold;">Use Importance</label>
                                 </div>
-                                <span id="importance-warning"
+                                <div id="importance-warning"
                                     style="color: var(--negative-color); font-size: 0.75rem; display: none;">Mismatch
-                                    length</span>
+                                    length</div>
+                                <div id="importance-negative-warning"
+                                    style="color: #eab308; font-size: 0.75rem; display: none;">Negative values were
+                                    clipped to 0</div>
                             </div>
 
-                            <textarea id="float-input-importance" placeholder="e.g. 0.1, 0.05, 0.3, 0.55"></textarea>
+                            <div class="settings-group" style="margin-bottom: 8px;">
+                                <label style="font-size: 0.8rem;">Load Importance from File</label>
+                                <div id="imp-file-drop-zone"
+                                    style="border: 2px dashed var(--border-color, #555); border-radius: 6px; padding: 12px; text-align: center; cursor: pointer; font-size: 0.8em; transition: all 0.2s ease;">
+                                    Click or drop (.txt, .csv)
+                                </div>
+                                <input type="file" id="imp-file-input" accept=".txt,.json,.csv,.xml"
+                                    style="display: none;">
+                            </div>
+
+                            <button id="imp-raw-toggle" class="adv-toggle-btn"
+                                style="margin-bottom: 4px; padding: 4px 0;">
+                                <span>Raw Importance Floats</span>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path d="M7 10l5 5 5-5z" />
+                                </svg>
+                            </button>
+                            <div id="imp-raw-panel" class="adv-panel"
+                                style="display: none; padding: 0; border: none; background: transparent; margin-top: 0;">
+                                <textarea id="float-input-importance"
+                                    placeholder="e.g. 0.1, 0.05, 0.3, 0.55"></textarea>
+                            </div>
 
                             <div class="settings-group" style="margin-top: 8px;">
                                 <label style="font-size: 0.8rem;">Generate Synthetic Importance</label>
@@ -137,22 +166,26 @@
                                         </svg>
                                     </button>
                                     <div id="imp-gen-adv-panel" class="adv-panel" style="display: none;">
-                                        <div id="imp-param-normal" class="imp-dist-params" style="display:none;">
+                                        <div id="imp-param-normal" class="dist-params imp-dist-params"
+                                            style="display:none; flex-direction:column;">
                                             <label>Standard Deviation</label>
                                             <input type="number" id="imp-gen-std" value="1.0" step="0.1" min="0.1">
                                         </div>
-                                        <div id="imp-param-laplace" class="imp-dist-params" style="display:none;">
+                                        <div id="imp-param-laplace" class="dist-params imp-dist-params"
+                                            style="display:none; flex-direction:column;">
                                             <label>Scale (Diversity)</label>
                                             <input type="number" id="imp-gen-scale" value="1.0" step="0.1" min="0.1">
                                         </div>
-                                        <div id="imp-param-bimodal" class="imp-dist-params" style="display:none;">
+                                        <div id="imp-param-bimodal" class="dist-params imp-dist-params"
+                                            style="display:none; flex-direction:column;">
                                             <label>Peak Distance</label>
                                             <input type="number" id="imp-gen-bimodal-dist" value="4.0" step="0.5">
                                             <label style="margin-top:4px;">Spread (Std Dev)</label>
                                             <input type="number" id="imp-gen-bimodal-spread" value="1.2" step="0.1"
                                                 min="0.1">
                                         </div>
-                                        <div id="imp-param-outliers" class="imp-dist-params" style="display:none;">
+                                        <div id="imp-param-outliers" class="dist-params imp-dist-params"
+                                            style="display:none; flex-direction:column;">
                                             <label>Outlier Probability</label>
                                             <input type="number" id="imp-gen-outlier-prob" value="0.02" step="0.01"
                                                 min="0" max="1">
@@ -160,7 +193,8 @@
                                             <input type="number" id="imp-gen-outlier-mult" value="5.0" step="0.5"
                                                 min="1.0">
                                         </div>
-                                        <div id="imp-param-uniform" class="imp-dist-params" style="display:flex;">
+                                        <div id="imp-param-uniform" class="dist-params imp-dist-params"
+                                            style="display:flex; flex-direction:column;">
                                             <label>Range (Spread)</label>
                                             <input type="number" id="imp-gen-uni-range" value="10.0" step="1.0"
                                                 min="0.1">

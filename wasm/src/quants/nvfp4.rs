@@ -64,7 +64,7 @@ pub fn quantize(
     QuantizeOutput {
         q_floats, t_floats: None, t_q_floats: None, bpw,
         formula_html: "<span>Weight = <span class=\"eq-pill\">Global_FP32<span class=\"bits\">32b</span></span> &times; ( <span class=\"eq-pill\">NVFP4_Value<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">FP8_Scale<span class=\"bits\">8b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">NVFP4: 16 weights share one FP8 (E4) scale. All weights share one global FP32 scale.</span>".into(),
-        block_size, super_block_size: floats.len(), meta: QuantMeta::Nvfp4(blocks, global_scale, 0.0, 0.0),
+        block_size, super_block_size: floats.len(), imp_size: block_size, meta: QuantMeta::Nvfp4(blocks, global_scale, 0.0, 0.0),
     }
 }
 

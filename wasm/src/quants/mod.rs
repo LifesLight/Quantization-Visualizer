@@ -58,6 +58,7 @@ pub struct QuantizeOutput {
     pub formula_html: String,
     pub block_size: usize,
     pub super_block_size: usize,
+    pub imp_size: usize,
     pub meta: QuantMeta,
 }
 

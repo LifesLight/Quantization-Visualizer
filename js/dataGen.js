@@ -56,5 +56,5 @@ export function generateImportanceData() {
         dist, count, uniRange, lapScale, bimDist, bimSpread, outProb, outMult, normStd
     );
 
-    elements.inputImportanceEl.value = resultStr;
+    elements.inputImportanceEl.value = resultStr.split(', ').map(x => Math.abs(parseFloat(x)).toFixed(5)).join(', ');
 }

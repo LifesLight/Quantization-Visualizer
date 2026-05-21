@@ -109,7 +109,7 @@ pub fn quantize(
     QuantizeOutput {
         q_floats, t_floats, t_q_floats, bpw,
         formula_html: format!("<span>Weight = {}[ ( <span class=\"eq-pill\">LloydMax<span class=\"bits\">{}b</span></span> &times; <span class=\"eq-pill\">RMS_Scale<span class=\"bits\">16b</span></span> ){} ]</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Every {} weights share one FP16 RMS scale. {}</span>", if use_wht { "<span class=\"eq-pill\" title=\"Diagonal Random Sign Array\">D</span> &times; <span class=\"eq-pill\" title=\"Orthogonal Fast Walsh-Hadamard Transform\">FWHT</span> &times; " } else { "" }, t_bits, if use_qjl { " + <span class=\"eq-pill\">QJL_1bit<span class=\"bits\">1b</span></span>" } else { "" }, t_bsize, if use_wht && use_qjl { "SRHT forces Gaussian distribution; QJL adds 1-bit bias correction." } else if use_wht { "SRHT rotates features into a Gaussian distribution." } else if use_qjl { "QJL adds 1-bit bias correction to raw values." } else { "Applying static Lloyd-Max to raw distribution." }),
-        block_size: t_bsize, super_block_size: 0, meta: QuantMeta::Turbo(blocks),
+        block_size: t_bsize, super_block_size: 0, imp_size: t_bsize, meta: QuantMeta::Turbo(blocks),
     }
 }
 
