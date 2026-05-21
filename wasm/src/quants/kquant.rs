@@ -1,10 +1,12 @@
 use crate::math_utils::*;
-use crate::quants::{ImportanceResult, InspectorData, KBlockMeta, KSuperMeta, QuantMeta, QuantizeOutput, Settings};
+use crate::quants::{
+    ImportanceResult, InspectorData, KBlockMeta, KSuperMeta, QuantMeta, QuantizeOutput, Settings,
+};
 
 /// Replicates the GGUF `K-Quant` hierarchical (super-block & sub-block) scale aggregation logic.
 pub fn quantize(
     floats: &[f32],
-    _importance: Option<&ImportanceResult>,
+    importance: Option<&ImportanceResult>,
     settings: &Settings,
 ) -> QuantizeOutput {
     let (weight_bits, sb_size, sub_size, sub_bits, has_offset) = (
@@ -46,17 +48,105 @@ pub fn quantize(
                         min = v;
                     }
                 }
-                sub_scales.push(if (max - min) / qmax_weight == 0.0 {
+                let mut best_scale = if (max - min) / qmax_weight == 0.0 {
                     1e-5
                 } else {
                     (max - min) / qmax_weight
-                });
-                sub_mins.push(min);
+                };
+                let mut best_min = min;
+
+                // local subblock refinement using element-level importance weights
+                if let Some(imp) = importance {
+                    let mut min_err = f64::INFINITY;
+                    let range = max - min;
+                    for k_s in 0..=10 {
+                        let factor_s = 0.5 + 0.1 * (k_s as f32);
+                        let s_cand = (best_scale * factor_s).max(1e-5);
+                        for j_m in 0..=10 {
+                            let factor_m = -0.2 + 0.04 * (j_m as f32);
+                            let m_cand = (best_min + range * factor_m).min(0.0);
+
+                            let mut err = 0.0_f64;
+                            for (l, &v) in chunk.iter().enumerate() {
+                                let w = imp.raw[s + i + l] as f64;
+                                let q =
+                                    ((v - m_cand) / s_cand).round().clamp(0.0, qmax_weight) as f64;
+                                let diff = (v as f64) - (q * (s_cand as f64) + (m_cand as f64));
+                                err += w * diff * diff;
+                            }
+                            if err < min_err {
+                                min_err = err;
+                                best_scale = s_cand;
+                                best_min = m_cand;
+                            }
+                        }
+                    }
+                }
+
+                sub_scales.push(best_scale);
+                sub_mins.push(best_min);
             }
-            super_scale =
+
+            // aggregate subblock weights
+            let mut sub_weights = None;
+            if let Some(imp) = importance {
+                let mut w_list = Vec::new();
+                for i in (0..super_chunk_len).step_by(sub_size) {
+                    let chunk_len = (super_chunk_len - i).min(sub_size);
+                    let mut w_sum = 0.0_f32;
+                    for l in 0..chunk_len {
+                        w_sum += imp.raw[s + i + l];
+                    }
+                    w_list.push(w_sum.max(1e-5));
+                }
+                sub_weights = Some(w_list);
+            }
+
+            // search for optimal super_scale
+            let mut best_super_scale =
                 fp16(sub_scales.iter().cloned().fold(0.0_f32, f32::max) / qmax_sub).max(1e-5);
-            super_min_scale =
+            if let Some(ref w) = sub_weights {
+                let mut min_err = f64::INFINITY;
+                let base_sc = best_super_scale;
+                for k_sc in 0..=50 {
+                    let factor = 0.5 + 0.02 * (k_sc as f32);
+                    let sc_cand = fp16(base_sc * factor).max(1e-5);
+                    let mut err = 0.0_f64;
+                    for (j, &s_val) in sub_scales.iter().enumerate() {
+                        let q = ((s_val / sc_cand).round()).clamp(0.0, qmax_sub);
+                        let diff = (s_val - q * sc_cand) as f64;
+                        err += (w[j] as f64) * diff * diff;
+                    }
+                    if err < min_err {
+                        min_err = err;
+                        best_super_scale = sc_cand;
+                    }
+                }
+            }
+            super_scale = best_super_scale;
+
+            // search for optimal super_min_scale
+            let mut best_super_min_scale =
                 fp16(sub_mins.iter().map(|&x| -x).fold(0.0_f32, f32::max) / qmax_sub).max(1e-5);
+            if let Some(ref w) = sub_weights {
+                let mut min_err = f64::INFINITY;
+                let base_sm = best_super_min_scale;
+                for k_sm in 0..=50 {
+                    let factor = 0.5 + 0.02 * (k_sm as f32);
+                    let sm_cand = fp16(base_sm * factor).max(1e-5);
+                    let mut err = 0.0_f64;
+                    for (j, &m_val) in sub_mins.iter().enumerate() {
+                        let q = (((-m_val) / sm_cand).round()).clamp(0.0, qmax_sub);
+                        let diff = ((-m_val) - q * sm_cand) as f64;
+                        err += (w[j] as f64) * diff * diff;
+                    }
+                    if err < min_err {
+                        min_err = err;
+                        best_super_min_scale = sm_cand;
+                    }
+                }
+            }
+            super_min_scale = best_super_min_scale;
 
             for k in 0..sub_scales.len() {
                 q_sub_scales.push(
@@ -91,14 +181,80 @@ pub fn quantize(
                         max_abs = v.abs();
                     }
                 }
-                sub_scales.push(if weight_bits == 1 {
+                let mut best_scale = if weight_bits == 1 {
                     max_abs.max(1e-5)
                 } else {
                     (max_abs / (max_q - 1.0)).max(1e-5)
-                });
+                };
+
+                // local subblock refinement using element-level importance weights
+                if let Some(imp) = importance {
+                    let mut min_err = f64::INFINITY;
+                    for k_s in 0..=10 {
+                        let factor_s = 0.5 + 0.1 * (k_s as f32);
+                        let s_cand = (best_scale * factor_s).max(1e-5);
+
+                        let mut err = 0.0_f64;
+                        for (l, &v) in chunk.iter().enumerate() {
+                            let w = imp.raw[s + i + l] as f64;
+                            let diff = if weight_bits == 1 {
+                                let q = if v >= 0.0 { 1.0 } else { -1.0 };
+                                (v as f64) - (q * (s_cand as f64))
+                            } else {
+                                let q =
+                                    (v / s_cand + max_q).round().clamp(0.0, (max_q * 2.0) - 1.0);
+                                (v as f64) - ((q - max_q) as f64 * (s_cand as f64))
+                            };
+                            err += w * diff * diff;
+                        }
+                        if err < min_err {
+                            min_err = err;
+                            best_scale = s_cand;
+                        }
+                    }
+                }
+
+                sub_scales.push(best_scale);
             }
-            super_scale =
+
+            // aggregate subblock weights
+            let mut sub_weights = None;
+            if let Some(imp) = importance {
+                let mut w_list = Vec::new();
+                for i in (0..super_chunk_len).step_by(sub_size) {
+                    let chunk_len = (super_chunk_len - i).min(sub_size);
+                    let mut w_sum = 0.0_f32;
+                    for l in 0..chunk_len {
+                        w_sum += imp.raw[s + i + l];
+                    }
+                    w_list.push(w_sum.max(1e-5));
+                }
+                sub_weights = Some(w_list);
+            }
+
+            // search for optimal super_scale
+            let mut best_super_scale =
                 fp16(sub_scales.iter().cloned().fold(0.0_f32, f32::max) / qmax_sub).max(1e-5);
+            if let Some(ref w) = sub_weights {
+                let mut min_err = f64::INFINITY;
+                let base_sc = best_super_scale;
+                for k_sc in 0..=50 {
+                    let factor = 0.5 + 0.02 * (k_sc as f32);
+                    let sc_cand = fp16(base_sc * factor).max(1e-5);
+                    let mut err = 0.0_f64;
+                    for (j, &s_val) in sub_scales.iter().enumerate() {
+                        let q = ((s_val / sc_cand).round()).clamp(0.0, qmax_sub);
+                        let diff = (s_val - q * sc_cand) as f64;
+                        err += (w[j] as f64) * diff * diff;
+                    }
+                    if err < min_err {
+                        min_err = err;
+                        best_super_scale = sc_cand;
+                    }
+                }
+            }
+            super_scale = best_super_scale;
+
             for k in 0..sub_scales.len() {
                 q_sub_scales.push(
                     ((sub_scales[k] / super_scale).round()).clamp(0.0, qmax_sub) * super_scale,
