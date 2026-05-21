@@ -1,10 +1,10 @@
 use crate::math_utils::*;
-use crate::quants::{AsymBlockMeta, InspectorData, QuantMeta, QuantizeOutput, Settings};
+use crate::quants::{AsymBlockMeta, ImportanceResult, InspectorData, QuantMeta, QuantizeOutput, Settings};
 
 /// Applies asymmetrical block quantization (includes both scale and offset limits).
 pub fn quantize(
     floats: &[f32],
-    _importance: Option<&[f32]>,
+    _importance: Option<&ImportanceResult>,
     settings: &Settings,
 ) -> QuantizeOutput {
     let weight_bits = settings.weight_bits;
@@ -60,7 +60,7 @@ pub fn quantize(
     QuantizeOutput {
         q_floats, t_floats: None, t_q_floats: None, bpw,
         formula_html: format!("<span>Weight = <span class=\"eq-pill\">Q_Weight<span class=\"bits\">{}b</span></span> &times; <span class=\"eq-pill\">Scale<span class=\"bits\">16b</span></span> + <span class=\"eq-pill\">Min<span class=\"bits\">16b</span></span></span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Every {} weights share one FP16 scale and one FP16 offset.</span>", weight_bits, block_size),
-        block_size, super_block_size: 0, imp_size: block_size, meta: QuantMeta::Asym(blocks),
+        block_size, super_block_size: 0, meta: QuantMeta::Asym(blocks),
     }
 }
 

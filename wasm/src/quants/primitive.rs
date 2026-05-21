@@ -1,10 +1,10 @@
 use crate::math_utils::*;
-use crate::quants::{InspectorData, QuantMeta, QuantizeOutput, Settings};
+use crate::quants::{ImportanceResult, InspectorData, QuantMeta, QuantizeOutput, Settings};
 
 /// Applies baseline data-type truncations mirroring industry primitive sizes.
 pub fn quantize(
     floats: &[f32],
-    _importance: Option<&[f32]>,
+    _importance: Option<&ImportanceResult>,
     settings: &Settings,
 ) -> QuantizeOutput {
     let (bpw, format_name) = match settings.primitive_format.as_str() {
@@ -33,7 +33,6 @@ pub fn quantize(
         formula_html: format!("Weights in {} precision.", format_name),
         block_size: 0,
         super_block_size: 0,
-        imp_size: 0, // 0 signifies Global
         meta: QuantMeta::Primitive,
     }
 }

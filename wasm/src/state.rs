@@ -62,6 +62,9 @@ pub struct AppBackend {
     raw_importance: Vec<f32>,
     base_importance: Vec<f32>,
     active_importance: Vec<f32>,
+    active_importance_intensity: Vec<f32>,
+    imp_block_stats: Vec<ImpBlockStat>,
+    imp_block_size: usize,
 
     last_output: Option<QuantizeOutput>,
     clip_start: usize,
@@ -88,6 +91,9 @@ impl AppBackend {
             raw_importance: vec![],
             base_importance: vec![],
             active_importance: vec![],
+            active_importance_intensity: vec![],
+            imp_block_stats: vec![],
+            imp_block_size: 0,
 
             last_output: None,
             clip_start: 0,
@@ -177,9 +183,53 @@ impl AppBackend {
         self.best_range_cache = None;
     }
 
+    fn prepare_importance(&mut self, imp_block_size: usize) {
+        let n = self.active_importance.len();
+        if n == 0 {
+            return;
+        }
+
+        let b_size = if imp_block_size == 0 {
+            n
+        } else {
+            imp_block_size
+        };
+        self.imp_block_size = b_size;
+
+        self.active_importance_intensity.resize(n, 0.0);
+        let num_blocks = (n + b_size - 1) / b_size;
+        self.imp_block_stats.clear();
+        self.imp_block_stats.reserve(num_blocks);
+
+        for i in (0..n).step_by(b_size) {
+            let chunk_len = (n - i).min(b_size);
+            let chunk = &self.active_importance[i..i + chunk_len];
+
+            let mut max = 0.0_f32;
+            let mut sum = 0.0_f32;
+            for &v in chunk {
+                if v > max {
+                    max = v;
+                }
+                sum += v;
+            }
+            self.imp_block_stats.push(ImpBlockStat { sum, max });
+
+            for j in 0..chunk_len {
+                self.active_importance_intensity[i + j] =
+                    if max > 0.0 { chunk[j] / max } else { 0.0 };
+            }
+        }
+    }
+
     /// Primary entry point that dynamically routes and triggers specific algorithm quantization.
     pub fn quantize(&mut self, settings_js: JsValue) -> JsValue {
         let settings: Settings = serde_wasm_bindgen::from_value(settings_js).unwrap();
+
+        let imp_block_size = get_importance_block_size(&settings.q_type, &settings);
+        if settings.use_importance && self.active_importance.len() == self.active_floats.len() {
+            self.prepare_importance(imp_block_size);
+        }
 
         let mut has_importance = false;
         let mut weighted_mse = 0.0;
@@ -189,21 +239,28 @@ impl AppBackend {
             && self.active_importance.len() == self.active_floats.len()
         {
             has_importance = true;
-            Some(self.active_importance.as_slice())
+            Some(ImportanceResult {
+                raw: &self.active_importance,
+                intensity: &self.active_importance_intensity,
+                block_stats: &self.imp_block_stats,
+                block_size: self.imp_block_size,
+            })
         } else {
             None
         };
 
         let output = match settings.q_type.as_str() {
-            "primitive" => primitive::quantize(&self.active_floats, importance_opt, &settings),
-            "sym" => sym::quantize(&self.active_floats, importance_opt, &settings),
-            "asym" => asym::quantize(&self.active_floats, importance_opt, &settings),
-            "kquant" => kquant::quantize(&self.active_floats, importance_opt, &settings),
-            "nvfp4" => nvfp4::quantize(&self.active_floats, importance_opt, &settings),
-            "mxfp" => mxfp::quantize(&self.active_floats, importance_opt, &settings),
-            "turbo" => turbo::quantize(&self.active_floats, importance_opt, &settings),
-            "trellis" => trellis::quantize(&self.active_floats, importance_opt, &settings),
-            _ => primitive::quantize(&self.active_floats, importance_opt, &settings),
+            "primitive" => {
+                primitive::quantize(&self.active_floats, importance_opt.as_ref(), &settings)
+            }
+            "sym" => sym::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            "asym" => asym::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            "kquant" => kquant::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            "nvfp4" => nvfp4::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            "mxfp" => mxfp::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            "turbo" => turbo::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            "trellis" => trellis::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            _ => primitive::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
         };
 
         let (global_mse, global_mae) = get_err_stats(&self.active_floats, &output.q_floats);
@@ -250,7 +307,11 @@ impl AppBackend {
             has_importance,
             weighted_mse,
             weighted_mae,
-            imp_block_size: output.imp_size,
+            imp_block_size: if has_importance {
+                self.imp_block_size
+            } else {
+                0
+            },
         };
 
         self.last_output = Some(output);
@@ -589,6 +650,9 @@ impl AppBackend {
     pub fn get_active_importance_ptr(&self) -> *const f32 {
         self.active_importance.as_ptr()
     }
+    pub fn get_active_importance_intensity_ptr(&self) -> *const f32 {
+        self.active_importance_intensity.as_ptr()
+    }
     pub fn get_base_importance_ptr(&self) -> *const f32 {
         self.base_importance.as_ptr()
     }
@@ -637,7 +701,22 @@ impl AppBackend {
                 _ => primitive::format_inspector(idx, &self.active_floats, out, &settings),
             };
             if settings.use_importance && self.active_importance.len() == self.active_floats.len() {
-                data.importance = Some(self.active_importance[idx]);
+                let b_size = self.imp_block_size;
+                let b_idx = idx / b_size;
+                if let Some(stats) = self.imp_block_stats.get(b_idx) {
+                    let raw = self.active_importance[idx];
+                    data.importance_raw = Some(raw);
+                    data.importance_pct_sum = Some(if stats.sum > 0.0 {
+                        (raw / stats.sum) * 100.0
+                    } else {
+                        0.0
+                    });
+                    data.importance_pct_max = Some(if stats.max > 0.0 {
+                        (raw / stats.max) * 100.0
+                    } else {
+                        0.0
+                    });
+                }
             }
             serde_wasm_bindgen::to_value(&data).unwrap()
         } else {

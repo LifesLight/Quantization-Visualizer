@@ -11,8 +11,21 @@ pub mod turbo;
 
 use serde::{Deserialize, Serialize};
 
+pub struct ImportanceResult<'a> {
+    pub raw: &'a [f32],
+    pub intensity: &'a [f32],
+    pub block_stats: &'a [ImpBlockStat],
+    pub block_size: usize,
+}
+
+#[derive(Clone, Copy)]
+pub struct ImpBlockStat {
+    pub sum: f32,
+    pub max: f32,
+}
+
 /// Identical functional signatures enforced across all quantizer algorithms.
-pub type QuantizeFn = fn(&[f32], Option<&[f32]>, &Settings) -> QuantizeOutput;
+pub type QuantizeFn = fn(&[f32], Option<&ImportanceResult>, &Settings) -> QuantizeOutput;
 pub type FormatInspectorFn = fn(usize, &[f32], &QuantizeOutput, &Settings) -> InspectorData;
 
 /// Global quantization settings payload passed directly from the JavaScript frontend.
@@ -49,6 +62,14 @@ pub struct Settings {
     pub use_importance: bool,
 }
 
+// Specify importance normalization for quants
+pub fn get_importance_block_size(q_type: &str, settings: &Settings) -> usize {
+    match q_type {
+        "kquant" => settings.sub_size,
+        _ => 0,
+    }
+}
+
 /// The standardized output containing the quantized data arrays and computed stats.
 pub struct QuantizeOutput {
     pub q_floats: Vec<f32>,
@@ -58,7 +79,6 @@ pub struct QuantizeOutput {
     pub formula_html: String,
     pub block_size: usize,
     pub super_block_size: usize,
-    pub imp_size: usize,
     pub meta: QuantMeta,
 }
 
@@ -95,7 +115,9 @@ pub struct InspectorData {
     pub global_mse: Option<f64>,
     pub global_mae: Option<f64>,
     pub trellis_json: Option<String>,
-    pub importance: Option<f32>,
+    pub importance_raw: Option<f32>,
+    pub importance_pct_sum: Option<f32>,
+    pub importance_pct_max: Option<f32>,
 }
 
 // Below are the specific metadata block structs for various algorithms.
