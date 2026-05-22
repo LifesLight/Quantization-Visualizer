@@ -16,11 +16,11 @@ pub struct QuantStats {
     pub global_variance: f64,
     pub global_sum_abs: f64,
     pub max_error: f64,
+    pub global_cosine_similarity: f64,
     pub has_importance: bool,
     pub weighted_mse: f64,
-    pub weighted_mae: f64,
     pub weighted_snr: f64,
-    pub max_weighted_error: f64,
+    pub weighted_cosine_similarity: f64,
     pub imp_block_size: usize,
 }
 
@@ -244,9 +244,8 @@ impl AppBackend {
 
         let mut has_importance = false;
         let mut weighted_mse = 0.0;
-        let mut weighted_mae = 0.0;
         let mut weighted_snr = f64::INFINITY;
-        let mut max_weighted_error = 0.0;
+        let mut weighted_cosine_similarity = 0.0;
 
         let importance_opt = if settings.use_importance
             && self.active_importance.len() == self.active_floats.len()
@@ -280,6 +279,8 @@ impl AppBackend {
         let mut sig_power = 0.0_f64;
         let mut sum_abs = 0.0_f64;
         let mut max_error = 0.0_f64;
+        let mut q_power = 0.0_f64;
+        let mut dot_prod = 0.0_f64;
 
         for i in 0..self.active_floats.len() {
             let vf = self.active_floats[i] as f64;
@@ -290,6 +291,8 @@ impl AppBackend {
             if err > max_error {
                 max_error = err;
             }
+            q_power += qf * qf;
+            dot_prod += vf * qf;
         }
 
         let global_variance = if self.active_floats.is_empty() {
@@ -298,35 +301,40 @@ impl AppBackend {
             sig_power / self.active_floats.len() as f64
         };
 
+        let norm_denom = (sig_power * q_power).sqrt();
+        let global_cosine_similarity = if norm_denom > 1e-12 {
+            dot_prod / norm_denom
+        } else {
+            0.0
+        };
+
         if has_importance {
             let mut w_mse = 0.0;
-            let mut w_mae = 0.0;
             let mut w_sum = 0.0;
             let mut w_sig_power = 0.0;
+            let mut w_q_power = 0.0;
+            let mut w_dot = 0.0;
             for i in 0..self.active_floats.len() {
-                let diff = (self.active_floats[i] - output.q_floats[i]) as f64;
-                let w = self.active_importance[i] as f64;
                 let val = self.active_floats[i] as f64;
+                let q_val = output.q_floats[i] as f64;
+                let diff = val - q_val;
+                let w = self.active_importance[i] as f64;
 
-                let err_sq = diff * diff;
-                let w_err_sq = err_sq * w;
-                let w_err_abs = diff.abs() * w;
-
-                if w_err_abs > max_weighted_error {
-                    max_weighted_error = w_err_abs;
-                }
-
-                w_mse += w_err_sq;
-                w_mae += w_err_abs;
+                w_mse += diff * diff * w;
                 w_sig_power += w * val * val;
+                w_q_power += w * q_val * q_val;
+                w_dot += w * val * q_val;
                 w_sum += w;
             }
             if w_sum > 1e-12 {
                 weighted_mse = w_mse / w_sum;
-                weighted_mae = w_mae / w_sum;
                 let weighted_variance = w_sig_power / w_sum;
                 if weighted_mse > 0.0 {
                     weighted_snr = 10.0 * (weighted_variance / weighted_mse).log10();
+                }
+                let norm_denom = (w_sig_power * w_q_power).sqrt();
+                if norm_denom > 1e-12 {
+                    weighted_cosine_similarity = w_dot / norm_denom;
                 }
             }
         }
@@ -342,11 +350,11 @@ impl AppBackend {
             global_variance,
             global_sum_abs: sum_abs,
             max_error,
+            global_cosine_similarity,
             has_importance,
             weighted_mse,
-            weighted_mae,
             weighted_snr,
-            max_weighted_error,
+            weighted_cosine_similarity,
             imp_block_size: if has_importance {
                 self.imp_block_size
             } else {

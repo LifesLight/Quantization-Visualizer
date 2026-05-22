@@ -143,7 +143,7 @@ export function render(opts = {}) {
     const sqnr = (stats.global_mse === 0 || stats.global_variance === 0) ? Infinity : 10 * Math.log10(stats.global_variance / stats.global_mse);
     const relError = stats.global_sum_abs === 0 ? 0 : ((stats.global_mae * actLen) / stats.global_sum_abs) * 100;
 
-    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nGlobal MAE: ${stats.global_mae.toFixed(6)}\nMax Error : ${stats.max_error.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
+    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nCosine Sim: ${stats.global_cosine_similarity.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nMax Error : ${stats.max_error.toFixed(6)}\nRel. Error: ${relError.toFixed(2)}%`;
     elements.quantStats.textContent = statsText;
 
     if (stats.has_importance) {
@@ -152,7 +152,7 @@ export function render(opts = {}) {
 
         const wSqnr = stats.weighted_snr === null || stats.weighted_snr === Infinity ? '∞' : stats.weighted_snr.toFixed(2);
 
-        let impStatsText = `Weighted MSE: ${stats.weighted_mse.toFixed(6)}\nWeighted MAE: ${stats.weighted_mae.toFixed(6)}\nW-SQNR      : ${wSqnr} dB\nMax W-Error : ${stats.max_weighted_error.toFixed(6)}`;
+        let impStatsText = `Weighted MSE: ${stats.weighted_mse.toFixed(6)}\nW-SQNR      : ${wSqnr} dB\nW-Cosine Sim: ${stats.weighted_cosine_similarity.toFixed(6)}`;
         elements.importanceStats.textContent = impStatsText;
     } else {
         elements.importanceStatsGroup.style.display = 'none';
