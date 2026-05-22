@@ -83,8 +83,7 @@
 
                     <div class="settings-group" style="margin-top: 10px;">
                         <label>Load Data from File</label>
-                        <div id="file-drop-zone"
-                            style="border: 2px dashed var(--border-color, #555); border-radius: 6px; padding: 16px; text-align: center; cursor: pointer; font-size: 0.9em; transition: all 0.2s ease;">
+                        <div id="file-drop-zone" class="file-drop-zone">
                             Click or drop (.txt, .json, .csv)
                         </div>
                         <input type="file" id="file-input" accept=".txt,.json,.csv,.xml" style="display: none;">
@@ -128,8 +127,8 @@
 
                             <div class="settings-group" style="margin-bottom: 8px;">
                                 <label style="font-size: 0.8rem;">Load Importance from File</label>
-                                <div id="imp-file-drop-zone"
-                                    style="border: 2px dashed var(--border-color, #555); border-radius: 6px; padding: 12px; text-align: center; cursor: pointer; font-size: 0.8em; transition: all 0.2s ease;">
+                                <div id="imp-file-drop-zone" class="file-drop-zone"
+                                    style="padding: 12px; font-size: 0.8em;">
                                     Click or drop (.txt, .csv)
                                 </div>
                                 <input type="file" id="imp-file-input" accept=".txt,.json,.csv,.xml"
@@ -655,7 +654,11 @@
                         </div>
                     </div>
 
-                    <div class="settings-group" style="margin-top: auto;">
+                    <div class="settings-group" id="importance-stats-group" style="display: none; margin-top: auto;">
+                        <label>Importance Stats</label>
+                        <div class="stats-box" id="importance-stats">Waiting...</div>
+                    </div>
+                    <div class="settings-group" id="global-stats-group" style="margin-top: auto;">
                         <label>Global Stats</label>
                         <div class="stats-box" id="quant-stats">Waiting...</div>
                     </div>
@@ -669,8 +672,7 @@
     </div>
 
     <!-- Modals -->
-    <div id="about-modal"
-        style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div id="about-modal" class="modal-overlay">
         <div class="panel modal-panel" style="max-width: 500px; text-align: left; position: relative;">
             <div
                 style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
@@ -708,8 +710,7 @@
         </div>
     </div>
 
-    <div id="large-data-modal"
-        style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div id="large-data-modal" class="modal-overlay">
         <div class="panel modal-panel">
             <h3 style="margin-top:0;">Performance Warning</h3>
             <p style="font-size: 0.95rem; line-height: 1.4; color: var(--text-muted);">Selecting more than 1.048.576

@@ -1,10 +1,12 @@
 use crate::math_utils::*;
-use crate::quants::{AsymBlockMeta, ImportanceResult, InspectorData, QuantMeta, QuantizeOutput, Settings};
+use crate::quants::{
+    AsymBlockMeta, ImportanceResult, InspectorData, QuantMeta, QuantizeOutput, Settings,
+};
 
 /// Applies asymmetrical block quantization (includes both scale and offset limits).
 pub fn quantize(
     floats: &[f32],
-    _importance: Option<&ImportanceResult>,
+    importance: Option<&ImportanceResult>,
     settings: &Settings,
 ) -> QuantizeOutput {
     let weight_bits = settings.weight_bits;
@@ -30,11 +32,22 @@ pub fn quantize(
             }
         }
 
-        let mut scale = fp16((max - min) / ((1 << weight_bits) as f32 - 1.0));
-        if scale == 0.0 {
-            scale = 1e-5;
+        let mut best_scale = (max - min) / ((1 << weight_bits) as f32 - 1.0);
+        if best_scale == 0.0 {
+            best_scale = 1e-5;
         }
-        let offset = fp16(min);
+        let mut best_min = min;
+
+        if let Some(imp) = importance {
+            let imp_weights = &imp.raw[i..i + chunk_len];
+            let (new_scale, new_min) =
+                refine_asym_scale_offset(chunk, imp_weights, best_scale, best_min, weight_bits);
+            best_scale = new_scale;
+            best_min = new_min;
+        }
+
+        let scale = fp16(best_scale);
+        let offset = fp16(best_min);
 
         let mut chunk_q = vec![0.0; chunk_len];
         for j in 0..chunk_len {

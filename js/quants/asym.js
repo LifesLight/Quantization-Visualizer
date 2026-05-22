@@ -1,6 +1,6 @@
 export default {
     id: 'asym',
-    importance: 'unused',
+    importance: 'optional',
     setupUI(ui) {
         ui.showBlockSettings(true);
         ui.showKQuantSettings(false);

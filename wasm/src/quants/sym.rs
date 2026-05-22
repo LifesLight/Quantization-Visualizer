@@ -1,10 +1,12 @@
 use crate::math_utils::*;
-use crate::quants::{ImportanceResult, InspectorData, QuantMeta, QuantizeOutput, Settings, SymBlockMeta};
+use crate::quants::{
+    ImportanceResult, InspectorData, QuantMeta, QuantizeOutput, Settings, SymBlockMeta,
+};
 
 /// Applies standard symmetrical block quantization (e.g., NF4-style or INT8).
 pub fn quantize(
     floats: &[f32],
-    _importance: Option<&ImportanceResult>,
+    importance: Option<&ImportanceResult>,
     settings: &Settings,
 ) -> QuantizeOutput {
     let weight_bits = settings.weight_bits;
@@ -29,7 +31,12 @@ pub fn quantize(
                     max_abs = v.abs();
                 }
             }
-            scale = fp16(if max_abs == 0.0 { 1e-5 } else { max_abs });
+            let mut best_scale = if max_abs == 0.0 { 1e-5 } else { max_abs };
+            if let Some(imp) = importance {
+                let imp_weights = &imp.raw[i..i + chunk_len];
+                best_scale = refine_sym_scale(chunk, imp_weights, best_scale, weight_bits);
+            }
+            scale = fp16(best_scale);
             for j in 0..chunk_len {
                 let q_val = if chunk[j] >= 0.0 { 1.0 } else { -1.0 } * scale;
                 chunk_q[j] = q_val;
@@ -43,11 +50,16 @@ pub fn quantize(
                     max_val = v;
                 }
             }
-            scale = fp16(if (max_val / -max_q) == 0.0 {
+            let mut best_scale = if (max_val / -max_q) == 0.0 {
                 1e-5
             } else {
                 max_val / -max_q
-            });
+            };
+            if let Some(imp) = importance {
+                let imp_weights = &imp.raw[i..i + chunk_len];
+                best_scale = refine_sym_scale(chunk, imp_weights, best_scale, weight_bits);
+            }
+            scale = fp16(best_scale);
             for j in 0..chunk_len {
                 let q = ((chunk[j] / scale + max_q).round()).clamp(0.0, (max_q * 2.0) - 1.0);
                 let q_val = (q - max_q) * scale;

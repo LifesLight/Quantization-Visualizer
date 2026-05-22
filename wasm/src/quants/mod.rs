@@ -66,6 +66,7 @@ pub struct Settings {
 pub fn get_importance_block_size(q_type: &str, settings: &Settings) -> usize {
     match q_type {
         "kquant" => settings.sub_size,
+        "sym" | "asym" => settings.block_size,
         _ => 0,
     }
 }

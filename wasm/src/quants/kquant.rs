@@ -57,30 +57,16 @@ pub fn quantize(
 
                 // local subblock refinement using element-level importance weights
                 if let Some(imp) = importance {
-                    let mut min_err = f64::INFINITY;
-                    let range = max - min;
-                    for k_s in 0..=10 {
-                        let factor_s = 0.5 + 0.1 * (k_s as f32);
-                        let s_cand = (best_scale * factor_s).max(1e-5);
-                        for j_m in 0..=10 {
-                            let factor_m = -0.2 + 0.04 * (j_m as f32);
-                            let m_cand = (best_min + range * factor_m).min(0.0);
-
-                            let mut err = 0.0_f64;
-                            for (l, &v) in chunk.iter().enumerate() {
-                                let w = imp.raw[s + i + l] as f64;
-                                let q =
-                                    ((v - m_cand) / s_cand).round().clamp(0.0, qmax_weight) as f64;
-                                let diff = (v as f64) - (q * (s_cand as f64) + (m_cand as f64));
-                                err += w * diff * diff;
-                            }
-                            if err < min_err {
-                                min_err = err;
-                                best_scale = s_cand;
-                                best_min = m_cand;
-                            }
-                        }
-                    }
+                    let imp_weights = &imp.raw[s + i..s + i + chunk.len()];
+                    let (new_scale, new_min) = refine_asym_scale_offset(
+                        chunk,
+                        imp_weights,
+                        best_scale,
+                        best_min,
+                        weight_bits,
+                    );
+                    best_scale = new_scale;
+                    best_min = new_min;
                 }
 
                 sub_scales.push(best_scale);
@@ -189,29 +175,8 @@ pub fn quantize(
 
                 // local subblock refinement using element-level importance weights
                 if let Some(imp) = importance {
-                    let mut min_err = f64::INFINITY;
-                    for k_s in 0..=10 {
-                        let factor_s = 0.5 + 0.1 * (k_s as f32);
-                        let s_cand = (best_scale * factor_s).max(1e-5);
-
-                        let mut err = 0.0_f64;
-                        for (l, &v) in chunk.iter().enumerate() {
-                            let w = imp.raw[s + i + l] as f64;
-                            let diff = if weight_bits == 1 {
-                                let q = if v >= 0.0 { 1.0 } else { -1.0 };
-                                (v as f64) - (q * (s_cand as f64))
-                            } else {
-                                let q =
-                                    (v / s_cand + max_q).round().clamp(0.0, (max_q * 2.0) - 1.0);
-                                (v as f64) - ((q - max_q) as f64 * (s_cand as f64))
-                            };
-                            err += w * diff * diff;
-                        }
-                        if err < min_err {
-                            min_err = err;
-                            best_scale = s_cand;
-                        }
-                    }
+                    let imp_weights = &imp.raw[s + i..s + i + chunk.len()];
+                    best_scale = refine_sym_scale(chunk, imp_weights, best_scale, weight_bits);
                 }
 
                 sub_scales.push(best_scale);

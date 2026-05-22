@@ -106,6 +106,9 @@ export function render(opts = {}) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
         elements.quantStats.textContent = "Waiting...";
+        elements.importanceStats.textContent = "Waiting...";
+        elements.importanceStatsGroup.style.display = 'none';
+        elements.globalStatsGroup.style.marginTop = 'auto';
         elements.chartMaxLbl.textContent = "Max: 0";
         elements.chartMinLbl.textContent = "Min: 0";
         elements.formulaBox.innerHTML = "";
@@ -140,12 +143,22 @@ export function render(opts = {}) {
     const sqnr = (stats.global_mse === 0 || stats.global_variance === 0) ? Infinity : 10 * Math.log10(stats.global_variance / stats.global_mse);
     const relError = stats.global_sum_abs === 0 ? 0 : ((stats.global_mae * actLen) / stats.global_sum_abs) * 100;
 
-    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
+    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nGlobal MAE: ${stats.global_mae.toFixed(6)}\nMax Error : ${stats.max_error.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nRel. Error: ${relError.toFixed(2)}%`;
+    elements.quantStats.textContent = statsText;
+
     if (stats.has_importance) {
-        statsText = `[Importance Enabled]\nWeighted MSE: ${stats.weighted_mse.toFixed(6)}\nWeighted MAE: ${stats.weighted_mae.toFixed(6)}\n\n` + statsText;
+        elements.importanceStatsGroup.style.display = 'flex';
+        elements.globalStatsGroup.style.marginTop = '10px';
+
+        const wSqnr = stats.weighted_snr === null || stats.weighted_snr === Infinity ? '∞' : stats.weighted_snr.toFixed(2);
+
+        let impStatsText = `Weighted MSE: ${stats.weighted_mse.toFixed(6)}\nWeighted MAE: ${stats.weighted_mae.toFixed(6)}\nW-SQNR      : ${wSqnr} dB\nMax W-Error : ${stats.max_weighted_error.toFixed(6)}`;
+        elements.importanceStats.textContent = impStatsText;
+    } else {
+        elements.importanceStatsGroup.style.display = 'none';
+        elements.globalStatsGroup.style.marginTop = 'auto';
     }
 
-    elements.quantStats.textContent = statsText;
     elements.formulaBox.innerHTML = formulaHTML;
     elements.btnResetZoom.style.display = state.zoomRange ? 'flex' : 'none';
 
@@ -263,7 +276,8 @@ export function render(opts = {}) {
             if (useImportance && isActive) {
                 const sliceIdx = bestIdx - state.clipStart;
                 const intensity = actImpIntensity[sliceIdx];
-                ctx.fillStyle = isDark ? `rgba(250, 204, 21, ${0.1 + 0.9 * intensity})` : `rgba(234, 179, 8, ${0.1 + 0.9 * intensity})`;
+                const impColor = isDark ? '250, 204, 21' : '234, 179, 8';
+                ctx.fillStyle = `rgba(${impColor}, ${0.1 + 0.9 * intensity})`;
                 ctx.fillRect(i, bottomY, 1, impH);
             }
         }
@@ -290,7 +304,8 @@ export function render(opts = {}) {
             if (useImportance && isActive) {
                 const sliceIdx = gIdx - state.clipStart;
                 const intensity = actImpIntensity[sliceIdx];
-                ctx.fillStyle = isDark ? `rgba(250, 204, 21, ${0.1 + 0.9 * intensity})` : `rgba(234, 179, 8, ${0.1 + 0.9 * intensity})`;
+                const impColor = isDark ? '250, 204, 21' : '234, 179, 8';
+                ctx.fillStyle = `rgba(${impColor}, ${0.1 + 0.9 * intensity})`;
                 ctx.fillRect(x, bottomY, barW, impH);
             }
         }

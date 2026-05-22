@@ -78,7 +78,7 @@ export function updateOverlays() {
         hoverEl.style.display = 'block';
         hoverEl.style.left = `${x}px`;
         hoverEl.style.width = `${w}px`;
-        hoverEl.style.backgroundColor = isDark ? 'rgba(248, 250, 252, 0.15)' : 'rgba(15, 23, 42, 0.15)';
+        hoverEl.style.backgroundColor = 'var(--hover-overlay-bg)';
 
         const sliceIdx = useClip ? primaryIdx - state.clipStart : primaryIdx;
         if (sliceIdx >= 0 && sliceIdx < state.currentRenderData.actLen) {
@@ -98,7 +98,7 @@ export function updateOverlays() {
                     superEl.style.display = 'block';
                     superEl.style.left = `${xw.x}px`;
                     superEl.style.width = `${xw.w}px`;
-                    superEl.style.backgroundColor = isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)';
+                    superEl.style.backgroundColor = 'var(--super-overlay-bg)';
                 }
             }
 
@@ -113,9 +113,9 @@ export function updateOverlays() {
                     blockEl.style.display = 'block';
                     blockEl.style.left = `${xw.x}px`;
                     blockEl.style.width = `${xw.w}px`;
-                    blockEl.style.backgroundColor = isDark ? 'rgba(79, 70, 229, 0.15)' : 'rgba(79, 70, 229, 0.05)';
+                    blockEl.style.backgroundColor = 'var(--block-overlay-bg)';
 
-                    const borderColor = isDark ? 'rgba(79, 70, 229, 0.5)' : 'rgba(79, 70, 229, 0.3)';
+                    const borderColor = 'var(--highlight-border)';
                     blockEl.style.borderLeft = dStart >= zStart ? `1px solid ${borderColor}` : 'none';
                     blockEl.style.borderRight = dEnd + 1 <= zEnd ? `1px solid ${borderColor}` : 'none';
                 }

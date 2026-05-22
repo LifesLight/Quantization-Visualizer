@@ -90,6 +90,98 @@ pub fn get_err_stats(arr_o: &[f32], arr_q: &[f32]) -> (f64, f64) {
     (se / n, ae / n)
 }
 
+/// Refines a block's scale using local importance weights to minimize weighted MSE.
+pub fn refine_sym_scale(
+    chunk: &[f32],
+    imp_weights: &[f32],
+    best_scale: f32,
+    weight_bits: u32,
+) -> f32 {
+    let mut min_err = f64::INFINITY;
+    let mut optimal_scale = best_scale;
+    let max_q = if weight_bits == 1 {
+        1.0
+    } else {
+        2.0_f32.powi(weight_bits as i32 - 1)
+    };
+
+    for k_s in 0..=10 {
+        let factor_s = 0.5 + 0.1 * (k_s as f32);
+        let mut s_cand = best_scale * factor_s;
+        if s_cand.abs() < 1e-5 {
+            s_cand = if best_scale < 0.0 { -1e-5 } else { 1e-5 };
+        }
+        let mut err = 0.0_f64;
+
+        for (l, &v) in chunk.iter().enumerate() {
+            let w = imp_weights[l] as f64;
+            let diff = if weight_bits == 1 {
+                let q = if v >= 0.0 { 1.0 } else { -1.0 };
+                (v as f64) - (q * (s_cand as f64))
+            } else {
+                let q = (v / s_cand + max_q).round().clamp(0.0, (max_q * 2.0) - 1.0);
+                (v as f64) - ((q - max_q) as f64 * (s_cand as f64))
+            };
+            err += w * diff * diff;
+        }
+
+        if err < min_err {
+            min_err = err;
+            optimal_scale = s_cand;
+        }
+    }
+    optimal_scale
+}
+
+/// Refines a block's scale and offset using local importance weights to minimize weighted MSE.
+pub fn refine_asym_scale_offset(
+    chunk: &[f32],
+    imp_weights: &[f32],
+    best_scale: f32,
+    best_min: f32,
+    weight_bits: u32,
+) -> (f32, f32) {
+    let mut min_err = f64::INFINITY;
+    let mut optimal_scale = best_scale;
+    let mut optimal_min = best_min;
+
+    let mut c_max = chunk[0];
+    let mut c_min = chunk[0];
+    for &v in chunk {
+        if v > c_max {
+            c_max = v;
+        }
+        if v < c_min {
+            c_min = v;
+        }
+    }
+    let range = c_max - c_min;
+    let qmax_weight = (1 << weight_bits) as f32 - 1.0;
+
+    for k_s in 0..=10 {
+        let factor_s = 0.5 + 0.1 * (k_s as f32);
+        let s_cand = (best_scale * factor_s).max(1e-5);
+        for j_m in 0..=10 {
+            let factor_m = -0.2 + 0.04 * (j_m as f32);
+            let m_cand = (best_min + range * factor_m).min(0.0);
+
+            let mut err = 0.0_f64;
+            for (l, &v) in chunk.iter().enumerate() {
+                let w = imp_weights[l] as f64;
+                let q = ((v - m_cand) / s_cand).round().clamp(0.0, qmax_weight) as f64;
+                let diff = (v as f64) - (q * (s_cand as f64) + (m_cand as f64));
+                err += w * diff * diff;
+            }
+            if err < min_err {
+                min_err = err;
+                optimal_scale = s_cand;
+                optimal_min = m_cand;
+            }
+        }
+    }
+    (optimal_scale, optimal_min)
+}
+
 /// In-place Fast Walsh-Hadamard Transform (FWHT).
 /// This orthogonal transform is commonly used in quantization (like QuIP#) to distribute outlier magnitude evenly.
 pub fn fwht_f32_inplace(res: &mut [f32]) {

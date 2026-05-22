@@ -15,9 +15,12 @@ pub struct QuantStats {
     pub global_mae: f64,
     pub global_variance: f64,
     pub global_sum_abs: f64,
+    pub max_error: f64,
     pub has_importance: bool,
     pub weighted_mse: f64,
     pub weighted_mae: f64,
+    pub weighted_snr: f64,
+    pub max_weighted_error: f64,
     pub imp_block_size: usize,
 }
 
@@ -203,22 +206,30 @@ impl AppBackend {
 
         for i in (0..n).step_by(b_size) {
             let chunk_len = (n - i).min(b_size);
-            let chunk = &self.active_importance[i..i + chunk_len];
 
             let mut max = 0.0_f32;
             let mut sum = 0.0_f32;
-            for &v in chunk {
+            for j in 0..chunk_len {
+                let v = self.active_importance[i + j];
                 if v > max {
                     max = v;
                 }
                 sum += v;
             }
-            self.imp_block_stats.push(ImpBlockStat { sum, max });
 
-            for j in 0..chunk_len {
-                self.active_importance_intensity[i + j] =
-                    if max > 0.0 { chunk[j] / max } else { 0.0 };
+            if sum == 0.0 {
+                max = 1.0;
+                sum = chunk_len as f32;
+                for j in 0..chunk_len {
+                    self.active_importance[i + j] = 1.0;
+                    self.active_importance_intensity[i + j] = 1.0;
+                }
+            } else {
+                for j in 0..chunk_len {
+                    self.active_importance_intensity[i + j] = self.active_importance[i + j] / max;
+                }
             }
+            self.imp_block_stats.push(ImpBlockStat { sum, max });
         }
     }
 
@@ -234,6 +245,8 @@ impl AppBackend {
         let mut has_importance = false;
         let mut weighted_mse = 0.0;
         let mut weighted_mae = 0.0;
+        let mut weighted_snr = f64::INFINITY;
+        let mut max_weighted_error = 0.0;
 
         let importance_opt = if settings.use_importance
             && self.active_importance.len() == self.active_floats.len()
@@ -266,11 +279,19 @@ impl AppBackend {
         let (global_mse, global_mae) = get_err_stats(&self.active_floats, &output.q_floats);
         let mut sig_power = 0.0_f64;
         let mut sum_abs = 0.0_f64;
-        for &v in &self.active_floats {
-            let vf = v as f64;
+        let mut max_error = 0.0_f64;
+
+        for i in 0..self.active_floats.len() {
+            let vf = self.active_floats[i] as f64;
+            let qf = output.q_floats[i] as f64;
             sig_power += vf * vf;
             sum_abs += vf.abs();
+            let err = (vf - qf).abs();
+            if err > max_error {
+                max_error = err;
+            }
         }
+
         let global_variance = if self.active_floats.is_empty() {
             0.0
         } else {
@@ -281,16 +302,32 @@ impl AppBackend {
             let mut w_mse = 0.0;
             let mut w_mae = 0.0;
             let mut w_sum = 0.0;
+            let mut w_sig_power = 0.0;
             for i in 0..self.active_floats.len() {
                 let diff = (self.active_floats[i] - output.q_floats[i]) as f64;
                 let w = self.active_importance[i] as f64;
-                w_mse += diff * diff * w;
-                w_mae += diff.abs() * w;
+                let val = self.active_floats[i] as f64;
+
+                let err_sq = diff * diff;
+                let w_err_sq = err_sq * w;
+                let w_err_abs = diff.abs() * w;
+
+                if w_err_abs > max_weighted_error {
+                    max_weighted_error = w_err_abs;
+                }
+
+                w_mse += w_err_sq;
+                w_mae += w_err_abs;
+                w_sig_power += w * val * val;
                 w_sum += w;
             }
             if w_sum > 1e-12 {
                 weighted_mse = w_mse / w_sum;
                 weighted_mae = w_mae / w_sum;
+                let weighted_variance = w_sig_power / w_sum;
+                if weighted_mse > 0.0 {
+                    weighted_snr = 10.0 * (weighted_variance / weighted_mse).log10();
+                }
             }
         }
 
@@ -304,9 +341,12 @@ impl AppBackend {
             global_mae,
             global_variance,
             global_sum_abs: sum_abs,
+            max_error,
             has_importance,
             weighted_mse,
             weighted_mae,
+            weighted_snr,
+            max_weighted_error,
             imp_block_size: if has_importance {
                 self.imp_block_size
             } else {
