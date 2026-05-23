@@ -1,5 +1,7 @@
 use crate::math_utils::*;
-use crate::quants::{ImportanceResult, InspectorData, QuantMeta, QuantizeOutput, Settings, TrellisBlockMeta};
+use crate::quants::{
+    ImportanceResult, InspectorData, QuantMeta, QuantizeOutput, Settings, TrellisBlockMeta,
+};
 use serde::Serialize;
 
 #[derive(Clone, Copy)]
@@ -487,11 +489,17 @@ pub fn quantize(
     let mut global_pad_len = floats.len();
     let mut global_rms = 1e-5;
 
+    let mut total_bits = 0.0;
+
     if is_global {
         global_pad_len = 1;
         while global_pad_len < floats.len() {
             global_pad_len <<= 1;
         }
+
+        total_bits += 16.0; // One FP16 global scale
+        total_bits += (global_pad_len * t_bits as usize) as f64; // Cost for all padded values
+
         let mut padded = vec![0.0; global_pad_len];
         padded[..floats.len()].copy_from_slice(floats);
         for j in 0..global_pad_len {
@@ -564,6 +572,11 @@ pub fn quantize(
             fwht_f32_inplace(&mut chunk_wht_buf[..pad_len]);
         } else {
             chunk_wht_buf[..actual_len].copy_from_slice(chunk);
+        }
+
+        if !is_global {
+            total_bits += 16.0; // One FP16 optimal scale per block
+            total_bits += (pad_len * t_bits as usize) as f64; // Cost for padded block elements
         }
 
         let chunk_w = &chunk_wht_buf[..pad_len];
@@ -653,7 +666,7 @@ pub fn quantize(
     }
 
     QuantizeOutput {
-        q_floats, t_floats: t_floats_out, t_q_floats: t_q_floats_out, bpw: t_bits as f32 + (16.0 / if is_global { floats.len() as f32 } else { t_bsize as f32 }),
+        q_floats, t_floats: t_floats_out, t_q_floats: t_q_floats_out, bpw: (total_bits / floats.len() as f64) as f32,
         formula_html: format!("<span>Weight = {}[ ( {} &times; <span class=\"eq-pill\">{}<span class=\"bits\">16b</span></span> ) ]</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Block size {}. {}</span>", if use_wht { "<span class=\"eq-pill\" title=\"Diagonal Random Sign Array\">D</span> &times; <span class=\"eq-pill\" title=\"Orthogonal Fast Walsh-Hadamard Transform\">FWHT</span> &times; " } else { "" }, if states > 1 { format!("<span class=\"eq-pill\" title=\"Trellis Coded Quantization via Viterbi\">TCQ_Path<span class=\"bits\">{}b</span></span>", t_bits) } else { format!("<span class=\"eq-pill\">Codeword<span class=\"bits\">{}b</span></span>", t_bits) }, if is_global { "Global_Scale" } else { "RMS_Scale" }, t_bsize, if use_wht { if is_global { format!("Global QuIP# SRHT applied. All {} weights share a single FP16 Global Scale.", floats.len()) } else { format!("Local Block SRHT applied. Every {} weights share one FP16 Optimal Scale.", t_bsize) } } else { format!("Every {} weights share one FP16 Optimal Scale.", t_bsize) }),
         block_size: t_bsize, super_block_size: 0, meta: QuantMeta::Trellis(blocks),
     }
