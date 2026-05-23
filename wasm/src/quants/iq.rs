@@ -254,7 +254,11 @@ fn best_index_iq4nl(val: f32) -> usize {
     best_idx
 }
 
-fn quantize_iq1_s_block(super_block: &[f32], weights: &[f32], _iters: i32) -> (Vec<f32>, f32) {
+fn quantize_iq1_s_block(
+    super_block: &[f32],
+    weights: &[f32],
+    _iters: i32,
+) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
     let mut q_block = vec![0.0; 256];
     let mut scales = [0.0; 8];
     let mut shifts = [1i8; 8];
@@ -378,7 +382,7 @@ fn quantize_iq1_s_block(super_block: &[f32], weights: &[f32], _iters: i32) -> (V
     }
 
     if max_scale == 0.0 {
-        return (q_block, 0.0);
+        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
     }
 
     let d = max_scale / 15.0;
@@ -400,10 +404,26 @@ fn quantize_iq1_s_block(super_block: &[f32], weights: &[f32], _iters: i32) -> (V
         }
     }
 
-    (q_block, d_out)
+    let mut out_grids = vec![];
+    for ib in 0..8 {
+        out_grids.extend_from_slice(&tile_best_grids[ib]);
+    }
+
+    (
+        q_block,
+        d_out,
+        scales.to_vec(),
+        shifts.to_vec(),
+        out_grids,
+        vec![],
+    )
 }
 
-fn quantize_iq2_xxs_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f32>, f32) {
+fn quantize_iq2_xxs_block(
+    block: &[f32],
+    weights: &[f32],
+    iters: i32,
+) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
     let mut q_block = vec![0.0; 256];
     let mut scales = [0.0; 8];
     let mut tile_best_grids = [[0usize; 4]; 8];
@@ -533,7 +553,7 @@ fn quantize_iq2_xxs_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f3
     }
 
     if max_scale == 0.0 {
-        return (q_block, 0.0);
+        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
     }
 
     let d = max_scale / 31.0;
@@ -560,10 +580,28 @@ fn quantize_iq2_xxs_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f3
         }
     }
 
-    (q_block, d_fp16)
+    let mut out_grids = vec![];
+    let mut out_signs = vec![];
+    for ib in 0..8 {
+        out_grids.extend_from_slice(&tile_best_grids[ib]);
+        out_signs.extend_from_slice(&tile_signs[ib]);
+    }
+
+    (
+        q_block,
+        d_fp16,
+        scales.to_vec(),
+        vec![],
+        out_grids,
+        out_signs,
+    )
 }
 
-fn quantize_iq3_xxs_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f32>, f32) {
+fn quantize_iq3_xxs_block(
+    block: &[f32],
+    weights: &[f32],
+    iters: i32,
+) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
     let mut q_block = vec![0.0; 256];
     let mut scales = [0.0; 8];
     let mut tile_best_grids = [[0usize; 8]; 8];
@@ -694,7 +732,7 @@ fn quantize_iq3_xxs_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f3
     }
 
     if max_scale == 0.0 {
-        return (q_block, 0.0);
+        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
     }
 
     let d = max_scale / 31.0;
@@ -722,10 +760,28 @@ fn quantize_iq3_xxs_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f3
         }
     }
 
-    (q_block, d_out)
+    let mut out_grids = vec![];
+    let mut out_signs = vec![];
+    for ib in 0..8 {
+        out_grids.extend_from_slice(&tile_best_grids[ib]);
+        out_signs.extend_from_slice(&tile_signs[ib]);
+    }
+
+    (
+        q_block,
+        d_out,
+        scales.to_vec(),
+        vec![],
+        out_grids,
+        out_signs,
+    )
 }
 
-fn quantize_iq4_xs_block(super_block: &[f32], weights: &[f32], iters: i32) -> (Vec<f32>, f32) {
+fn quantize_iq4_xs_block(
+    super_block: &[f32],
+    weights: &[f32],
+    iters: i32,
+) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
     let mut q_block = vec![0.0; 256];
     let mut scales = [0.0; 8];
 
@@ -787,7 +843,7 @@ fn quantize_iq4_xs_block(super_block: &[f32], weights: &[f32], iters: i32) -> (V
     }
 
     if max_scale == 0.0 {
-        return (q_block, 0.0);
+        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
     }
 
     let d = -max_scale / 32.0;
@@ -814,10 +870,14 @@ fn quantize_iq4_xs_block(super_block: &[f32], weights: &[f32], iters: i32) -> (V
         }
     }
 
-    (q_block, d_out)
+    (q_block, d_out, scales.to_vec(), vec![], vec![], vec![])
 }
 
-fn quantize_iq4_nl_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f32>, f32) {
+fn quantize_iq4_nl_block(
+    block: &[f32],
+    weights: &[f32],
+    iters: i32,
+) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
     let mut q_block = vec![0.0; 32];
 
     let mut max = 0.0_f32;
@@ -831,7 +891,7 @@ fn quantize_iq4_nl_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f32
     }
 
     if amax < 1e-6 {
-        return (q_block, 0.0);
+        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
     }
 
     let mut best_scale = 0.0;
@@ -875,7 +935,7 @@ fn quantize_iq4_nl_block(block: &[f32], weights: &[f32], iters: i32) -> (Vec<f32
         q_block[i] = d * KVALUES_IQ4NL[best_l[i]];
     }
 
-    (q_block, d)
+    (q_block, d, vec![], vec![], vec![], vec![])
 }
 
 pub fn quantize(
@@ -933,7 +993,7 @@ pub fn quantize(
         }
         weights[chunk_len..max_pad_len].fill(0.0);
 
-        let (q_block, block_scale) = match settings.iq_type.as_str() {
+        let (q_block, block_scale, scales, aux8, grids, signs) = match settings.iq_type.as_str() {
             "iq1_s" => quantize_iq1_s_block(&chunk_padded, &weights, iters),
             "iq2_xxs" => quantize_iq2_xxs_block(&chunk_padded, &weights, iters),
             "iq3_xxs" => quantize_iq3_xxs_block(&chunk_padded, &weights, iters),
@@ -953,15 +1013,19 @@ pub fn quantize(
             block_scale,
             mse,
             mae,
+            scales,
+            aux8,
+            grids,
+            signs,
         });
     }
 
     let formula_html = match settings.iq_type.as_str() {
-        "iq1_s" => "<span>Weight = ( <span class=\"eq-pill\">IQ1S_Grid_Val<span class=\"bits\">1.5b</span></span> &plusmn; <span class=\"eq-pill\">Delta</span> ) &times; ( <span class=\"eq-pill\">Tile_Scale<span class=\"bits\">3b</span></span> &times; <span class=\"eq-pill\">Super_Scale<span class=\"bits\">16b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Groups of 8 mapped to a 2048-entry {-1, 0, 1} codebook with sign offset. 256-weight superblocks.</span>",
-        "iq2_xxs" => "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( <span class=\"eq-pill\">IQ2_Grid_Val<span class=\"bits\">2b</span></span> &times; <span class=\"eq-pill\">Tile_Scale<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">Super_Scale<span class=\"bits\">16b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Groups of 8 are snapped to a 256-entry codebook grid. Exact Sign Parity is strictly enforced. 256-weight superblocks.</span>",
-        "iq3_xxs" => "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( <span class=\"eq-pill\">IQ3_Grid_Val<span class=\"bits\">3b</span></span> &times; <span class=\"eq-pill\">Tile_Scale<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">Super_Scale<span class=\"bits\">16b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Groups of 4 are snapped to a 256-entry codebook grid. Exact Sign Parity is strictly enforced. 256-weight superblocks.</span>",
-        "iq4_xs" => "<span>Weight = <span class=\"eq-pill\">NonLinear_Grid_Val<span class=\"bits\">4b</span></span> &times; ( <span class=\"eq-pill\">Tile_Scale<span class=\"bits\">6b</span></span> &times; <span class=\"eq-pill\">Super_Scale<span class=\"bits\">16b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">4-bit non-linear index mapping with 6-bit scales over 256-weight superblocks.</span>",
-        "iq4_nl" => "<span>Weight = <span class=\"eq-pill\">NonLinear_Grid_Val<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">Block_Scale<span class=\"bits\">16b</span></span></span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">4-bit non-linear index mapping designed to capture Gaussian outliers efficiently. 32-weight blocks.</span>",
+        "iq1_s" => "<span>Weight = ( <span class=\"eq-pill\">Codebook<span class=\"bits\">1.5b</span></span> &plusmn; <span title=\"Adaptive shift offset (+0.125 or -0.125) evaluated per tile to optimally center the grid vector distribution.\" style=\"border-bottom: 1px dotted var(--text-muted); cursor: help;\">0.125</span> ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">3b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Groups of 8 are snapped to a 3-state {-1, 0, 1} vector grid, utilizing an adaptive sign-shift offset.</span>",
+        "iq2_xxs" => "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( 2 &times; <span class=\"eq-pill\">GridVal<span class=\"bits\">2b</span></span> + 1 ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">4b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Snaps groups of 8 to a 2-bit coordinate grid, enforcing strict even-sign-parity to save storage.</span>",
+        "iq3_xxs" => "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( 2 &times; <span class=\"eq-pill\">GridVal<span class=\"bits\">3b</span></span> + 1 ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">4b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Snaps groups of 4 to a 3-bit coordinate grid, sharing sign-parity constraints across dual pairs.</span>",
+        "iq4_xs" => "<span>Weight = <span class=\"eq-pill\">NonLinearVal<span class=\"bits\">4b</span></span> &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">6b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Maps 32-weight blocks to 4-bit non-linear logarithmic curves, scaled by hierarchical 6-bit step-sizes.</span>",
+        "iq4_nl" => "<span>Weight = <span class=\"eq-pill\">NonLinearVal<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">BlockScale<span class=\"bits\">16b</span></span></span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Direct 4-bit non-linear quantization with standalone 16-bit scales, optimized for Gaussian outlier distributions.</span>",
         _ => "",
     }.to_string();
 
@@ -981,7 +1045,7 @@ pub fn format_inspector(
     idx: usize,
     active: &[f32],
     out: &QuantizeOutput,
-    _settings: &Settings,
+    settings: &Settings,
 ) -> InspectorData {
     let QuantMeta::Iq(blocks) = &out.meta else {
         return InspectorData::default();
@@ -992,30 +1056,274 @@ pub fn format_inspector(
 
     if let Some(bm) = blocks.get(b_idx) {
         let q_val = out.q_floats[idx];
-        let original = active[idx];
-        let s_disp = if q_val < 0.0 || original < 0.0 {
-            "-"
+
+        let local_idx = idx % block_size;
+        let tile_idx = local_idx / 32;
+        let sub_group_idx = local_idx % 8;
+
+        let sign_char = if q_val < 0.0 { "-" } else { "+" };
+        data.math_str = Some(format!("{} {:.4} (Grid mapped)", sign_char, q_val.abs()));
+
+        let mut iq_html = String::new();
+
+        if settings.iq_type == "iq4_nl" {
+            let scale_val = bm.block_scale;
+            let id = if scale_val != 0.0 {
+                1.0 / scale_val
+            } else {
+                0.0
+            };
+            let unscaled_val = id * q_val;
+            let active_centroid_idx = best_index_iq4nl(unscaled_val);
+
+            let mut distribution_html = String::new();
+            for i in 0..16 {
+                let centroid_val = KVALUES_IQ4NL[i];
+                let is_hovered_centroid = i == active_centroid_idx;
+                let bg_color = if is_hovered_centroid {
+                    "background:var(--accent-color); color:white; font-weight:bold;"
+                } else if centroid_val < 0.0 {
+                    "background:var(--negative-color); opacity:0.6; color:white;"
+                } else {
+                    "background:var(--primary-color); opacity:0.6; color:white;"
+                };
+
+                distribution_html.push_str(&format!(
+                    "<div style=\"flex:1; text-align:center; padding:4px 0; font-size:0.65rem; border-radius:3px; {};\" title=\"Centroid {}: {:.1} (Quantized: {:.4})\">{}</div>",
+                    bg_color, i, centroid_val, scale_val * centroid_val, centroid_val.round() as i32
+                ));
+            }
+
+            iq_html.push_str(&format!(
+                r#"<div style="display:flex; flex-direction:column; gap:8px;">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:var(--bg-secondary); padding:8px; border-radius:6px; font-size:0.8rem;">
+                        <div style="display:flex; flex-direction:column; align-items:center; min-width:75px;">
+                            <span style="font-weight:bold; color:var(--accent-color);">{:.4}</span>
+                            <span style="font-size:0.65rem; color:var(--text-muted);">Block-Scale</span>
+                        </div>
+                        <div style="color:var(--text-muted); font-weight:bold; margin: 0 4px;">&rarr;</div>
+                        <div style="display:flex; flex-direction:column; align-items:center; min-width:75px;">
+                            <span style="font-weight:bold; color:var(--primary-color);">{:.1}</span>
+                            <span style="font-size:0.65rem; color:var(--text-muted);">Centroid</span>
+                        </div>
+                        <div style="color:var(--text-muted); font-weight:bold; margin: 0 4px;">&rarr;</div>
+                        <div style="display:flex; flex-direction:column; align-items:center; min-width:75px;">
+                            <span style="font-weight:bold; font-size: 0.75rem;">#{:02}</span>
+                            <span style="font-size:0.65rem; color:var(--text-muted);">Centroid Idx</span>
+                        </div>
+                    </div>
+
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-top:8px;">Non-Linear Gaussian Centroids (16 levels)</div>
+                    <div style="display:flex; gap:2px; padding:2px 0;">
+                        {}
+                    </div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.3; margin-top:4px;">
+                        Weight mapped to non-linear index #{}. Centroids are non-uniformly spaced to allocate higher resolution to smaller values, matching a Gaussian bell curve.
+                    </div>
+                </div>"#,
+                scale_val, KVALUES_IQ4NL[active_centroid_idx], active_centroid_idx, distribution_html, active_centroid_idx
+            ));
         } else {
-            "+"
+            let max_scale = bm.scales.iter().cloned().fold(0.0_f32, f32::max);
+            let mut chart_html = String::new();
+            for (i, &s) in bm.scales.iter().enumerate() {
+                let pct = if max_scale > 0.0 {
+                    (s / max_scale) * 100.0
+                } else {
+                    0.0
+                };
+                let is_active = if i == tile_idx {
+                    "background:var(--accent-color);"
+                } else {
+                    "background:var(--primary-color); opacity:0.6;"
+                };
+                chart_html.push_str(&format!(
+                    "<div style=\"flex:1; height:{}%; {}; border-radius:2px 2px 0 0;\" title=\"Tile {}: {:.4}\"></div>",
+                    pct.max(5.0), is_active, i, s
+                ));
+            }
+
+            let grid_val_disp = if settings.iq_type == "iq3_xxs" {
+                let g1 = bm
+                    .grids
+                    .get(tile_idx * 8 + ((local_idx % 32) / 8) * 2)
+                    .unwrap_or(&0);
+                let g2 = bm
+                    .grids
+                    .get(tile_idx * 8 + ((local_idx % 32) / 8) * 2 + 1)
+                    .unwrap_or(&0);
+                format!("#{} & #{}", g1, g2)
+            } else if !bm.grids.is_empty() {
+                format!(
+                    "Entry #{}",
+                    bm.grids
+                        .get(tile_idx * 4 + (local_idx % 32) / 8)
+                        .unwrap_or(&0)
+                )
+            } else {
+                "Grid".to_string()
+            };
+
+            iq_html.push_str(&format!(
+                r#"<div style="display:flex; flex-direction:column; gap:8px;">
+                    <div style="display:flex; justify-content:space-around; align-items:center; background:var(--bg-secondary); padding:8px; border-radius:6px; font-size:0.8rem;">
+                        <div style="display:flex; flex-direction:column; align-items:center; min-width:65px;">
+                            <span style="font-weight:bold; color:var(--accent-color);">{:.4}</span>
+                            <span style="font-size:0.65rem; color:var(--text-muted);">Super-Scale</span>
+                        </div>
+                        <div style="color:var(--text-muted); font-weight:bold; margin: 0 4px;">&rarr;</div>
+                        <div style="display:flex; flex-direction:column; align-items:center; min-width:65px;">
+                            <span style="font-weight:bold; color:var(--primary-color);">{:.4}</span>
+                            <span style="font-size:0.65rem; color:var(--text-muted);">Tile-Scale</span>
+                        </div>
+                        <div style="color:var(--text-muted); font-weight:bold; margin: 0 4px;">&rarr;</div>
+                        <div style="display:flex; flex-direction:column; align-items:center; min-width:65px;">
+                            <span style="font-weight:bold; font-size: 0.75rem;">{}</span>
+                            <span style="font-size:0.65rem; color:var(--text-muted);">Vector Base</span>
+                        </div>
+                    </div>
+
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-top:8px;">Relative Tile Scales (8x32)</div>
+                    <div style="display:flex; gap:2px; height:40px; align-items:flex-end; border-bottom:1px solid var(--border-color);">
+                        {}
+                    </div>
+                </div>"#,
+                bm.block_scale, bm.scales.get(tile_idx).unwrap_or(&0.0), grid_val_disp, chart_html
+            ));
+        }
+
+        if settings.iq_type == "iq1_s"
+            || settings.iq_type == "iq2_xxs"
+            || settings.iq_type == "iq3_xxs"
+        {
+            let start = (idx / 8) * 8;
+            let group_orig = &active[start..start + 8];
+            let group_q = &out.q_floats[start..start + 8];
+
+            let mut snap_html = format!(
+                r#"
+                <div style="margin-top:12px; border-top:1px solid var(--border-color); padding-top:8px;">
+                    <div style="font-size:0.85rem; font-weight:bold; margin-bottom:4px;">Vector Snapping (Codebook Group)</div>
+                    <div style="display:flex; gap:4px;">
+            "#
+            );
+
+            for i in 0..8 {
+                let o_v = group_orig[i];
+                let q_v = group_q[i];
+                let is_hover = i == sub_group_idx;
+                let bg = if is_hover {
+                    "background:var(--primary-color); color:white;"
+                } else {
+                    "background:var(--bg-secondary);"
+                };
+                let arrow = if q_v.abs() > o_v.abs() {
+                    "&uarr;"
+                } else {
+                    "&darr;"
+                };
+
+                snap_html.push_str(&format!(r#"
+                    <div style="flex:1; display:flex; flex-direction:column; align-items:center; border-radius:4px; padding:4px 0; {}">
+                        <span style="font-size:0.6rem; {}">{:.2}</span>
+                        <span style="font-size:0.7rem; font-weight:bold;">{}</span>
+                        <span style="font-size:0.65rem; font-weight:bold;">{:.2}</span>
+                    </div>
+                "#, bg, if is_hover { "color:#ddd;" } else { "color:var(--text-muted);" }, o_v, arrow, q_v));
+            }
+            snap_html.push_str("</div></div>");
+            iq_html.push_str(&snap_html);
+
+            if settings.iq_type == "iq2_xxs" || settings.iq_type == "iq3_xxs" {
+                let mut orig_neg = 0;
+                let mut parity_violation = false;
+                let mut flip_idx = 8;
+
+                for i in 0..8 {
+                    if group_orig[i] < 0.0 {
+                        orig_neg += 1;
+                    }
+                }
+
+                if orig_neg % 2 != 0 {
+                    parity_violation = true;
+                    for i in 0..8 {
+                        let o_sign = group_orig[i] < 0.0;
+                        let q_sign = group_q[i] < 0.0;
+                        if o_sign != q_sign {
+                            flip_idx = i;
+                            break;
+                        }
+                    }
+                }
+
+                let mut parity_html = format!(
+                    r#"
+                    <div style="margin-top:12px; border-top:1px solid var(--border-color); padding-top:8px;">
+                        <div style="font-size:0.85rem; font-weight:bold; margin-bottom:4px;">Sign Parity Enforcement</div>
+                        <div style="display:flex; gap:4px;">
+                "#
+                );
+
+                for i in 0..8 {
+                    let q_sign = group_q[i] < 0.0;
+                    let o_sign = group_orig[i] < 0.0;
+
+                    let mut is_flipped = i == flip_idx;
+                    if parity_violation && flip_idx == 8 && o_sign != q_sign {
+                        is_flipped = true;
+                    }
+
+                    let bg = if q_sign {
+                        "var(--negative-color)"
+                    } else {
+                        "var(--accent-color)"
+                    };
+                    let sign_char = if q_sign { "-" } else { "+" };
+                    let border = if is_flipped {
+                        "border:2px solid #fbbf24; transform:scale(1.1);"
+                    } else {
+                        "border:2px solid transparent;"
+                    };
+
+                    parity_html.push_str(&format!(r#"
+                        <div style="flex:1; text-align:center; padding:2px; border-radius:4px; background:{}; color:white; font-weight:bold; {}">
+                            {}
+                        </div>
+                    "#, bg, border, sign_char));
+                }
+
+                let text = if parity_violation {
+                    format!(
+                        "Parity Violation! Flipped sign of element #{} to satisfy even parity.",
+                        flip_idx + 1
+                    )
+                } else {
+                    "Even negatives. Parity satisfied.".to_string()
+                };
+
+                parity_html.push_str(&format!(r#"
+                        </div>
+                        <div style="font-size:0.75rem; margin-top:6px; color:var(--text-muted); line-height:1.2; min-height:2.4em; display:flex; align-items:center;">
+                            {}
+                        </div>
+                    </div>
+                "#, text));
+
+                iq_html.push_str(&parity_html);
+            }
+        }
+
+        data.iq_html = if iq_html.is_empty() {
+            None
+        } else {
+            Some(iq_html)
         };
 
-        data.math_str = Some(format!(
-            "{}{:.4} (approx. from grid & scale)",
-            s_disp,
-            q_val.abs(),
-        ));
         data.block_idx = Some(bm.idx);
         data.scale = Some(bm.block_scale);
         data.mse = Some(bm.mse);
         data.mae = Some(bm.mae);
-
-        if block_size == 256 {
-            // Also supply these just in case the UI opts to display the superblock section
-            data.super_idx = Some(bm.idx);
-            data.super_scale = Some(bm.block_scale);
-            data.super_mse = Some(bm.mse);
-            data.super_mae = Some(bm.mae);
-        }
     }
     data
 }

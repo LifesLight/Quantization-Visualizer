@@ -326,7 +326,7 @@ export function updateInspector(idx) {
         elements.insBData.innerHTML = '<div class="empty-state">Hover over a block to inspect</div>';
     }
 
-    // --- Advanced Metadata Rendering (Trellis / Superblocks / Globals) ---
+    // --- Advanced Metadata Rendering (Trellis / Superblocks / Globals / IQ) ---
     let superHtml = '';
 
     if (insData.trellisJson) {
@@ -425,6 +425,9 @@ export function updateInspector(idx) {
                 `}
             </div>
         `;
+    } else if (insData.iqHtml) {
+        elements.iSBIdx.textContent = `[IQ Map]`;
+        elements.insSBData.innerHTML = insData.iqHtml;
     } else if (insData.globalScale !== undefined) {
         superHtml += `<div class="data-row"><span>Global MSE:</span> <span class="val-hl">${insData.globalMse.toFixed(6)}</span></div>`;
         superHtml += `<div class="data-row"><span>Global MAE:</span> <span>${insData.globalMae.toFixed(6)}</span></div>`;

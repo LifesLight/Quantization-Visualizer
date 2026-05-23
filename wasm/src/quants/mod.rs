@@ -127,12 +127,13 @@ pub struct InspectorData {
     pub global_mse: Option<f64>,
     pub global_mae: Option<f64>,
     pub trellis_json: Option<String>,
+    pub iq_html: Option<String>,
     pub importance_raw: Option<f32>,
     pub importance_pct_sum: Option<f32>,
     pub importance_pct_max: Option<f32>,
 }
 
-// Below are the specific metadata block structs for various algorithms.
+// Specific metadata block structs for various algorithms.
 
 pub struct SymBlockMeta {
     pub idx: usize,
@@ -203,4 +204,8 @@ pub struct IqBlockMeta {
     pub block_scale: f32,
     pub mse: f64,
     pub mae: f64,
+    pub scales: Vec<f32>,
+    pub aux8: Vec<i8>,
+    pub grids: Vec<usize>,
+    pub signs: Vec<u8>,
 }

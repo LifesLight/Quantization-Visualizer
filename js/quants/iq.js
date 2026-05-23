@@ -10,7 +10,7 @@ export default {
         if (ui.showPrimitiveSettings) ui.showPrimitiveSettings(false);
         if (ui.showIqSettings) ui.showIqSettings(true);
         ui.showQuantBits(false);
-        ui.showSuperBlockCard(false);
+        ui.showSuperBlockCard(true, 'IQ Hierarchy Map');
         ui.showBlockCard(true, 'Block Stats');
     }
 };
