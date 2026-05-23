@@ -1,6 +1,7 @@
 //! Contains all implemented quantization schemes and shared types.
 
 pub mod asym;
+pub mod iq;
 pub mod kquant;
 pub mod mxfp;
 pub mod nvfp4;
@@ -52,6 +53,8 @@ pub struct Settings {
     pub trellis_wht_scope: String,
     pub trellis_opt_iters: usize,
     pub trellis_sign_seed: u32,
+    pub iq_type: String,
+    pub iq_scale_iters: usize,
     pub mxfp_format: String,
     pub primitive_format: String,
     pub centering_mode: String,
@@ -67,6 +70,13 @@ pub fn get_importance_block_size(q_type: &str, settings: &Settings) -> usize {
     match q_type {
         "kquant" => settings.sub_size,
         "sym" | "asym" => settings.block_size,
+        "iq" => {
+            if settings.iq_type == "iq4_nl" {
+                32
+            } else {
+                256
+            }
+        }
         _ => 0,
     }
 }
@@ -93,6 +103,7 @@ pub enum QuantMeta {
     Mxfp(Vec<MxfpBlockMeta>),
     Turbo(Vec<TurboBlockMeta>),
     Trellis(Vec<TrellisBlockMeta>),
+    Iq(Vec<IqBlockMeta>),
 }
 
 /// Individual block inspection data retrieved via UI interactions. Serialized to JS Object.
@@ -185,4 +196,11 @@ pub struct TrellisBlockMeta {
     pub mse: f64,
     pub mae: f64,
     pub chunk_w: Vec<f64>,
+}
+pub struct IqBlockMeta {
+    pub idx: usize,
+    pub size: usize,
+    pub block_scale: f32,
+    pub mse: f64,
+    pub mae: f64,
 }

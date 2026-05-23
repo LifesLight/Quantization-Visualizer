@@ -272,6 +272,7 @@ impl AppBackend {
             "mxfp" => mxfp::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
             "turbo" => turbo::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
             "trellis" => trellis::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            "iq" => iq::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
             _ => primitive::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
         };
 
@@ -746,6 +747,7 @@ impl AppBackend {
                 "mxfp" => mxfp::format_inspector(idx, &self.active_floats, out, &settings),
                 "turbo" => turbo::format_inspector(idx, &self.active_floats, out, &settings),
                 "trellis" => trellis::format_inspector(idx, &self.active_floats, out, &settings),
+                "iq" => iq::format_inspector(idx, &self.active_floats, out, &settings),
                 _ => primitive::format_inspector(idx, &self.active_floats, out, &settings),
             };
             if settings.use_importance && self.active_importance.len() == self.active_floats.len() {

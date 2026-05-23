@@ -38,6 +38,14 @@ export const presetGroups = [
         }
     },
     {
+        label: "Llama.cpp: IQ Quants",
+        presets: {
+            'IQ2_XXS': { label: 'IQ2_XXS', 'quant-type': 'iq', 'iq-type': 'iq2_xxs', 'iq-scale-iters': 6 },
+            'IQ3_XXS': { label: 'IQ3_XXS', 'quant-type': 'iq', 'iq-type': 'iq3_xxs', 'iq-scale-iters': 15 },
+            'IQ4_NL': { label: 'IQ4_NL', 'quant-type': 'iq', 'iq-type': 'iq4_nl', 'iq-scale-iters': 6 },
+        }
+    },
+    {
         label: "Llama.cpp: TurboQuant",
         presets: {
             'turbo2': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false, 'turbo-sign-seed': 42 },

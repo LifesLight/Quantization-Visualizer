@@ -6,6 +6,7 @@ import turboQuant from './turbo.js';
 import trellisQuant from './trellis.js';
 import nvfp4Quant from './nvfp4.js';
 import mxfpQuant from './mxfp.js';
+import iqQuant from './iq.js';
 
 primitiveQuant.label = "Primitive (FP Types)";
 
@@ -17,6 +18,7 @@ mxfpQuant.label = "MXFP (OCP Microscaling)";
 symQuant.label = "Symmetric (Block Scale)";
 asymQuant.label = "Asymmetric (Block Scale + Zero)";
 kquantQuant.label = "K-Quant (Nested Scales)";
+iqQuant.label = "IQ Quants (llama.cpp)";
 
 // Complex
 turboQuant.label = "TurboQuant (Scalar WHT)";
@@ -30,6 +32,7 @@ const registry = {
     'sym': symQuant,
     'asym': asymQuant,
     'kquant': kquantQuant,
+    'iq': iqQuant,
     'turbo': turboQuant,
     'trellis': trellisQuant,
 };
