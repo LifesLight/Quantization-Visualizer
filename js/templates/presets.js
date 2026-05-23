@@ -42,7 +42,7 @@ export const presetGroups = [
         presets: {
             'IQ2_XXS': { label: 'IQ2_XXS', 'quant-type': 'iq', 'iq-type': 'iq2_xxs', 'iq-scale-iters': 6 },
             'IQ3_XXS': { label: 'IQ3_XXS', 'quant-type': 'iq', 'iq-type': 'iq3_xxs', 'iq-scale-iters': 15 },
-            'IQ4_NL': { label: 'IQ4_NL', 'quant-type': 'iq', 'iq-type': 'iq4_nl', 'iq-scale-iters': 6 },
+            'IQ4_XS': { label: 'IQ4_XS', 'quant-type': 'iq', 'iq-type': 'iq4_xs', 'iq-scale-iters': 15 },
         }
     },
     {
