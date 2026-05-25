@@ -17,6 +17,7 @@ pub fn quantize_block(
     iters: i32,
 ) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
     let mut q_block = vec![0.0; 256];
+    let mut qs_out = vec![0u8; 256];
     let mut scales = [0.0; 8];
 
     let mut amax_scale = 0.0;
@@ -40,11 +41,32 @@ pub fn quantize_block(
             continue;
         }
 
-        let mut best_scale = 0.0;
-        let mut best_score = -1.0;
+        // Evaluate initial candidate
+        let mut d = if iters > 0 {
+            -max / lut::KVALUES_IQ4NL[0]
+        } else {
+            max / lut::KVALUES_IQ4NL[0]
+        };
+        let mut id = if d != 0.0 { 1.0 / d } else { 0.0 };
+
+        let mut sumqx = 0.0;
+        let mut sumq2 = 0.0;
+
+        for i in 0..32 {
+            let al = id * chunk[i];
+            let l = best_index_iq4nl(al);
+
+            let q = lut::KVALUES_IQ4NL[l];
+            let w = w_chunk[i];
+            sumqx += w * q * chunk[i];
+            sumq2 += w * q * q;
+        }
+
+        d = if sumq2 > 0.0 { sumqx / sumq2 } else { 0.0 };
+        let mut best_score = d * sumqx;
+        let mut best_scale = d;
 
         for is in -iters..=iters {
-            // FIX: Map directly to raw initial negative LUT index mapping to utilize the full signed dynamic range.
             let id = (is as f32 + lut::KVALUES_IQ4NL[0]) / max;
             let mut sumqx = 0.0;
             let mut sumq2 = 0.0;
@@ -59,16 +81,10 @@ pub fn quantize_block(
                 sumq2 += w * q * q;
             }
 
-            let scale_cand = if sumq2 > 0.0 { sumqx / sumq2 } else { 0.0 };
-            let score = if sumq2 > 0.0 {
-                sumqx * sumqx / sumq2
-            } else {
-                0.0
-            };
-
-            if score > best_score {
-                best_score = score;
-                best_scale = scale_cand;
+            if sumq2 > 0.0 && sumqx * sumqx > best_score * sumq2 {
+                d = sumqx / sumq2;
+                best_score = d * sumqx;
+                best_scale = d;
             }
         }
 
@@ -80,7 +96,7 @@ pub fn quantize_block(
     }
 
     if amax_scale == 0.0 {
-        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
+        return (q_block, 0.0, vec![], vec![], vec![], qs_out);
     }
 
     let d = -max_scale / 32.0;
@@ -101,15 +117,19 @@ pub fn quantize_block(
             0.0
         };
 
+        // Output quantized scale value for inspector accuracy
+        scales[ib] = decoded_scale;
+
         let chunk = &super_block[ib * 32..(ib + 1) * 32];
         for i in 0..32 {
             let al = idl * chunk[i];
             let q_idx = best_index_iq4nl(al);
             q_block[ib * 32 + i] = decoded_scale * lut::KVALUES_IQ4NL[q_idx];
+            qs_out[ib * 32 + i] = q_idx as u8;
         }
     }
 
-    (q_block, d_out, scales.to_vec(), vec![], vec![], vec![])
+    (q_block, d_out, scales.to_vec(), vec![], vec![], qs_out)
 }
 
 pub fn formula_html() -> &'static str {

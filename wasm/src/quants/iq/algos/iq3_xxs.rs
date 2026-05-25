@@ -168,7 +168,13 @@ pub fn quantize_block(
     }
 
     if max_scale == 0.0 {
-        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
+        let mut out_grids = vec![];
+        let mut out_signs = vec![];
+        for ib in 0..8 {
+            out_grids.extend_from_slice(&tile_best_grids[ib]);
+            out_signs.extend_from_slice(&tile_signs[ib]);
+        }
+        return (q_block, 0.0, scales.to_vec(), vec![], out_grids, out_signs);
     }
 
     let d = max_scale / 31.0;

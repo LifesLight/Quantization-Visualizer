@@ -1,5 +1,5 @@
 pub mod algos;
-pub mod lut; // From previous folder state, already implemented
+pub mod lut;
 
 use crate::math_utils::*;
 use crate::quants::{

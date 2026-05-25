@@ -37,7 +37,6 @@ pub fn quantize_block(
 
         let mut block_signs = [0u8; 2];
         for k in 0..2 {
-            let mut nflip = 0;
             let mut s = 0u8;
             for i in 0..8 {
                 let v = block[ib * 16 + k * 8 + i];
@@ -45,22 +44,8 @@ pub fn quantize_block(
                     xval[k * 8 + i] = v;
                 } else {
                     xval[k * 8 + i] = -v;
-                    nflip += 1;
                     s |= 1 << i;
                 }
-            }
-            if nflip % 2 != 0 {
-                let mut min_cost = f32::INFINITY;
-                let mut imin = 0;
-                for i in 0..8 {
-                    let cost = w_chunk[k * 8 + i] * block[ib * 16 + k * 8 + i].powi(2);
-                    if cost < min_cost {
-                        min_cost = cost;
-                        imin = i;
-                    }
-                }
-                xval[k * 8 + imin] = -xval[k * 8 + imin];
-                s ^= 1 << imin;
             }
             block_signs[k] = s;
         }
@@ -114,13 +99,6 @@ pub fn quantize_block(
             }
         }
 
-        if best_scale < 0.0 {
-            best_scale = -best_scale;
-            for k in 0..2 {
-                block_signs[k] = !block_signs[k];
-            }
-        }
-
         if best_scale > 0.0 {
             let mut final_sumqx = 0.0;
             let mut final_sumq2 = 0.0;
@@ -148,6 +126,13 @@ pub fn quantize_block(
             tile_best_grids[ib] = refined_grids;
         } else {
             tile_best_grids[ib] = best_grids;
+        }
+
+        if best_scale < 0.0 {
+            best_scale = -best_scale;
+            for k in 0..2 {
+                block_signs[k] = !block_signs[k];
+            }
         }
 
         scales[ib] = best_scale;
@@ -213,7 +198,7 @@ pub fn quantize_block(
 }
 
 pub fn formula_html() -> &'static str {
-    "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( 2 &times; <span class=\"eq-pill\">GridVal<span class=\"bits\">2b</span></span> + 1 ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">4b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">16-element sub-blocks, 1024-entry 2-bit coordinate grid, enforcing even-sign-parity constraints.</span>"
+    "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( 2 &times; <span class=\"eq-pill\">GridVal<span class=\"bits\">2b</span></span> + 1 ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">4b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">16-element sub-blocks, 1024-entry 2-bit coordinate grid.</span>"
 }
 
 pub fn format_inspector(

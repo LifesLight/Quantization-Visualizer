@@ -35,6 +35,11 @@ pub fn quantize_block(
         let mut xval = [0.0; 32];
         let w_chunk = &weights[ib * 32..ib * 32 + 32];
 
+        let mut waux = [0.0; 32];
+        for i in 0..32 {
+            waux[i] = w_chunk[i].sqrt();
+        }
+
         let mut block_signs = [0u8; 4];
         for k in 0..4 {
             let mut nflip = 0;
@@ -87,7 +92,7 @@ pub fn quantize_block(
                 let best_g = find_best_grid_idx(
                     grid,
                     &xval[k * 8..k * 8 + 8],
-                    &w_chunk[k * 8..k * 8 + 8],
+                    &waux[k * 8..k * 8 + 8],
                     this_scale,
                     &q_mapped,
                 );
@@ -131,7 +136,7 @@ pub fn quantize_block(
                 let best_g = find_best_grid_idx(
                     grid,
                     &xval[k * 8..k * 8 + 8],
-                    &w_chunk[k * 8..k * 8 + 8],
+                    &waux[k * 8..k * 8 + 8],
                     best_scale,
                     &q_mapped,
                 );

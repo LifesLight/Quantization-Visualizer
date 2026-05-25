@@ -31,18 +31,28 @@ pub fn quantize_block(
     let x_p = [-1.0 + 0.125, 0.125, 1.0 + 0.125];
     let x_m = [-1.0 - 0.125, -0.125, 1.0 - 0.125];
 
+    let mut sumx2 = 0.0;
+    for &v in super_block {
+        sumx2 += v * v;
+    }
+    let sigma2 = 2.0 * sumx2 / 256.0;
+
     let mut max_scale = 0.0;
 
     for ib in 0..8 {
         let chunk = &super_block[ib * 32..(ib + 1) * 32];
-        let w_chunk = &weights[ib * 32..(ib + 1) * 32];
+        let base_w_chunk = &weights[ib * 32..(ib + 1) * 32];
 
         let mut max = 0.0_f32;
-        for &v in chunk {
+        let mut w_chunk = [0.0; 32];
+        for i in 0..32 {
+            let v = chunk[i];
             if v.abs() > max {
                 max = v.abs();
             }
+            w_chunk[i] = base_w_chunk[i] * (sigma2 + v * v).sqrt();
         }
+
         if max < 1e-6 {
             scales[ib] = 0.0;
             shifts[ib] = 1;
@@ -68,6 +78,7 @@ pub fn quantize_block(
         let mut best_score = -f32::MAX;
         let mut best_scale = max;
         let mut best_shift = 1;
+        let mut found_split = false;
 
         for i1 in 0..=32 {
             for i2 in i1..=32 {
@@ -81,6 +92,7 @@ pub fn quantize_block(
                     best_scale = sumqx_p / sumq2_p;
                     best_score = best_scale * sumqx_p;
                     best_shift = 1;
+                    found_split = true;
                 }
 
                 let sumqx_m = (sumx[i1] - sumx[0]) * x_m[0]
@@ -93,8 +105,15 @@ pub fn quantize_block(
                     best_scale = sumqx_m / sumq2_m;
                     best_score = best_scale * sumqx_m;
                     best_shift = -1;
+                    found_split = true;
                 }
             }
+        }
+
+        if !found_split {
+            scales[ib] = 0.0;
+            shifts[ib] = 1;
+            continue;
         }
 
         if best_scale < 0.0 {
@@ -123,7 +142,7 @@ pub fn quantize_block(
             }
         }
 
-        if final_sumq2 > 0.0 {
+        if final_sumqx > 0.0 && final_sumq2 > 0.0 {
             best_scale = final_sumqx / final_sumq2;
         }
 

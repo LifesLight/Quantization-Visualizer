@@ -33,7 +33,8 @@ pub fn quantize_block(
 
     for ib in 0..8 {
         let mut xval = [0.0; 32];
-        let w_chunk = &weights[ib * 32..ib * 32 + 32];
+        let mut w_chunk = [0.0; 32];
+        let mut waux_chunk = [0.0; 32];
 
         let mut block_signs = [0u8; 4];
         for k in 0..4 {
@@ -46,6 +47,8 @@ pub fn quantize_block(
                     xval[k * 8 + i] = -v;
                     s |= 1 << i;
                 }
+                w_chunk[k * 8 + i] = weights[ib * 32 + k * 8 + i];
+                waux_chunk[k * 8 + i] = w_chunk[k * 8 + i].sqrt();
             }
             block_signs[k] = s;
         }
@@ -72,7 +75,7 @@ pub fn quantize_block(
                 let best_g = find_best_grid_idx_4(
                     grid,
                     &xval[k * 4..k * 4 + 4],
-                    &w_chunk[k * 4..k * 4 + 4],
+                    &waux_chunk[k * 4..k * 4 + 4],
                     this_scale,
                     &q_mapped,
                 );
@@ -115,7 +118,7 @@ pub fn quantize_block(
                 let best_g = find_best_grid_idx_4(
                     grid,
                     &xval[k * 4..k * 4 + 4],
-                    &w_chunk[k * 4..k * 4 + 4],
+                    &waux_chunk[k * 4..k * 4 + 4],
                     best_scale,
                     &q_mapped,
                 );
@@ -170,7 +173,7 @@ pub fn quantize_block(
             let g_vals = grid[g_idx];
             for i in 0..4 {
                 let q = q_mapped[g_vals[i] as usize];
-                let sign = if tile_signs[ib][(k / 2) * 8 + (k % 2) * 4 + i] == 1 {
+                let sign = if tile_signs[ib][k * 4 + i] == 1 {
                     -1.0
                 } else {
                     1.0
@@ -198,7 +201,7 @@ pub fn quantize_block(
 }
 
 pub fn formula_html() -> &'static str {
-    "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( 2 &times; <span class=\"eq-pill\">GridVal<span class=\"bits\">3b</span></span> + 1 ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">4b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">32-element sub-blocks, 512-entry 3-bit coordinate grid, sharing sign-parity constraints across dual pairs.</span>"
+    "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( 2 &times; <span class=\"eq-pill\">GridVal<span class=\"bits\">3b</span></span> + 1 ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">4b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">32-element sub-blocks, 512-entry 3-bit coordinate grid, independent signs.</span>"
 }
 
 pub fn format_inspector(
@@ -321,43 +324,22 @@ pub fn format_inspector(
     snap_html.push_str("</div></div>");
     iq_html.push_str(&snap_html);
 
-    let mut orig_neg = 0;
-    let mut parity_violation = false;
-    let mut flip_idx = 8;
-
-    for i in 0..8 {
-        if group_orig[i] < 0.0 {
-            orig_neg += 1;
-        }
-    }
-
-    if orig_neg % 2 != 0 {
-        parity_violation = true;
-        for i in 0..8 {
-            let o_sign = group_orig[i] < 0.0;
-            let q_sign = group_q[i] < 0.0;
-            if o_sign != q_sign {
-                flip_idx = i;
-                break;
-            }
-        }
-    }
-
-    let mut parity_html = format!(
+    let mut sign_html = format!(
         r#"
         <div style="margin-top:12px; border-top:1px solid var(--border-color); padding-top:8px;">
-            <div style="font-size:0.85rem; font-weight:bold; margin-bottom:4px;">Sign Parity Enforcement</div>
+            <div style="font-size:0.85rem; font-weight:bold; margin-bottom:4px;">Sign Bits</div>
             <div style="display:flex; gap:4px;">
     "#
     );
 
+    let mut inverted_count = 0;
+
     for i in 0..8 {
         let q_sign = group_q[i] < 0.0;
         let o_sign = group_orig[i] < 0.0;
-
-        let mut is_flipped = i == flip_idx;
-        if parity_violation && flip_idx == 8 && o_sign != q_sign {
-            is_flipped = true;
+        let is_flipped = q_sign != o_sign && group_q[i] != 0.0 && group_orig[i] != 0.0;
+        if is_flipped {
+            inverted_count += 1;
         }
 
         let bg = if q_sign {
@@ -372,7 +354,7 @@ pub fn format_inspector(
             "border:2px solid transparent;"
         };
 
-        parity_html.push_str(&format!(
+        sign_html.push_str(&format!(
             r#"
             <div style="flex:1; text-align:center; padding:2px; border-radius:4px; background:{}; color:white; font-weight:bold; {}">
                 {}
@@ -382,16 +364,13 @@ pub fn format_inspector(
         ));
     }
 
-    let text = if parity_violation {
-        format!(
-            "Parity Violation! Flipped sign of element #{} to satisfy even parity.",
-            flip_idx + 1
-        )
+    let text = if inverted_count > 0 {
+        "Signs flipped (likely due to negative tile scale optimization)."
     } else {
-        "Even negatives. Parity satisfied.".to_string()
+        "Signs match original values."
     };
 
-    parity_html.push_str(&format!(
+    sign_html.push_str(&format!(
         r#"
             </div>
             <div style="font-size:0.75rem; margin-top:6px; color:var(--text-muted); line-height:1.2; min-height:2.4em; display:flex; align-items:center;">
@@ -402,7 +381,7 @@ pub fn format_inspector(
         text
     ));
 
-    iq_html.push_str(&parity_html);
+    iq_html.push_str(&sign_html);
 
     Some(iq_html)
 }

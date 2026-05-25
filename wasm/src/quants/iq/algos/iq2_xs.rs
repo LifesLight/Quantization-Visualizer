@@ -31,9 +31,21 @@ pub fn quantize_block(
     let mut max_scale = 0.0;
     let q_mapped = [1.0, 3.0, 5.0, 7.0];
 
+    // Compute variance-based weight modulation
+    let mut sumx2 = 0.0;
+    for i in 0..256 {
+        sumx2 += block[i] * block[i];
+    }
+    let sigma2 = sumx2 / 256.0;
+
+    let mut local_weights = vec![0.0; 256];
+    for i in 0..256 {
+        local_weights[i] = weights[i] * (sigma2 + block[i] * block[i]).sqrt();
+    }
+
     for ib in 0..16 {
         let mut xval = [0.0; 16];
-        let w_chunk = &weights[ib * 16..ib * 16 + 16];
+        let w_chunk = &local_weights[ib * 16..ib * 16 + 16];
 
         let mut block_signs = [0u8; 2];
         for k in 0..2 {
@@ -114,13 +126,6 @@ pub fn quantize_block(
             }
         }
 
-        if best_scale < 0.0 {
-            best_scale = -best_scale;
-            for k in 0..2 {
-                block_signs[k] = !block_signs[k];
-            }
-        }
-
         if best_scale > 0.0 {
             let mut final_sumqx = 0.0;
             let mut final_sumq2 = 0.0;
@@ -148,6 +153,13 @@ pub fn quantize_block(
             tile_best_grids[ib] = refined_grids;
         } else {
             tile_best_grids[ib] = best_grids;
+        }
+
+        if best_scale < 0.0 {
+            best_scale = -best_scale;
+            for k in 0..2 {
+                block_signs[k] = !block_signs[k];
+            }
         }
 
         scales[ib] = best_scale;

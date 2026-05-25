@@ -28,8 +28,8 @@ pub fn quantize_block(
     let mut tile_best_grids = [[0usize; 2]; 16];
 
     let grid = get_iq1_s_grid();
-    let x_p = [-1.0 + 0.125, 0.125, 1.0 + 0.125];
-    let x_m = [-1.0 - 0.125, -0.125, 1.0 - 0.125];
+    let x_p = [-1.0 + 0.125, 0.125, 1.0 + 0.125, 0.0];
+    let x_m = [-1.0 - 0.125, -0.125, 1.0 - 0.125, 0.0];
 
     let mut max_scale = 0.0;
 
@@ -66,30 +66,59 @@ pub fn quantize_block(
                 let mut sumqx = [0.0; 4];
                 let mut sumq2 = [0.0; 4];
 
-                for j in 0..16 {
+                for j in 0..i1 {
                     let i = pairs[j].1;
                     let w = w_chunk[i];
-                    let v = chunk[i];
-                    let ww = w * v;
+                    let ww = w * chunk[i];
 
-                    let (q0, q1, q2, q3) = if j < i1 {
-                        if i < 8 {
-                            (x_p[0], x_p[0], x_m[0], x_m[0])
-                        } else {
-                            (x_p[0], x_m[0], x_p[0], x_m[0])
-                        }
-                    } else if j < i2 {
-                        if i < 8 {
-                            (x_p[1], x_p[1], x_m[1], x_m[1])
-                        } else {
-                            (x_p[1], x_m[1], x_p[1], x_m[1])
-                        }
+                    let (q0, q1, q2, q3) = if i < 8 {
+                        (x_p[0], x_p[0], x_m[0], x_m[0])
                     } else {
-                        if i < 8 {
-                            (x_p[2], x_p[2], x_m[2], x_m[2])
-                        } else {
-                            (x_p[2], x_m[2], x_p[2], x_m[2])
-                        }
+                        (x_p[0], x_m[0], x_p[0], x_m[0])
+                    };
+
+                    sumqx[0] += ww * q0;
+                    sumqx[1] += ww * q1;
+                    sumqx[2] += ww * q2;
+                    sumqx[3] += ww * q3;
+
+                    sumq2[0] += w * q0 * q0;
+                    sumq2[1] += w * q1 * q1;
+                    sumq2[2] += w * q2 * q2;
+                    sumq2[3] += w * q3 * q3;
+                }
+
+                for j in i1..i2 {
+                    let i = pairs[j].1;
+                    let w = w_chunk[i];
+                    let ww = w * chunk[i];
+
+                    let (q0, q1, q2, q3) = if i < 8 {
+                        (x_p[1], x_p[1], x_m[1], x_m[1])
+                    } else {
+                        (x_p[1], x_m[1], x_p[1], x_m[1])
+                    };
+
+                    sumqx[0] += ww * q0;
+                    sumqx[1] += ww * q1;
+                    sumqx[2] += ww * q2;
+                    sumqx[3] += ww * q3;
+
+                    sumq2[0] += w * q0 * q0;
+                    sumq2[1] += w * q1 * q1;
+                    sumq2[2] += w * q2 * q2;
+                    sumq2[3] += w * q3 * q3;
+                }
+
+                for j in i2..16 {
+                    let i = pairs[j].1;
+                    let w = w_chunk[i];
+                    let ww = w * chunk[i];
+
+                    let (q0, q1, q2, q3) = if i < 8 {
+                        (x_p[2], x_p[2], x_m[2], x_m[2])
+                    } else {
+                        (x_p[2], x_m[2], x_p[2], x_m[2])
                     };
 
                     sumqx[0] += ww * q0;
@@ -174,13 +203,51 @@ pub fn quantize_block(
     }
 
     let d = max_scale / 15.0;
-    let d_out = fp16(d * 1.1125);
     let id = if d > 0.0 { 1.0 / d } else { 0.0 };
+    let mut sumqx_f = 0.0;
+    let mut sumq2_f = 0.0;
+    let mut ls = [0i32; 16];
 
     for ib in 0..16 {
         let mut l = (0.5 * (id * scales[ib] - 1.0)).round() as i32;
         l = l.clamp(0, 7);
-        let decoded_scale = d_out * (2.0 * l as f32 + 1.0);
+        ls[ib] = l;
+
+        let w_chunk = &weights[ib * 16..(ib + 1) * 16];
+        let chunk = &super_block[ib * 16..(ib + 1) * 16];
+
+        for k in 0..2 {
+            let xx = if k == 0 {
+                if shifts[ib] < 2 {
+                    x_p
+                } else {
+                    x_m
+                }
+            } else {
+                if shifts[ib] % 2 == 0 {
+                    x_p
+                } else {
+                    x_m
+                }
+            };
+
+            let g_idx = tile_best_grids[ib][k];
+            for i in 0..8 {
+                let q = xx[grid[g_idx][i] as usize] * (2.0 * l as f32 + 1.0);
+                let w = w_chunk[k * 8 + i];
+                sumqx_f += w * q * chunk[k * 8 + i];
+                sumq2_f += w * q * q;
+            }
+        }
+    }
+
+    let d_final = if sumq2_f > 0.0 { sumqx_f / sumq2_f } else { d };
+    let d_out = fp16(d_final * 1.1125);
+
+    for ib in 0..16 {
+        let l_scale = 2.0 * ls[ib] as f32 + 1.0;
+        let decoded_scale = d_out * l_scale;
+        scales[ib] = l_scale;
 
         for k in 0..2 {
             let xx = if k == 0 {

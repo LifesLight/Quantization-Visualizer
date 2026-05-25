@@ -32,11 +32,35 @@ pub fn quantize_block(
         return (q_block, 0.0, vec![], vec![], vec![], vec![]);
     }
 
-    let mut best_scale = 0.0;
-    let mut best_score = -1.0;
+    // Initial pass to establish a baseline
+    let d_init = if iters > 0 {
+        -max / lut::KVALUES_IQ4NL[0]
+    } else {
+        max / lut::KVALUES_IQ4NL[0]
+    };
+    let id_init = if d_init != 0.0 { 1.0 / d_init } else { 0.0 };
 
+    let mut sumqx_init = 0.0;
+    let mut sumq2_init = 0.0;
+
+    for i in 0..32 {
+        let al = id_init * block[i];
+        let l = best_index_iq4nl(al);
+        let q = lut::KVALUES_IQ4NL[l];
+        let w = weights[i];
+        sumqx_init += w * q * block[i];
+        sumq2_init += w * q * q;
+    }
+
+    let mut best_scale = if sumq2_init > 0.0 {
+        sumqx_init / sumq2_init
+    } else {
+        0.0
+    };
+    let mut best_score = best_scale * sumqx_init;
+
+    // Iterative refinement
     for is in -iters..=iters {
-        // FIX: Map directly to raw initial negative LUT index mapping to utilize the full signed dynamic range.
         let id = (is as f32 + lut::KVALUES_IQ4NL[0]) / max;
 
         let mut sumqx = 0.0;
@@ -52,16 +76,9 @@ pub fn quantize_block(
             sumq2 += w * q * q;
         }
 
-        let scale_cand = if sumq2 > 0.0 { sumqx / sumq2 } else { 0.0 };
-        let score = if sumq2 > 0.0 {
-            sumqx * sumqx / sumq2
-        } else {
-            0.0
-        };
-
-        if score > best_score {
-            best_score = score;
-            best_scale = scale_cand;
+        if sumq2 > 0.0 && sumqx * sumqx > best_score * sumq2 {
+            best_scale = sumqx / sumq2;
+            best_score = best_scale * sumqx;
         }
     }
 
