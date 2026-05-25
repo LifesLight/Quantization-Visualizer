@@ -1,7 +1,6 @@
 //! Contains all implemented quantization schemes and shared types.
 
 pub mod asym;
-pub mod lut;
 pub mod iq;
 pub mod kquant;
 pub mod mxfp;
