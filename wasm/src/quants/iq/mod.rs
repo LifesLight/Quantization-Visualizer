@@ -6,6 +6,36 @@ use crate::quants::{
     ImportanceResult, InspectorData, IqBlockMeta, QuantMeta, QuantizeOutput, Settings,
 };
 
+#[derive(Clone, Copy)]
+enum IqAlgo {
+    Iq1S,
+    Iq1M,
+    Iq2Xxs,
+    Iq2Xs,
+    Iq2S,
+    Iq3Xxs,
+    Iq3S,
+    Iq4Xs,
+    Iq4Nl,
+}
+
+impl IqAlgo {
+    fn from_str(s: &str) -> Self {
+        match s {
+            "iq1_s" => Self::Iq1S,
+            "iq1_m" => Self::Iq1M,
+            "iq2_xxs" => Self::Iq2Xxs,
+            "iq2_xs" => Self::Iq2Xs,
+            "iq2_s" => Self::Iq2S,
+            "iq3_xxs" => Self::Iq3Xxs,
+            "iq3_s" => Self::Iq3S,
+            "iq4_xs" => Self::Iq4Xs,
+            "iq4_nl" => Self::Iq4Nl,
+            _ => Self::Iq2Xxs,
+        }
+    }
+}
+
 pub fn quantize(
     floats: &[f32],
     importance: Option<&ImportanceResult>,
@@ -15,56 +45,53 @@ pub fn quantize(
     let mut q_floats = vec![0.0; n];
     let mut blocks = Vec::new();
 
-    let (block_size, bpw, formula_html) = match settings.iq_type.as_str() {
-        "iq1_s" => (
+    let algo = IqAlgo::from_str(settings.iq_type.as_str());
+
+    let (block_size, bpw, formula_html) = match algo {
+        IqAlgo::Iq1S => (
             algos::iq1_s::block_size(),
             algos::iq1_s::bpw(),
             algos::iq1_s::formula_html(),
         ),
-        "iq1_m" => (
+        IqAlgo::Iq1M => (
             algos::iq1_m::block_size(),
             algos::iq1_m::bpw(),
             algos::iq1_m::formula_html(),
         ),
-        "iq2_xxs" => (
+        IqAlgo::Iq2Xxs => (
             algos::iq2_xxs::block_size(),
             algos::iq2_xxs::bpw(),
             algos::iq2_xxs::formula_html(),
         ),
-        "iq2_xs" => (
+        IqAlgo::Iq2Xs => (
             algos::iq2_xs::block_size(),
             algos::iq2_xs::bpw(),
             algos::iq2_xs::formula_html(),
         ),
-        "iq2_s" => (
+        IqAlgo::Iq2S => (
             algos::iq2_s::block_size(),
             algos::iq2_s::bpw(),
             algos::iq2_s::formula_html(),
         ),
-        "iq3_xxs" => (
+        IqAlgo::Iq3Xxs => (
             algos::iq3_xxs::block_size(),
             algos::iq3_xxs::bpw(),
             algos::iq3_xxs::formula_html(),
         ),
-        "iq3_s" => (
+        IqAlgo::Iq3S => (
             algos::iq3_s::block_size(),
             algos::iq3_s::bpw(),
             algos::iq3_s::formula_html(),
         ),
-        "iq4_xs" => (
+        IqAlgo::Iq4Xs => (
             algos::iq4_xs::block_size(),
             algos::iq4_xs::bpw(),
             algos::iq4_xs::formula_html(),
         ),
-        "iq4_nl" => (
+        IqAlgo::Iq4Nl => (
             algos::iq4_nl::block_size(),
             algos::iq4_nl::bpw(),
             algos::iq4_nl::formula_html(),
-        ),
-        _ => (
-            algos::iq2_xxs::block_size(),
-            algos::iq2_xxs::bpw(),
-            algos::iq2_xxs::formula_html(),
         ),
     };
 
@@ -98,17 +125,16 @@ pub fn quantize(
         }
         weights[chunk_len..max_pad_len].fill(0.0);
 
-        let (q_block, block_scale, scales, aux8, grids, signs) = match settings.iq_type.as_str() {
-            "iq1_s" => algos::iq1_s::quantize_block(&chunk_padded, &weights, iters),
-            "iq1_m" => algos::iq1_m::quantize_block(&chunk_padded, &weights, iters),
-            "iq2_xxs" => algos::iq2_xxs::quantize_block(&chunk_padded, &weights, iters),
-            "iq2_xs" => algos::iq2_xs::quantize_block(&chunk_padded, &weights, iters),
-            "iq2_s" => algos::iq2_s::quantize_block(&chunk_padded, &weights, iters),
-            "iq3_xxs" => algos::iq3_xxs::quantize_block(&chunk_padded, &weights, iters),
-            "iq3_s" => algos::iq3_s::quantize_block(&chunk_padded, &weights, iters),
-            "iq4_xs" => algos::iq4_xs::quantize_block(&chunk_padded, &weights, iters),
-            "iq4_nl" => algos::iq4_nl::quantize_block(&chunk_padded, &weights, iters),
-            _ => algos::iq2_xxs::quantize_block(&chunk_padded, &weights, iters),
+        let (q_block, block_scale, scales, aux8, grids, signs) = match algo {
+            IqAlgo::Iq1S => algos::iq1_s::quantize_block(&chunk_padded, &weights, iters),
+            IqAlgo::Iq1M => algos::iq1_m::quantize_block(&chunk_padded, &weights, iters),
+            IqAlgo::Iq2Xxs => algos::iq2_xxs::quantize_block(&chunk_padded, &weights, iters),
+            IqAlgo::Iq2Xs => algos::iq2_xs::quantize_block(&chunk_padded, &weights, iters),
+            IqAlgo::Iq2S => algos::iq2_s::quantize_block(&chunk_padded, &weights, iters),
+            IqAlgo::Iq3Xxs => algos::iq3_xxs::quantize_block(&chunk_padded, &weights, iters),
+            IqAlgo::Iq3S => algos::iq3_s::quantize_block(&chunk_padded, &weights, iters),
+            IqAlgo::Iq4Xs => algos::iq4_xs::quantize_block(&chunk_padded, &weights, iters),
+            IqAlgo::Iq4Nl => algos::iq4_nl::quantize_block(&chunk_padded, &weights, iters),
         };
 
         for i in 0..chunk_len {
@@ -160,17 +186,18 @@ pub fn format_inspector(
         let sign_char = if q_val < 0.0 { "-" } else { "+" };
         data.math_str = Some(format!("{} {:.4} (Grid mapped)", sign_char, q_val.abs()));
 
-        let iq_html = match settings.iq_type.as_str() {
-            "iq1_s" => algos::iq1_s::format_inspector(idx, active, &out.q_floats, bm),
-            "iq1_m" => algos::iq1_m::format_inspector(idx, active, &out.q_floats, bm),
-            "iq2_xxs" => algos::iq2_xxs::format_inspector(idx, active, &out.q_floats, bm),
-            "iq2_xs" => algos::iq2_xs::format_inspector(idx, active, &out.q_floats, bm),
-            "iq2_s" => algos::iq2_s::format_inspector(idx, active, &out.q_floats, bm),
-            "iq3_xxs" => algos::iq3_xxs::format_inspector(idx, active, &out.q_floats, bm),
-            "iq3_s" => algos::iq3_s::format_inspector(idx, active, &out.q_floats, bm),
-            "iq4_xs" => algos::iq4_xs::format_inspector(idx, active, &out.q_floats, bm),
-            "iq4_nl" => algos::iq4_nl::format_inspector(idx, active, &out.q_floats, bm),
-            _ => None,
+        let algo = IqAlgo::from_str(settings.iq_type.as_str());
+
+        let iq_html = match algo {
+            IqAlgo::Iq1S => algos::iq1_s::format_inspector(idx, active, &out.q_floats, bm),
+            IqAlgo::Iq1M => algos::iq1_m::format_inspector(idx, active, &out.q_floats, bm),
+            IqAlgo::Iq2Xxs => algos::iq2_xxs::format_inspector(idx, active, &out.q_floats, bm),
+            IqAlgo::Iq2Xs => algos::iq2_xs::format_inspector(idx, active, &out.q_floats, bm),
+            IqAlgo::Iq2S => algos::iq2_s::format_inspector(idx, active, &out.q_floats, bm),
+            IqAlgo::Iq3Xxs => algos::iq3_xxs::format_inspector(idx, active, &out.q_floats, bm),
+            IqAlgo::Iq3S => algos::iq3_s::format_inspector(idx, active, &out.q_floats, bm),
+            IqAlgo::Iq4Xs => algos::iq4_xs::format_inspector(idx, active, &out.q_floats, bm),
+            IqAlgo::Iq4Nl => algos::iq4_nl::format_inspector(idx, active, &out.q_floats, bm),
         };
 
         data.iq_html = iq_html;

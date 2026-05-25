@@ -47,7 +47,7 @@ pub fn quantize_block(
         } else {
             max / lut::KVALUES_IQ4NL[0]
         };
-        let mut id = if d != 0.0 { 1.0 / d } else { 0.0 };
+        let id = if d != 0.0 { 1.0 / d } else { 0.0 };
 
         let mut sumqx = 0.0;
         let mut sumq2 = 0.0;
