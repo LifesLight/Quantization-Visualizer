@@ -13,6 +13,7 @@ A visualizer for floating-point quantization. It shows how different schemes map
 *   **K-Quant (Nested Scales):** Superblock structure where sub-block scales are themselves quantized by a shared super-scale.
 *   **TurboQuant (Scalar WHT):** SRHT rotation normalizes the coefficient distribution, then a precomputed Lloyd-Max codebook quantizes each coordinate independently. Optional QJL adds a 1-bit residual correction to remove inner-product bias.
 *   **Trellis (Viterbi WHT):** SRHT rotation followed by a multi-state Viterbi search that minimizes MSE over the full sequence rather than per value independently, using Ungerboeck set partitioning to increase effective codebook resolution.
+*   **IQ-Quant (Grid-Based):** Block quantization using learned grids with per-block scales, auxiliary metadata, and sign bits. Variants: IQ1_S, IQ1_M, IQ2_XXS, IQ2_XS, IQ2_S, IQ3_XXS, IQ3_S, IQ4_XS, IQ4_NL.
 
 ### Interface
 
