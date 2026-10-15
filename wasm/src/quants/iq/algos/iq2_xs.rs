@@ -1,238 +1,279 @@
-use super::{find_best_grid_idx, get_grid_2bit};
-use crate::math_utils::*;
-use crate::quants::iq::lut;
-use crate::quants::IqBlockMeta;
+//! IQ2_XS: block_iq2_xs { fp16 d; u16 qs[32]; u8 scales[8] } -> 74 bytes per 256 weights.
+//! Each u16 in qs is a 9 bit grid index plus 7 sign bits, scales are 4 bits per 16 weights.
 
-pub fn block_size() -> usize {
-    256
-}
+use super::*;
+use crate::quants::iq::{grid, lut};
 
-pub fn bpw() -> f32 {
-    2.3125
-}
+pub static TYPE: IqType = IqType {
+    name: "IQ2_XS",
+    super_size: QK_K,
+    sub_size: 16,
+    group_size: 8,
+    bytes: 74,
+    needs_imatrix: true,
+    quantize,
+    dequantize,
+    decode,
+    sub_scales,
+    formula_html,
+};
 
-fn get_iq2_xs_grid() -> &'static [[u8; 8]] {
-    static GRID: std::sync::OnceLock<Vec<[u8; 8]>> = std::sync::OnceLock::new();
-    GRID.get_or_init(|| get_grid_2bit(&lut::KGRID_2BIT_512))
-        .as_slice()
-}
+const K_MAX_Q: i32 = 3;
+const QS: usize = 2;
+const SCALES: usize = 66;
 
-pub fn quantize_block(
-    block: &[f32],
-    weights: &[f32],
-    iters: i32,
-) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
-    let mut q_block = vec![0.0; 256];
-    let mut scales = [0.0; 16];
-    let mut tile_best_grids = [[0usize; 2]; 16];
-    let mut tile_signs = [[0u8; 16]; 16];
-    let grid = get_iq2_xs_grid();
+/// Port of quantize_row_iq2_xs_impl for one super-block.
+pub fn quantize(xbl: &[f32], qw: Option<&[f32]>) -> Encoded {
+    let grid = grid::iq2xs();
+    let qw = qw.expect("IQ2_XS needs quantization weights");
 
-    let mut max_scale = 0.0;
-    let q_mapped = [1.0, 3.0, 5.0, 7.0];
+    let mut bytes = vec![0u8; TYPE.bytes];
+    let mut probe = vec![0u16; QK_K / 8];
 
-    // Compute variance-based weight modulation
-    let mut sumx2 = 0.0;
-    for i in 0..256 {
-        sumx2 += block[i] * block[i];
+    let mut scales = [0.0f32; QK_K / 16];
+    let mut weight = [0.0f32; 16];
+    let mut xval = [0.0f32; 16];
+    let mut l = [0i8; 16];
+    let mut laux = [0i8; 16];
+    let mut waux = [0.0f32; 16];
+    let mut is_on_grid: [bool; 2];
+    let mut is_on_grid_aux = [true; 2];
+    let mut probe_aux = [0u16; 2];
+    let mut probe_best: [u16; 2];
+    let mut block_signs = [0u8; 2];
+    let mut q2 = [0u16; 2 * (QK_K / 16)];
+
+    let mut max_scale = 0.0f32;
+
+    let mut sumx2 = 0.0f32;
+    for i in 0..QK_K {
+        sumx2 += xbl[i] * xbl[i];
     }
-    let sigma2 = sumx2 / 256.0;
+    let sigma2 = sumx2 / QK_K as f32;
 
-    let mut local_weights = vec![0.0; 256];
-    for i in 0..256 {
-        local_weights[i] = weights[i] * (sigma2 + block[i] * block[i]).sqrt();
-    }
-
-    for ib in 0..16 {
-        let mut xval = [0.0; 16];
-        let w_chunk = &local_weights[ib * 16..ib * 16 + 16];
-
-        let mut block_signs = [0u8; 2];
-        for k in 0..2 {
-            let mut nflip = 0;
-            let mut s = 0u8;
-            for i in 0..8 {
-                let v = block[ib * 16 + k * 8 + i];
-                if v >= 0.0 {
-                    xval[k * 8 + i] = v;
-                } else {
-                    xval[k * 8 + i] = -v;
-                    nflip += 1;
-                    s |= 1 << i;
-                }
-            }
-            if nflip % 2 != 0 {
-                let mut min_cost = f32::INFINITY;
-                let mut imin = 0;
-                for i in 0..8 {
-                    let cost = w_chunk[k * 8 + i] * block[ib * 16 + k * 8 + i].powi(2);
-                    if cost < min_cost {
-                        min_cost = cost;
-                        imin = i;
-                    }
-                }
-                xval[k * 8 + imin] = -xval[k * 8 + imin];
-                s ^= 1 << imin;
-            }
-            block_signs[k] = s;
+    for ib in 0..QK_K / 16 {
+        let xb = &xbl[16 * ib..16 * ib + 16];
+        let qwb = &qw[16 * ib..16 * ib + 16];
+        for i in 0..16 {
+            weight[i] = qwb[i] * (sigma2 + xb[i] * xb[i]).sqrt();
         }
-
-        let max = xval.iter().cloned().fold(0.0_f32, f32::max);
-        if max < 1e-6 {
+        for i in 0..16 {
+            waux[i] = weight[i].sqrt();
+        }
+        for k in 0..2 {
+            let r = 8 * k..8 * k + 8;
+            block_signs[k] = even_signs(&xb[r.clone()], &weight[r.clone()], &mut xval[r]);
+        }
+        let mut max = xval[0];
+        for i in 1..16 {
+            if xval[i] > max {
+                max = xval[i];
+            }
+        }
+        l.fill(0);
+        if max < GROUP_MAX_EPS {
             scales[ib] = 0.0;
             continue;
         }
-
-        let mut best_scale = 0.0;
-        let mut best_score = -1.0;
-        let mut best_grids = [0usize; 2];
-
-        for is in -iters..=iters {
-            let id = (5.0 + is as f32 * 0.1) / max;
+        let mut best = 0.0f32;
+        let mut scale = max / (2 * K_MAX_Q - 1) as f32;
+        is_on_grid = [true; 2];
+        probe_best = [0; 2];
+        for is in -9..=9 {
+            let id = ((2 * K_MAX_Q - 1) as f32 + is as f32 * 0.1) / max;
             let this_scale = 1.0 / id;
-
-            let mut current_grids = [0usize; 2];
-            let mut sumqx = 0.0;
-            let mut sumq2 = 0.0;
-
             for k in 0..2 {
-                let best_g = find_best_grid_idx(
-                    grid,
-                    &xval[k * 8..k * 8 + 8],
-                    &w_chunk[k * 8..k * 8 + 8],
-                    this_scale,
-                    &q_mapped,
-                );
-                current_grids[k] = best_g;
                 for i in 0..8 {
-                    let q = q_mapped[grid[best_g][i] as usize];
-                    let w = w_chunk[k * 8 + i];
-                    sumqx += w * xval[k * 8 + i] * q;
-                    sumq2 += w * q * q;
+                    let li = nearest_int(0.5 * (id * xval[8 * k + i] - 1.0));
+                    laux[8 * k + i] = li.clamp(0, K_MAX_Q - 1) as i8;
+                }
+                let u = pack_levels(&laux[8 * k..8 * k + 8], 2);
+                is_on_grid_aux[k] = true;
+                probe_aux[k] = 0;
+                if grid.map[u] < 0 {
+                    is_on_grid_aux[k] = false;
+                    probe_aux[k] = grid.neighbours[u].len() as u16;
+                    find_best_neighbour(
+                        &grid.neighbours[u],
+                        grid,
+                        &xval[8 * k..],
+                        &waux[8 * k..],
+                        this_scale,
+                        &mut laux[8 * k..8 * k + 8],
+                    );
                 }
             }
-
-            let scale_cand = if sumq2 > 0.0 { sumqx / sumq2 } else { 0.0 };
-            let score = if sumq2 > 0.0 {
-                sumqx * sumqx / sumq2
-            } else {
-                0.0
-            };
-
-            if score > best_score {
-                best_score = score;
-                best_scale = scale_cand;
-                best_grids = current_grids;
+            let mut sumqx = 0.0f32;
+            let mut sumq2 = 0.0f32;
+            for i in 0..16 {
+                let w = weight[i];
+                let q = (2 * laux[i] as i32 + 1) as f32;
+                sumqx += w * xval[i] * q;
+                sumq2 += w * q * q;
+            }
+            if sumq2 > 0.0 && sumqx * sumqx > best * sumq2 {
+                scale = sumqx / sumq2;
+                best = scale * sumqx;
+                l = laux;
+                is_on_grid = is_on_grid_aux;
+                probe_best = probe_aux;
             }
         }
-
-        if best_scale > 0.0 {
-            let mut final_sumqx = 0.0;
-            let mut final_sumq2 = 0.0;
-            let mut refined_grids = [0usize; 2];
-
+        let n_not_ongrid = is_on_grid.iter().filter(|&&g| !g).count();
+        if n_not_ongrid > 0 && scale > 0.0 {
+            let id = 1.0 / scale;
             for k in 0..2 {
-                let best_g = find_best_grid_idx(
-                    grid,
-                    &xval[k * 8..k * 8 + 8],
-                    &w_chunk[k * 8..k * 8 + 8],
-                    best_scale,
-                    &q_mapped,
-                );
-                refined_grids[k] = best_g;
+                if is_on_grid[k] {
+                    continue;
+                }
+                let mut u = 0usize;
                 for i in 0..8 {
-                    let q = q_mapped[grid[best_g][i] as usize];
-                    let w = w_chunk[k * 8 + i];
-                    final_sumqx += w * xval[k * 8 + i] * q;
-                    final_sumq2 += w * q * q;
+                    let li = nearest_int(0.5 * (id * xval[8 * k + i] - 1.0)).clamp(0, K_MAX_Q - 1);
+                    u |= (li as usize) << (2 * i);
+                    l[8 * k + i] = li as i8;
+                }
+                probe_best[k] = 0;
+                if grid.map[u] < 0 {
+                    probe_best[k] = grid.neighbours[u].len() as u16;
+                    find_best_neighbour(
+                        &grid.neighbours[u],
+                        grid,
+                        &xval[8 * k..],
+                        &waux[8 * k..],
+                        scale,
+                        &mut l[8 * k..8 * k + 8],
+                    );
                 }
             }
-            if final_sumq2 > 0.0 {
-                best_scale = final_sumqx / final_sumq2;
+            let mut sumqx = 0.0f32;
+            let mut sumq2 = 0.0f32;
+            for i in 0..16 {
+                let w = weight[i];
+                let q = (2 * l[i] as i32 + 1) as f32;
+                sumqx += w * xval[i] * q;
+                sumq2 += w * q * q;
             }
-            tile_best_grids[ib] = refined_grids;
-        } else {
-            tile_best_grids[ib] = best_grids;
+            if sumq2 > 0.0 {
+                scale = sumqx / sumq2;
+            }
         }
-
-        if best_scale < 0.0 {
-            best_scale = -best_scale;
+        if scale < 0.0 {
+            scale = -scale;
             for k in 0..2 {
-                block_signs[k] = !block_signs[k];
+                block_signs[k] = !block_signs[k] & 127;
             }
         }
-
-        scales[ib] = best_scale;
-
         for k in 0..2 {
-            for i in 0..8 {
-                tile_signs[ib][k * 8 + i] = if (block_signs[k] & (1 << i)) != 0 {
-                    1
-                } else {
-                    0
-                };
-            }
+            let u = pack_levels(&l[8 * k..8 * k + 8], 2);
+            let grid_index = grid.map[u].max(0) as u16;
+            q2[2 * ib + k] = grid_index | ((block_signs[k] as u16) << 9);
+            probe[2 * ib + k] = probe_best[k];
         }
-
-        if best_scale > max_scale {
-            max_scale = best_scale;
+        scales[ib] = scale;
+        if scale > max_scale {
+            max_scale = scale;
         }
     }
 
     if max_scale == 0.0 {
-        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
+        return Encoded {
+            bytes,
+            probe,
+            note: None,
+        };
     }
 
     let d = max_scale / 31.0;
-    let d_fp16 = fp16(d);
-    let id = if d > 0.0 { 1.0 / d } else { 0.0 };
+    put_u16(&mut bytes, 0, f16_bits(d));
+    let id = 1.0 / d;
+    for ib in 0..QK_K / 16 {
+        let li = nearest_int(0.5 * (id * scales[ib] - 1.0)).clamp(0, 15) as u8;
+        if ib % 2 == 0 {
+            bytes[SCALES + ib / 2] = li;
+        } else {
+            bytes[SCALES + ib / 2] |= li << 4;
+        }
+    }
+    for (i, v) in q2.iter().enumerate() {
+        put_u16(&mut bytes, QS + 2 * i, *v);
+    }
+    Encoded {
+        bytes,
+        probe,
+        note: None,
+    }
+}
 
-    for ib in 0..16 {
-        let mut l = (0.5 * (id * scales[ib] - 1.0)).round() as i32;
-        l = l.clamp(0, 15);
-        let decoded_scale = d_fp16 * (2.0 * l as f32 + 1.0);
-
-        for k in 0..2 {
-            let g_idx = tile_best_grids[ib][k];
-            let g_vals = grid[g_idx];
-            for i in 0..8 {
-                let q = q_mapped[g_vals[i] as usize];
-                let sign = if tile_signs[ib][k * 8 + i] == 1 {
-                    -1.0
-                } else {
-                    1.0
-                };
-                q_block[ib * 16 + k * 8 + i] = decoded_scale * q * sign;
+/// Port of dequantize_row_iq2_xs.
+pub fn dequantize(b: &[u8], y: &mut [f32]) {
+    let d = f16_val(get_u16(b, 0));
+    for ib32 in 0..QK_K / 32 {
+        let sc = b[SCALES + ib32];
+        let db = [
+            d * (0.5 + (sc & 0xf) as f32) * 0.25,
+            d * (0.5 + (sc >> 4) as f32) * 0.25,
+        ];
+        for l in 0..4 {
+            let qs = get_u16(b, QS + 2 * (4 * ib32 + l));
+            let row = lut::IQ2XS_GRID[(qs & 511) as usize];
+            let signs = lut::KSIGNS_IQ2XS[(qs >> 9) as usize];
+            for j in 0..8 {
+                let s = if signs & (1 << j) != 0 { -1.0 } else { 1.0 };
+                y[32 * ib32 + 8 * l + j] = db[l / 2] * grid_byte(row, j) as f32 * s;
             }
         }
     }
+}
 
-    let mut out_grids = vec![];
-    let mut out_signs = vec![];
-    for ib in 0..16 {
-        out_grids.extend_from_slice(&tile_best_grids[ib]);
-        out_signs.extend_from_slice(&tile_signs[ib]);
+fn scale_nibble(b: &[u8], ib16: usize) -> u32 {
+    ((b[SCALES + ib16 / 2] >> (4 * (ib16 % 2))) & 0xf) as u32
+}
+
+pub fn sub_scales(b: &[u8]) -> Vec<f32> {
+    let d = f16_val(get_u16(b, 0));
+    (0..QK_K / 16)
+        .map(|ib| d * (0.5 + scale_nibble(b, ib) as f32) * 0.25)
+        .collect()
+}
+
+pub fn decode(b: &[u8], j: usize) -> IqDecode {
+    let g = j / 8;
+    let jj = j % 8;
+    let d = f16_val(get_u16(b, 0));
+    let s = scale_nibble(b, j / 16);
+    let qs = get_u16(b, QS + 2 * g) as u32;
+    let idx = qs & 511;
+    let sign7 = qs >> 9;
+    let neg = lut::KSIGNS_IQ2XS[sign7 as usize];
+    let row = lut::IQ2XS_GRID[idx as usize];
+    let levels: Vec<f32> = (0..8).map(|k| grid_byte(row, k) as f32).collect();
+    IqDecode {
+        d,
+        sub_field: s,
+        sub_bits: 4,
+        dl: d * (0.5 + s as f32) * 0.25,
+        dl_expr: "d&middot;(0.5+{s})&middot;&frac14;".into(),
+        math: format!(
+            "{:.5}&middot;(0.5+{})&middot;&frac14; &times; {} &times; {}1",
+            d,
+            s,
+            levels[jj],
+            sign_char(neg & (1 << jj) != 0)
+        ),
+        codebook: Codebook::Grid {
+            idx: idx as usize,
+            size: 512,
+            levels,
+        },
+        signs: Signs::Parity { neg },
+        delta: None,
     }
+}
 
-    (
-        q_block,
-        d_fp16,
-        scales.to_vec(),
-        vec![],
-        out_grids,
-        out_signs,
+pub fn formula_html() -> String {
+    formula(
+        "<span class=\"eq-pill\">d<span class=\"bits\">16b</span></span> &times; (0.5 + <span class=\"eq-pill\">s<span class=\"bits\">4b</span></span>) &times; &frac14; &times; <span class=\"eq-pill\">grid[idx]<sub>j</sub><span class=\"bits\">9b</span></span> &times; <span class=\"eq-pill\">&plusmn;<span class=\"bits\">7b</span></span>",
+        "8-element groups, 512-entry grid, even-sign-parity, 4-bit scale per 16.",
+        "512-entry lattice grid with magnitudes {8, 25, 43}. 7 sign bits per 8 weights, the 8th implied by even parity. 4-bit scale per 16 weights, one FP16 scale per 256. 2.3125 bpw.",
     )
-}
-
-pub fn formula_html() -> &'static str {
-    "<span>Weight = <span class=\"eq-pill\">Sign<span class=\"bits\">1b</span></span> &times; ( 2 &times; <span class=\"eq-pill\">GridVal<span class=\"bits\">2b</span></span> + 1 ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">4b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">16-element sub-blocks, 512-entry 2-bit coordinate grid, enforcing even-sign-parity constraints.</span>"
-}
-
-pub fn format_inspector(
-    global_idx: usize,
-    active_floats: &[f32],
-    q_floats: &[f32],
-    bm: &IqBlockMeta,
-) -> Option<String> {
-    crate::quants::iq::algos::iq2_xxs::format_inspector(global_idx, active_floats, q_floats, bm)
 }

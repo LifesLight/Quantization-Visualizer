@@ -1,414 +1,377 @@
-use super::{find_best_grid_idx, get_grid_1bit};
-use crate::math_utils::*;
-use crate::quants::iq::lut;
-use crate::quants::IqBlockMeta;
+//! IQ1_M: block_iq1_m { u8 qs[32]; u8 qh[16]; u8 scales[8] } -> 56 bytes per 256 weights.
+//! Same ternary grid as IQ1_S, but 3 bit scales per 16 weights and a +-0.125 shift per group of 8.
+//! There is no separate d field, its fp16 bits are spread over the top nibbles of the scale words.
 
-pub fn block_size() -> usize {
-    256
-}
+use super::*;
+use crate::quants::iq::{grid, lut};
 
-pub fn bpw() -> f32 {
-    1.75
-}
+pub static TYPE: IqType = IqType {
+    name: "IQ1_M",
+    super_size: QK_K,
+    sub_size: 16,
+    group_size: 8,
+    bytes: 56,
+    needs_imatrix: false,
+    quantize,
+    dequantize,
+    decode,
+    sub_scales,
+    formula_html,
+};
 
-fn get_iq1_s_grid() -> &'static [[u8; 8]] {
-    static GRID: std::sync::OnceLock<Vec<[u8; 8]>> = std::sync::OnceLock::new();
-    GRID.get_or_init(|| get_grid_1bit(&lut::KGRID_1BIT_2048))
-        .as_slice()
-}
+const BLOCK: usize = 16;
+const QS: usize = 0;
+const QH: usize = 32;
+const SCALES: usize = 48;
 
-pub fn quantize_block(
-    super_block: &[f32],
-    weights: &[f32],
-    _iters: i32,
-) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
-    let mut q_block = vec![0.0; 256];
-    let mut scales = [0.0; 16];
-    let mut shifts = [0i8; 16];
-    let mut tile_best_grids = [[0usize; 2]; 16];
+/// Port of quantize_row_iq1_m_impl for one super-block.
+pub fn quantize(xbl: &[f32], qw: Option<&[f32]>) -> Encoded {
+    let grid = grid::iq1();
 
-    let grid = get_iq1_s_grid();
-    let x_p = [-1.0 + 0.125, 0.125, 1.0 + 0.125, 0.0];
-    let x_m = [-1.0 - 0.125, -0.125, 1.0 - 0.125, 0.0];
+    let mut bytes = vec![0u8; TYPE.bytes];
+    let mut probe = vec![0u16; QK_K / 8];
 
-    let mut max_scale = 0.0;
+    let x_p = [
+        -1.0 + lut::IQ1M_DELTA,
+        lut::IQ1M_DELTA,
+        1.0 + lut::IQ1M_DELTA,
+    ];
+    let x_m = [
+        -1.0 - lut::IQ1M_DELTA,
+        -lut::IQ1M_DELTA,
+        1.0 - lut::IQ1M_DELTA,
+    ];
+    let masks: [u8; 4] = [0x00, 0x80, 0x08, 0x88];
 
-    for ib in 0..16 {
-        let chunk = &super_block[ib * 16..(ib + 1) * 16];
-        let w_chunk = &weights[ib * 16..(ib + 1) * 16];
+    let mut scales = [0.0f32; QK_K / BLOCK];
+    let mut shifts = [0usize; QK_K / BLOCK];
+    let mut weight = [0.0f32; BLOCK];
+    let mut idx = [0usize; BLOCK];
+    let mut l = [0i8; BLOCK];
+    let mut index = [0u16; BLOCK / 8];
+    let mut sumqx = [0.0f32; 4];
+    let mut sumq2 = [0.0f32; 4];
 
-        let mut max = 0.0_f32;
-        for &v in chunk {
-            if v.abs() > max {
-                max = v.abs();
+    let mut max_scale = 0.0f32;
+
+    let mut sumx2 = 0.0f32;
+    for i in 0..QK_K {
+        sumx2 += xbl[i] * xbl[i];
+    }
+    let sigma2 = 2.0 * sumx2 / QK_K as f32;
+
+    let set_weights = |weight: &mut [f32; BLOCK], ib: usize, xb: &[f32]| match qw {
+        Some(qw) => {
+            for i in 0..BLOCK {
+                weight[i] = qw[BLOCK * ib + i] * (sigma2 + xb[i] * xb[i]).sqrt();
             }
         }
-        if max < 1e-6 {
+        None => {
+            for i in 0..BLOCK {
+                weight[i] = xb[i] * xb[i];
+            }
+        }
+    };
+
+    for ib in 0..QK_K / BLOCK {
+        let xb = &xbl[BLOCK * ib..BLOCK * ib + BLOCK];
+        set_weights(&mut weight, ib, xb);
+        let mut max = xb[0].abs();
+        for i in 1..BLOCK {
+            if xb[i].abs() > max {
+                max = xb[i].abs();
+            }
+        }
+        if max < GROUP_MAX_EPS_IQ1_M {
             scales[ib] = 0.0;
             shifts[ib] = 0;
             continue;
         }
-
-        let mut pairs: Vec<(f32, usize)> = chunk
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(i, v)| (v, i))
-            .collect();
-        pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
+        sort_pairs(xb, &mut idx);
         let mut best_score = -f32::MAX;
-        let mut best_scale = max;
-        let mut best_k = 0;
-
-        for i1 in 0..=16 {
-            for i2 in i1..=16 {
-                let mut sumqx = [0.0; 4];
-                let mut sumq2 = [0.0; 4];
-
-                for j in 0..i1 {
-                    let i = pairs[j].1;
-                    let w = w_chunk[i];
-                    let ww = w * chunk[i];
-
-                    let (q0, q1, q2, q3) = if i < 8 {
-                        (x_p[0], x_p[0], x_m[0], x_m[0])
-                    } else {
-                        (x_p[0], x_m[0], x_p[0], x_m[0])
-                    };
-
-                    sumqx[0] += ww * q0;
-                    sumqx[1] += ww * q1;
-                    sumqx[2] += ww * q2;
-                    sumqx[3] += ww * q3;
-
-                    sumq2[0] += w * q0 * q0;
-                    sumq2[1] += w * q1 * q1;
-                    sumq2[2] += w * q2 * q2;
-                    sumq2[3] += w * q3 * q3;
-                }
-
-                for j in i1..i2 {
-                    let i = pairs[j].1;
-                    let w = w_chunk[i];
-                    let ww = w * chunk[i];
-
-                    let (q0, q1, q2, q3) = if i < 8 {
-                        (x_p[1], x_p[1], x_m[1], x_m[1])
-                    } else {
-                        (x_p[1], x_m[1], x_p[1], x_m[1])
-                    };
-
-                    sumqx[0] += ww * q0;
-                    sumqx[1] += ww * q1;
-                    sumqx[2] += ww * q2;
-                    sumqx[3] += ww * q3;
-
-                    sumq2[0] += w * q0 * q0;
-                    sumq2[1] += w * q1 * q1;
-                    sumq2[2] += w * q2 * q2;
-                    sumq2[3] += w * q3 * q3;
-                }
-
-                for j in i2..16 {
-                    let i = pairs[j].1;
-                    let w = w_chunk[i];
-                    let ww = w * chunk[i];
-
-                    let (q0, q1, q2, q3) = if i < 8 {
-                        (x_p[2], x_p[2], x_m[2], x_m[2])
-                    } else {
-                        (x_p[2], x_m[2], x_p[2], x_m[2])
-                    };
-
-                    sumqx[0] += ww * q0;
-                    sumqx[1] += ww * q1;
-                    sumqx[2] += ww * q2;
-                    sumqx[3] += ww * q3;
-
-                    sumq2[0] += w * q0 * q0;
-                    sumq2[1] += w * q1 * q1;
-                    sumq2[2] += w * q2 * q2;
-                    sumq2[3] += w * q3 * q3;
-                }
-
-                for k in 0..4 {
-                    if sumq2[k] > 0.0 && sumqx[k] * sumqx[k] > best_score * sumq2[k] {
-                        best_scale = sumqx[k] / sumq2[k];
-                        best_score = best_scale * sumqx[k];
-                        best_k = k;
+        let mut scale = max;
+        let mut besti1: i32 = -1;
+        let mut besti2: i32 = -1;
+        let mut best_k: i32 = -1;
+        {
+            // Prefix sums per half, because each half can use its own shift sign.
+            // Since v[0]-v[1] = v[1]-v[2] = -1 for both x_p and x_m, the 3-way split sum
+            // collapses to T*v[2] - px[i1] - px[i2].
+            let mut px = [[0.0f32; BLOCK + 1]; 2];
+            let mut pw = [[0.0f32; BLOCK + 1]; 2];
+            for j in 0..BLOCK {
+                let i = idx[j];
+                let h = if i < BLOCK / 2 { 0 } else { 1 };
+                px[h][j + 1] = px[h][j] + weight[i] * xb[i];
+                px[1 - h][j + 1] = px[1 - h][j];
+                pw[h][j + 1] = pw[h][j] + weight[i];
+                pw[1 - h][j + 1] = pw[1 - h][j];
+            }
+            let txs = [px[0][BLOCK], px[1][BLOCK]];
+            let tws = [pw[0][BLOCK], pw[1][BLOCK]];
+            let p2 = x_p[2];
+            let m2 = x_m[2];
+            let cp1 = x_p[0] * x_p[0] - x_p[1] * x_p[1];
+            let cp2 = x_p[1] * x_p[1] - x_p[2] * x_p[2];
+            let cm1 = x_m[0] * x_m[0] - x_m[1] * x_m[1];
+            let cm2 = x_m[1] * x_m[1] - x_m[2] * x_m[2];
+            for i1 in 0..=BLOCK {
+                for i2 in i1..=BLOCK {
+                    let mut qx_p = [0.0f32; 2];
+                    let mut qx_m = [0.0f32; 2];
+                    let mut q2_p = [0.0f32; 2];
+                    let mut q2_m = [0.0f32; 2];
+                    for h in 0..2 {
+                        let sx = px[h][i1] + px[h][i2];
+                        qx_p[h] = txs[h] * p2 - sx;
+                        qx_m[h] = txs[h] * m2 - sx;
+                        q2_p[h] = tws[h] * p2 * p2 + pw[h][i1] * cp1 + pw[h][i2] * cp2;
+                        q2_m[h] = tws[h] * m2 * m2 + pw[h][i1] * cm1 + pw[h][i2] * cm2;
+                    }
+                    sumqx[0] = qx_p[0] + qx_p[1];
+                    sumqx[1] = qx_p[0] + qx_m[1];
+                    sumqx[2] = qx_m[0] + qx_p[1];
+                    sumqx[3] = qx_m[0] + qx_m[1];
+                    sumq2[0] = q2_p[0] + q2_p[1];
+                    sumq2[1] = q2_p[0] + q2_m[1];
+                    sumq2[2] = q2_m[0] + q2_p[1];
+                    sumq2[3] = q2_m[0] + q2_m[1];
+                    for k in 0..4 {
+                        if sumq2[k] > 0.0 && sumqx[k] * sumqx[k] > best_score * sumq2[k] {
+                            scale = sumqx[k] / sumq2[k];
+                            best_score = scale * sumqx[k];
+                            besti1 = i1 as i32;
+                            besti2 = i2 as i32;
+                            best_k = k as i32;
+                        }
                     }
                 }
             }
         }
-
-        if best_scale < 0.0 {
-            best_scale = -best_scale;
-            best_k = match best_k {
-                0 => 3,
-                1 => 2,
-                2 => 1,
-                _ => 0,
-            };
+        if besti1 < 0 || besti2 < 0 || best_k < 0 {
+            scales[ib] = 0.0;
+            shifts[ib] = 0;
+            continue;
         }
-
-        let mut final_sumqx = 0.0;
-        let mut final_sumq2 = 0.0;
-
-        for k in 0..2 {
-            let xx = if k == 0 {
-                if best_k < 2 {
-                    x_p
-                } else {
-                    x_m
+        let (i1, i2) = (besti1 as usize, besti2 as usize);
+        for j in 0..i1 {
+            l[idx[j]] = 0;
+        }
+        for j in i1..i2 {
+            l[idx[j]] = 1;
+        }
+        for j in i2..BLOCK {
+            l[idx[j]] = 2;
+        }
+        let mut best_k = best_k as usize;
+        if scale < 0.0 {
+            for j in 0..BLOCK {
+                l[j] = 2 - l[j];
+            }
+            scale = -scale;
+            best_k = 3 - best_k;
+        }
+        let mut all_on_grid = true;
+        for k in 0..BLOCK / 8 {
+            let xx = pick(&x_p, &x_m, best_k, k);
+            let u = pack_levels(&l[8 * k..8 * k + 8], 2);
+            let mut grid_index = grid.map[u];
+            if grid_index < 0 {
+                all_on_grid = false;
+                probe[2 * ib + k] = grid.neighbours[u].len() as u16;
+                grid_index = iq1_find_best_neighbour2(
+                    &grid.neighbours[u],
+                    grid,
+                    &xb[8 * k..],
+                    &weight[8 * k..],
+                    scale,
+                    xx,
+                    &mut l[8 * k..8 * k + 8],
+                ) as i32;
+            }
+            index[k] = grid_index as u16;
+        }
+        if !all_on_grid {
+            let mut sumqx_f = 0.0f32;
+            let mut sumq2_f = 0.0f32;
+            for k in 0..BLOCK / 8 {
+                let xx = pick(&x_p, &x_m, best_k, k);
+                let pg = &grid.points[index[k] as usize];
+                for j in 0..8 {
+                    let w = weight[8 * k + j];
+                    let q = xx[((pg[j] - 1) / 2) as usize];
+                    sumqx_f += w * q * xb[8 * k + j];
+                    sumq2_f += w * q * q;
                 }
-            } else {
-                if best_k % 2 == 0 {
-                    x_p
-                } else {
-                    x_m
-                }
-            };
-
-            let best_g = find_best_grid_idx(
-                grid,
-                &chunk[k * 8..k * 8 + 8],
-                &w_chunk[k * 8..k * 8 + 8],
-                best_scale,
-                &xx,
-            );
-            tile_best_grids[ib][k] = best_g;
-
-            for i in 0..8 {
-                let q = xx[grid[best_g][i] as usize];
-                let w = w_chunk[k * 8 + i];
-                final_sumqx += w * q * chunk[k * 8 + i];
-                final_sumq2 += w * q * q;
+            }
+            if sumqx_f > 0.0 && sumq2_f > 0.0 {
+                scale = sumqx_f / sumq2_f;
             }
         }
-
-        if final_sumq2 > 0.0 {
-            best_scale = final_sumqx / final_sumq2;
-        }
-
-        scales[ib] = best_scale;
-        shifts[ib] = best_k as i8;
-        if best_scale > max_scale {
-            max_scale = best_scale;
+        bytes[QS + 2 * ib] = (index[0] & 255) as u8;
+        bytes[QS + 2 * ib + 1] = (index[1] & 255) as u8;
+        bytes[QH + ib] = ((index[0] >> 8) | ((index[1] >> 8) << 4)) as u8;
+        scales[ib] = scale;
+        shifts[ib] = best_k;
+        if scale > max_scale {
+            max_scale = scale;
         }
     }
 
     if max_scale == 0.0 {
-        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
+        return Encoded {
+            bytes,
+            probe,
+            note: None,
+        };
     }
 
-    let d = max_scale / 15.0;
-    let id = if d > 0.0 { 1.0 / d } else { 0.0 };
-    let mut sumqx_f = 0.0;
-    let mut sumq2_f = 0.0;
-    let mut ls = [0i32; 16];
-
-    for ib in 0..16 {
-        let mut l = (0.5 * (id * scales[ib] - 1.0)).round() as i32;
-        l = l.clamp(0, 7);
-        ls[ib] = l;
-
-        let w_chunk = &weights[ib * 16..(ib + 1) * 16];
-        let chunk = &super_block[ib * 16..(ib + 1) * 16];
-
-        for k in 0..2 {
-            let xx = if k == 0 {
-                if shifts[ib] < 2 {
-                    x_p
-                } else {
-                    x_m
-                }
-            } else {
-                if shifts[ib] % 2 == 0 {
-                    x_p
-                } else {
-                    x_m
-                }
-            };
-
-            let g_idx = tile_best_grids[ib][k];
-            for i in 0..8 {
-                let q = xx[grid[g_idx][i] as usize] * (2.0 * l as f32 + 1.0);
-                let w = w_chunk[k * 8 + i];
-                sumqx_f += w * q * chunk[k * 8 + i];
+    let mut sc = [0u16; 4];
+    let mut d = max_scale / 15.0;
+    let id = 1.0 / d;
+    let mut sumqx_f = 0.0f32;
+    let mut sumq2_f = 0.0f32;
+    for ib in 0..QK_K / BLOCK {
+        let li = nearest_int(0.5 * (id * scales[ib] - 1.0)).clamp(0, 7);
+        sc[ib / 4] |= (li as u16) << (3 * (ib % 4));
+        bytes[QH + ib] |= masks[shifts[ib]];
+        let xb = &xbl[BLOCK * ib..BLOCK * ib + BLOCK];
+        set_weights(&mut weight, ib, xb);
+        for k in 0..BLOCK / 8 {
+            let xx = pick(&x_p, &x_m, shifts[ib], k);
+            let gi = bytes[QS + 2 * ib + k] as usize
+                + (((bytes[QH + ib] as usize) << (8 - 4 * k)) & 0x700);
+            let pg = &grid.points[gi];
+            for j in 0..8 {
+                let w = weight[8 * k + j];
+                let q = xx[((pg[j] - 1) / 2) as usize] * (2 * li + 1) as f32;
+                sumqx_f += w * q * xb[8 * k + j];
                 sumq2_f += w * q * q;
             }
         }
     }
+    if sumq2_f > 0.0 {
+        d = sumqx_f / sumq2_f;
+    }
+    let s = f16_bits(d * 1.1125);
+    sc[0] |= (s & 0x000f) << 12;
+    sc[1] |= (s & 0x00f0) << 8;
+    sc[2] |= (s & 0x0f00) << 4;
+    sc[3] |= s & 0xf000;
+    for (i, v) in sc.iter().enumerate() {
+        put_u16(&mut bytes, SCALES + 2 * i, *v);
+    }
+    Encoded {
+        bytes,
+        probe,
+        note: None,
+    }
+}
 
-    let d_final = if sumq2_f > 0.0 { sumqx_f / sumq2_f } else { d };
-    let d_out = fp16(d_final * 1.1125);
+/// Shift choice per group of 8. best_k: 0 = (+,+), 1 = (+,-), 2 = (-,+), 3 = (-,-)
+fn pick<'a>(x_p: &'a [f32; 3], x_m: &'a [f32; 3], best_k: usize, k: usize) -> &'a [f32; 3] {
+    let plus = if k == 0 { best_k < 2 } else { best_k % 2 == 0 };
+    if plus {
+        x_p
+    } else {
+        x_m
+    }
+}
 
-    for ib in 0..16 {
-        let l_scale = 2.0 * ls[ib] as f32 + 1.0;
-        let decoded_scale = d_out * l_scale;
-        scales[ib] = l_scale;
+fn sc(b: &[u8], i: usize) -> u16 {
+    get_u16(b, SCALES + 2 * i)
+}
 
-        for k in 0..2 {
-            let xx = if k == 0 {
-                if shifts[ib] < 2 {
-                    x_p
-                } else {
-                    x_m
-                }
+fn d_bits(b: &[u8]) -> u16 {
+    (sc(b, 0) >> 12) | ((sc(b, 1) >> 8) & 0x00f0) | ((sc(b, 2) >> 4) & 0x0f00) | (sc(b, 3) & 0xf000)
+}
+
+/// 3 bit scale of 16-weight block `ib16`.
+fn scale3(b: &[u8], ib16: usize) -> u32 {
+    ((sc(b, ib16 / 4) >> (3 * (ib16 % 4))) & 0x7) as u32
+}
+
+fn grid_index(b: &[u8], g: usize) -> usize {
+    let qh = b[QH + g / 2] as usize;
+    b[QS + g] as usize | ((qh << (8 - 4 * (g % 2))) & 0x700)
+}
+
+fn delta_neg(b: &[u8], g: usize) -> bool {
+    b[QH + g / 2] & (if g % 2 == 0 { 0x08 } else { 0x80 }) != 0
+}
+
+fn grid_level(row: u64, j: usize) -> f32 {
+    grid_byte(row, j) as i8 as f32
+}
+
+/// Port of dequantize_row_iq1_m.
+pub fn dequantize(b: &[u8], y: &mut [f32]) {
+    let d = f16_val(d_bits(b));
+    for ib in 0..QK_K / 32 {
+        let dl1 = d * (2 * scale3(b, 2 * ib) + 1) as f32;
+        let dl2 = d * (2 * scale3(b, 2 * ib + 1) + 1) as f32;
+        for l in 0..4 {
+            let g = 4 * ib + l;
+            let dl = if l < 2 { dl1 } else { dl2 };
+            let delta = if delta_neg(b, g) {
+                -lut::IQ1S_DELTA
             } else {
-                if shifts[ib] % 2 == 0 {
-                    x_p
-                } else {
-                    x_m
-                }
+                lut::IQ1S_DELTA
             };
-
-            let g_idx = tile_best_grids[ib][k];
-            for i in 0..8 {
-                let q = xx[grid[g_idx][i] as usize];
-                q_block[ib * 16 + k * 8 + i] = decoded_scale * q;
+            let row = lut::IQ1S_GRID[grid_index(b, g)];
+            for j in 0..8 {
+                y[8 * g + j] = dl * (grid_level(row, j) + delta);
             }
         }
     }
+}
 
-    let mut out_grids = vec![];
-    for ib in 0..16 {
-        out_grids.extend_from_slice(&tile_best_grids[ib]);
+pub fn sub_scales(b: &[u8]) -> Vec<f32> {
+    let d = f16_val(d_bits(b));
+    (0..QK_K / 16)
+        .map(|ib| d * (2 * scale3(b, ib) + 1) as f32)
+        .collect()
+}
+
+pub fn decode(b: &[u8], j: usize) -> IqDecode {
+    let g = j / 8;
+    let d = f16_val(d_bits(b));
+    let s = scale3(b, j / 16);
+    let neg_delta = delta_neg(b, g);
+    let idx = grid_index(b, g);
+    let row = lut::IQ1S_GRID[idx];
+    let levels: Vec<f32> = (0..8).map(|k| grid_level(row, k)).collect();
+    IqDecode {
+        d,
+        sub_field: s,
+        sub_bits: 3,
+        dl: d * (2 * s + 1) as f32,
+        dl_expr: "d&middot;(2&middot;{s}+1)".into(),
+        math: format!(
+            "{:.5}&middot;(2&middot;{}+1) &times; ({}{}.125)",
+            d,
+            s,
+            levels[j % 8],
+            if neg_delta { "&minus;" } else { "+" }
+        ),
+        codebook: Codebook::Grid {
+            idx,
+            size: 2048,
+            levels,
+        },
+        signs: Signs::None,
+        delta: Some(if neg_delta {
+            -lut::IQ1S_DELTA
+        } else {
+            lut::IQ1S_DELTA
+        }),
     }
+}
 
-    (
-        q_block,
-        d_out,
-        scales.to_vec(),
-        shifts.to_vec(),
-        out_grids,
-        vec![],
+pub fn formula_html() -> String {
+    formula(
+        "<span class=\"eq-pill\">d<span class=\"bits\">16b</span></span> &times; (2&middot;<span class=\"eq-pill\">s<span class=\"bits\">3b</span></span> + 1) &times; ( <span class=\"eq-pill\">grid[idx]<sub>j</sub><span class=\"bits\">11b</span></span> + <span class=\"eq-pill\">&plusmn;0.125<span class=\"bits\">1b</span></span> )",
+        "8-element groups, 2048-entry {-1, 0, 1} grid, &plusmn;0.125 shift per 8, 3-bit scale per 16.",
+        "2048-entry ternary grid, no sign bits. &plusmn;0.125 shift per 8 weights, 3-bit scale per 16. The FP16 scale has no own field, its 4 nibbles sit in the top bits of the scale words. Refit by least squares with a 1.1125 fudge factor. 1.75 bpw.",
     )
-}
-
-pub fn formula_html() -> &'static str {
-    "<span>Weight = ( <span class=\"eq-pill\">Codebook<span class=\"bits\">1.5b</span></span> &plusmn; <span title=\"Adaptive shift offset evaluated per tile to optimally center the grid vector distribution.\" style=\"border-bottom: 1px dotted var(--text-muted); cursor: help;\">0.125</span> ) &times; ( <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">TileScale<span class=\"bits\">3b</span></span> )</span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">16-element sub-blocks with exhaustive SSD search over 4 configuration permutations.</span>"
-}
-
-pub fn format_inspector(
-    global_idx: usize,
-    active_floats: &[f32],
-    q_floats: &[f32],
-    bm: &IqBlockMeta,
-) -> Option<String> {
-    let local_idx = global_idx % block_size();
-    let scale_chunk_size = if bm.scales.len() > 0 {
-        block_size() / bm.scales.len()
-    } else {
-        32
-    };
-    let tile_idx = local_idx / scale_chunk_size;
-    let sub_group_idx = local_idx % 8;
-
-    let mut iq_html = String::new();
-
-    let max_scale = bm.scales.iter().cloned().fold(0.0_f32, f32::max);
-    let mut chart_html = String::new();
-    for (i, &s) in bm.scales.iter().enumerate() {
-        let pct = if max_scale > 0.0 {
-            (s / max_scale) * 100.0
-        } else {
-            0.0
-        };
-        let is_active = if i == tile_idx {
-            "background:var(--accent-color);"
-        } else {
-            "background:var(--primary-color); opacity:0.6;"
-        };
-        chart_html.push_str(&format!(
-            "<div style=\"flex:1; height:{}%; {}; border-radius:2px 2px 0 0;\" title=\"Tile {}: {:.4}\"></div>",
-            pct.max(5.0), is_active, i, s
-        ));
-    }
-
-    let grid_val_disp = if !bm.grids.is_empty() {
-        format!(
-            "Entry #{}",
-            bm.grids
-                .get(tile_idx * (scale_chunk_size / 8) + (local_idx % scale_chunk_size) / 8)
-                .unwrap_or(&0)
-        )
-    } else {
-        "Grid".to_string()
-    };
-
-    iq_html.push_str(&format!(
-        r#"<div style="display:flex; flex-direction:column; gap:8px;">
-            <div style="display:flex; justify-content:space-around; align-items:center; background:var(--bg-secondary); padding:8px; border-radius:6px; font-size:0.8rem;">
-                <div style="display:flex; flex-direction:column; align-items:center; min-width:65px;">
-                    <span style="font-weight:bold; color:var(--accent-color);">{:.4}</span>
-                    <span style="font-size:0.65rem; color:var(--text-muted);">Super-Scale</span>
-                </div>
-                <div style="color:var(--text-muted); font-weight:bold; margin: 0 4px;">&rarr;</div>
-                <div style="display:flex; flex-direction:column; align-items:center; min-width:65px;">
-                    <span style="font-weight:bold; color:var(--primary-color);">{:.4}</span>
-                    <span style="font-size:0.65rem; color:var(--text-muted);">Tile-Scale</span>
-                </div>
-                <div style="color:var(--text-muted); font-weight:bold; margin: 0 4px;">&rarr;</div>
-                <div style="display:flex; flex-direction:column; align-items:center; min-width:65px;">
-                    <span style="font-weight:bold; font-size: 0.75rem;">{}</span>
-                    <span style="font-size:0.65rem; color:var(--text-muted);">Vector Base</span>
-                </div>
-            </div>
-
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:8px;">Relative Tile Scales</div>
-            <div style="display:flex; gap:2px; height:40px; align-items:flex-end; border-bottom:1px solid var(--border-color);">
-                {}
-            </div>
-        </div>"#,
-        bm.block_scale, bm.scales.get(tile_idx).unwrap_or(&0.0), grid_val_disp, chart_html
-    ));
-
-    let start = (global_idx / 8) * 8;
-    let group_orig = &active_floats[start..start + 8];
-    let group_q = &q_floats[start..start + 8];
-
-    let mut snap_html = format!(
-        r#"
-        <div style="margin-top:12px; border-top:1px solid var(--border-color); padding-top:8px;">
-            <div style="font-size:0.85rem; font-weight:bold; margin-bottom:4px;">Vector Snapping (Codebook Group)</div>
-            <div style="display:flex; gap:4px;">
-    "#
-    );
-
-    for i in 0..8 {
-        let o_v = group_orig[i];
-        let q_v = group_q[i];
-        let is_hover = i == sub_group_idx;
-        let bg = if is_hover {
-            "background:var(--primary-color); color:white;"
-        } else {
-            "background:var(--bg-secondary);"
-        };
-        let arrow = if q_v.abs() > o_v.abs() {
-            "&uarr;"
-        } else {
-            "&darr;"
-        };
-
-        snap_html.push_str(&format!(
-            r#"
-            <div style="flex:1; display:flex; flex-direction:column; align-items:center; border-radius:4px; padding:4px 0; {}">
-                <span style="font-size:0.6rem; {}">{:.2}</span>
-                <span style="font-size:0.7rem; font-weight:bold;">{}</span>
-                <span style="font-size:0.65rem; font-weight:bold;">{:.2}</span>
-            </div>
-        "#,
-            bg,
-            if is_hover { "color:#ddd;" } else { "color:var(--text-muted);" },
-            o_v,
-            arrow,
-            q_v
-        ));
-    }
-    snap_html.push_str("</div></div>");
-    iq_html.push_str(&snap_html);
-
-    Some(iq_html)
 }

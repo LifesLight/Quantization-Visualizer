@@ -313,7 +313,7 @@ export function updateInspector(idx) {
     let blockHtml = '';
     if (insData.mse !== undefined) blockHtml += `<div class="data-row"><span>MSE:</span> <span class="val-hl">${insData.mse.toFixed(6)}</span></div>`;
     if (insData.mae !== undefined) blockHtml += `<div class="data-row"><span>MAE:</span> <span>${insData.mae.toFixed(6)}</span></div>`;
-    if (insData.scale !== undefined) blockHtml += `<div class="data-row" style="margin-top:4px"><span>Scale (FP16):</span> <span>${insData.scale.toFixed(5)}</span></div>`;
+    if (insData.scale !== undefined) blockHtml += `<div class="data-row" style="margin-top:4px"><span>${insData.scaleLabel ?? 'Scale (FP16):'}</span> <span>${insData.scale.toFixed(5)}</span></div>`;
     if (insData.min !== undefined) blockHtml += `<div class="data-row"><span>Min (FP16):</span> <span>${insData.min.toFixed(5)}</span></div>`;
     if (insData.scaleE !== undefined) blockHtml += `<div class="data-row" style="margin-top:4px"><span>Block Scale (E8M0):</span> <span>2<sup>${insData.scaleE}</sup></span></div>`;
     if (insData.qjlScale !== undefined && insData.qjlScale > 0) blockHtml += `<div class="data-row"><span>QJL Scale:</span> <span>${insData.qjlScale.toFixed(5)}</span></div>`;
@@ -426,7 +426,7 @@ export function updateInspector(idx) {
             </div>
         `;
     } else if (insData.iqHtml) {
-        elements.iSBIdx.textContent = `[IQ Map]`;
+        elements.iSBIdx.textContent = `[${insData.superIdx ?? '-'}]`;
         elements.insSBData.innerHTML = insData.iqHtml;
     } else if (insData.globalScale !== undefined) {
         superHtml += `<div class="data-row"><span>Global MSE:</span> <span class="val-hl">${insData.globalMse.toFixed(6)}</span></div>`;

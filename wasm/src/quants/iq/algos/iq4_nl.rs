@@ -1,171 +1,227 @@
-use super::best_index_iq4nl;
-use crate::math_utils::*;
+//! IQ4_NL: block_iq4_nl { fp16 d; u8 qs[16] } -> 18 bytes per 32 weights.
+//! Each weight is a 4 bit index into the fixed non-linear table kvalues_iq4nl.
+
+use super::*;
 use crate::quants::iq::lut;
-use crate::quants::IqBlockMeta;
 
-pub fn block_size() -> usize {
-    32
+pub static TYPE: IqType = IqType {
+    name: "IQ4_NL",
+    super_size: 32,
+    sub_size: 32,
+    group_size: 1,
+    bytes: 18,
+    needs_imatrix: false,
+    quantize,
+    dequantize,
+    decode,
+    sub_scales,
+    formula_html,
+};
+
+pub struct Iq4Out {
+    pub dh: u16,
+    pub scales_h: u16,
+    pub scales_l: [u8; QK_K / 64],
+    pub q4: Vec<u8>,
 }
 
-pub fn bpw() -> f32 {
-    4.5
-}
+/// Port of quantize_row_iq4_nl_impl, shared by IQ4_NL (one 32 block) and IQ4_XS (8 blocks of 32).
+pub fn quantize_impl(super_size: usize, x: &[f32], qw: Option<&[f32]>, ntry: i32) -> Iq4Out {
+    const BLOCK: usize = 32;
+    let values = &lut::KVALUES_IQ4NL;
+    let nb = super_size / BLOCK;
 
-pub fn quantize_block(
-    block: &[f32],
-    weights: &[f32],
-    iters: i32,
-) -> (Vec<f32>, f32, Vec<f32>, Vec<i8>, Vec<usize>, Vec<u8>) {
-    let mut q_block = vec![0.0; 32];
+    let mut sigma2 = 0.0f32;
+    for j in 0..super_size {
+        sigma2 += x[j] * x[j];
+    }
+    sigma2 *= 2.0 / super_size as f32;
 
-    let mut max = 0.0_f32;
-    let mut amax = 0.0_f32;
-    for i in 0..32 {
-        let abs_v = block[i].abs();
-        if abs_v > amax {
-            amax = abs_v;
-            max = block[i];
+    let mut out = Iq4Out {
+        dh: 0,
+        scales_h: 0,
+        scales_l: [0; QK_K / 64],
+        q4: vec![0u8; super_size / 2],
+    };
+    let mut scales = vec![0.0f32; nb];
+    let mut weight = [0.0f32; BLOCK];
+    let mut ls = vec![0u8; super_size];
+
+    let mut max_scale = 0.0f32;
+    let mut amax_scale = 0.0f32;
+    for ib in 0..nb {
+        let xb = &x[ib * BLOCK..ib * BLOCK + BLOCK];
+        match qw {
+            Some(qw) => {
+                for j in 0..BLOCK {
+                    weight[j] = qw[ib * BLOCK + j] * (sigma2 + xb[j] * xb[j]).sqrt();
+                }
+            }
+            None => {
+                for j in 0..BLOCK {
+                    weight[j] = xb[j] * xb[j];
+                }
+            }
         }
-    }
-
-    if amax < 1e-6 {
-        return (q_block, 0.0, vec![], vec![], vec![], vec![]);
-    }
-
-    // Initial pass to establish a baseline
-    let d_init = if iters > 0 {
-        -max / lut::KVALUES_IQ4NL[0]
-    } else {
-        max / lut::KVALUES_IQ4NL[0]
-    };
-    let id_init = if d_init != 0.0 { 1.0 / d_init } else { 0.0 };
-
-    let mut sumqx_init = 0.0;
-    let mut sumq2_init = 0.0;
-
-    for i in 0..32 {
-        let al = id_init * block[i];
-        let l = best_index_iq4nl(al);
-        let q = lut::KVALUES_IQ4NL[l];
-        let w = weights[i];
-        sumqx_init += w * q * block[i];
-        sumq2_init += w * q * q;
-    }
-
-    let mut best_scale = if sumq2_init > 0.0 {
-        sumqx_init / sumq2_init
-    } else {
-        0.0
-    };
-    let mut best_score = best_scale * sumqx_init;
-
-    // Iterative refinement
-    for is in -iters..=iters {
-        let id = (is as f32 + lut::KVALUES_IQ4NL[0]) / max;
-
-        let mut sumqx = 0.0;
-        let mut sumq2 = 0.0;
-
-        for i in 0..32 {
-            let al = id * block[i];
-            let l = best_index_iq4nl(al);
-
-            let q = lut::KVALUES_IQ4NL[l];
-            let w = weights[i];
-            sumqx += w * q * block[i];
+        let mut amax = 0.0f32;
+        let mut max = 0.0f32;
+        for j in 0..BLOCK {
+            let ax = xb[j].abs();
+            if ax > amax {
+                amax = ax;
+                max = xb[j];
+            }
+        }
+        if amax < GROUP_MAX_EPS {
+            scales[ib] = 0.0;
+            continue;
+        }
+        let mut d = if ntry > 0 {
+            -max / values[0] as f32
+        } else {
+            max / values[0] as f32
+        };
+        let mut id = 1.0 / d;
+        let mut sumqx = 0.0f32;
+        let mut sumq2 = 0.0f32;
+        for j in 0..BLOCK {
+            let al = id * xb[j];
+            let l = best_index_int8(values, al);
+            ls[ib * BLOCK + j] = l as u8;
+            let q = values[l] as f32;
+            let w = weight[j];
+            sumqx += w * q * xb[j];
             sumq2 += w * q * q;
         }
-
-        if sumq2 > 0.0 && sumqx * sumqx > best_score * sumq2 {
-            best_scale = sumqx / sumq2;
-            best_score = best_scale * sumqx;
+        d = if sumq2 > 0.0 { sumqx / sumq2 } else { 0.0 };
+        let mut best = d * sumqx;
+        for itry in -ntry..=ntry {
+            id = (itry + values[0] as i32) as f32 / max;
+            sumqx = 0.0;
+            sumq2 = 0.0;
+            for j in 0..BLOCK {
+                let al = id * xb[j];
+                let l = best_index_int8(values, al);
+                let q = values[l] as f32;
+                let w = weight[j];
+                sumqx += w * q * xb[j];
+                sumq2 += w * q * q;
+            }
+            if sumq2 > 0.0 && sumqx * sumqx > best * sumq2 {
+                d = sumqx / sumq2;
+                best = d * sumqx;
+            }
+        }
+        scales[ib] = d;
+        let abs_d = d.abs();
+        if abs_d > amax_scale {
+            amax_scale = abs_d;
+            max_scale = d;
         }
     }
 
-    let d = fp16(best_scale);
-    let id = if best_scale != 0.0 {
-        1.0 / best_scale
+    if nb > 1 {
+        let d = -max_scale / 32.0;
+        out.dh = f16_bits(d);
+        let id = if d != 0.0 { 1.0 / d } else { 0.0 };
+        for ib in 0..nb {
+            let mut l = nearest_int(id * scales[ib]).clamp(-32, 31);
+            let dl = d * l as f32;
+            let idl = if dl != 0.0 { 1.0 / dl } else { 0.0 };
+            for j in 0..BLOCK {
+                ls[ib * BLOCK + j] = best_index_int8(values, idl * x[ib * BLOCK + j]) as u8;
+            }
+            l += 32;
+            let l_l = (l & 0xf) as u8;
+            let l_h = (l >> 4) as u16;
+            if ib % 2 == 0 {
+                out.scales_l[ib / 2] = l_l;
+            } else {
+                out.scales_l[ib / 2] |= l_l << 4;
+            }
+            out.scales_h |= l_h << (2 * (ib % 8));
+        }
     } else {
-        0.0
-    };
-
-    for i in 0..32 {
-        let l = best_index_iq4nl(id * block[i]);
-        q_block[i] = d * lut::KVALUES_IQ4NL[l];
+        out.dh = f16_bits(scales[0]);
+        if ntry > 0 {
+            let id = if scales[0] != 0.0 {
+                1.0 / scales[0]
+            } else {
+                0.0
+            };
+            for j in 0..super_size {
+                ls[j] = best_index_int8(values, id * x[j]) as u8;
+            }
+        }
     }
 
-    (q_block, d, vec![], vec![], vec![], vec![])
-}
-
-pub fn formula_html() -> &'static str {
-    "<span>Weight = <span class=\"eq-pill\">NonLinearVal<span class=\"bits\">4b</span></span> &times; <span class=\"eq-pill\">BlockScale<span class=\"bits\">16b</span></span></span><br><span style=\"color:var(--text-muted);font-size:0.8rem;\">Direct 4-bit non-linear quantization with standalone 16-bit scales, optimized for Gaussian outlier distributions.</span>"
-}
-
-pub fn format_inspector(
-    global_idx: usize,
-    _active_floats: &[f32],
-    q_floats: &[f32],
-    bm: &IqBlockMeta,
-) -> Option<String> {
-    let q_val = q_floats[global_idx];
-    let scale_val = bm.block_scale;
-    let id = if scale_val != 0.0 {
-        1.0 / scale_val
-    } else {
-        0.0
-    };
-    let unscaled_val = id * q_val;
-    let active_centroid_idx = best_index_iq4nl(unscaled_val);
-
-    let mut distribution_html = String::new();
-    for i in 0..16 {
-        let centroid_val = lut::KVALUES_IQ4NL[i];
-        let is_hovered_centroid = i == active_centroid_idx;
-        let bg_color = if is_hovered_centroid {
-            "background:var(--accent-color); color:white; font-weight:bold;"
-        } else if centroid_val < 0.0 {
-            "background:var(--negative-color); opacity:0.6; color:white;"
-        } else {
-            "background:var(--primary-color); opacity:0.6; color:white;"
-        };
-
-        distribution_html.push_str(&format!(
-            "<div style=\"flex:1; text-align:center; padding:4px 0; font-size:0.65rem; border-radius:3px; {};\" title=\"Centroid {}: {:.1} (Quantized: {:.4})\">{}</div>",
-            bg_color, i, centroid_val, scale_val * centroid_val, centroid_val.round() as i32
-        ));
+    for i in 0..super_size / 32 {
+        for j in 0..16 {
+            out.q4[16 * i + j] = ls[32 * i + j] | (ls[32 * i + 16 + j] << 4);
+        }
     }
+    out
+}
 
-    Some(format!(
-        r#"<div style="display:flex; flex-direction:column; gap:8px;">
-            <div style="display:flex; justify-content:space-around; align-items:center; background:var(--bg-secondary); padding:8px; border-radius:6px; font-size:0.8rem;">
-                <div style="display:flex; flex-direction:column; align-items:center; min-width:75px;">
-                    <span style="font-weight:bold; color:var(--accent-color);">{:.4}</span>
-                    <span style="font-size:0.65rem; color:var(--text-muted);">Block-Scale</span>
-                </div>
-                <div style="color:var(--text-muted); font-weight:bold; margin: 0 4px;">&rarr;</div>
-                <div style="display:flex; flex-direction:column; align-items:center; min-width:75px;">
-                    <span style="font-weight:bold; color:var(--primary-color);">{:.1}</span>
-                    <span style="font-size:0.65rem; color:var(--text-muted);">Centroid</span>
-                </div>
-                <div style="color:var(--text-muted); font-weight:bold; margin: 0 4px;">&rarr;</div>
-                <div style="display:flex; flex-direction:column; align-items:center; min-width:75px;">
-                    <span style="font-weight:bold; font-size: 0.75rem;">#{:02}</span>
-                    <span style="font-size:0.65rem; color:var(--text-muted);">Centroid Idx</span>
-                </div>
-            </div>
+/// Port of quantize_iq4_nl for one 32 block (ntry = 7).
+pub fn quantize(x: &[f32], qw: Option<&[f32]>) -> Encoded {
+    let r = quantize_impl(32, x, qw, 7);
+    let mut bytes = vec![0u8; TYPE.bytes];
+    put_u16(&mut bytes, 0, r.dh);
+    bytes[2..18].copy_from_slice(&r.q4);
+    Encoded {
+        bytes,
+        probe: vec![],
+        note: None,
+    }
+}
 
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:8px;">Non-Linear Gaussian Centroids (16 levels)</div>
-            <div style="display:flex; gap:2px; padding:2px 0;">
-                {}
-            </div>
-            <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.3; margin-top:4px;">
-                Weight mapped to non-linear index #{}. Centroids are non-uniformly spaced to allocate higher resolution to smaller values, matching a Gaussian bell curve.
-            </div>
-        </div>"#,
-        scale_val,
-        lut::KVALUES_IQ4NL[active_centroid_idx],
-        active_centroid_idx,
-        distribution_html,
-        active_centroid_idx
-    ))
+/// Position of weight `j` (0..32) inside the packed nibbles of its 32 block.
+pub fn nibble(qs: &[u8], j: usize) -> usize {
+    if j < 16 {
+        (qs[j] & 0xf) as usize
+    } else {
+        (qs[j - 16] >> 4) as usize
+    }
+}
+
+/// Port of dequantize_row_iq4_nl.
+pub fn dequantize(b: &[u8], y: &mut [f32]) {
+    let d = f16_val(get_u16(b, 0));
+    let qs = &b[2..18];
+    for j in 0..16 {
+        y[j] = d * lut::KVALUES_IQ4NL[(qs[j] & 0xf) as usize] as f32;
+        y[j + 16] = d * lut::KVALUES_IQ4NL[(qs[j] >> 4) as usize] as f32;
+    }
+}
+
+pub fn sub_scales(b: &[u8]) -> Vec<f32> {
+    vec![f16_val(get_u16(b, 0))]
+}
+
+pub fn decode(b: &[u8], j: usize) -> IqDecode {
+    let d = f16_val(get_u16(b, 0));
+    let q = nibble(&b[2..18], j);
+    IqDecode {
+        d,
+        sub_field: 0,
+        sub_bits: 0,
+        dl: d,
+        dl_expr: "d".into(),
+        math: format!("{:.5} &times; {}", d, lut::KVALUES_IQ4NL[q]),
+        codebook: Codebook::NonLinear {
+            idx: q,
+            values: &lut::KVALUES_IQ4NL,
+        },
+        signs: Signs::None,
+        delta: None,
+    }
+}
+
+pub fn formula_html() -> String {
+    formula(
+        "<span class=\"eq-pill\">d<span class=\"bits\">16b</span></span> &times; <span class=\"eq-pill\">kvalues[q]<span class=\"bits\">4b</span></span>",
+        "16-level non-linear table, one FP16 scale per 32.",
+        "Fixed 16-level table, dense near zero and sparse in the tails. Every 32 weights share one FP16 scale, searched over 15 candidates around max/127. No super-block. 4.5 bpw.",
+    )
 }

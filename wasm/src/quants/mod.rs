@@ -54,7 +54,6 @@ pub struct Settings {
     pub trellis_opt_iters: usize,
     pub trellis_sign_seed: u32,
     pub iq_type: String,
-    pub iq_scale_iters: usize,
     pub mxfp_format: String,
     pub primitive_format: String,
     pub centering_mode: String,
@@ -116,6 +115,7 @@ pub struct InspectorData {
     pub mse: Option<f64>,
     pub mae: Option<f64>,
     pub scale: Option<f32>,
+    pub scale_label: Option<String>,
     pub min: Option<f32>,
     pub scale_e: Option<i32>,
     pub qjl_scale: Option<f32>,
@@ -201,11 +201,12 @@ pub struct TrellisBlockMeta {
 pub struct IqBlockMeta {
     pub idx: usize,
     pub size: usize,
-    pub block_scale: f32,
+    /// The block exactly as llama.cpp stores it (block_iq2_xxs etc.).
+    pub bytes: Vec<u8>,
+    /// Per codebook group: 0 if it landed on the grid, otherwise neighbours scanned.
+    pub probe: Vec<u16>,
+    /// (short label, long explanation) for anything odd the reference did with this block.
+    pub note: Option<(String, String)>,
     pub mse: f64,
     pub mae: f64,
-    pub scales: Vec<f32>,
-    pub aux8: Vec<i8>,
-    pub grids: Vec<usize>,
-    pub signs: Vec<u8>,
 }

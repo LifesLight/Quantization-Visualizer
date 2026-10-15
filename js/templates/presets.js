@@ -40,9 +40,15 @@ export const presetGroups = [
     {
         label: "Llama.cpp: IQ Quants",
         presets: {
-            'IQ2_XXS': { label: 'IQ2_XXS', 'quant-type': 'iq', 'iq-type': 'iq2_xxs', 'iq-scale-iters': 6 },
-            'IQ3_XXS': { label: 'IQ3_XXS', 'quant-type': 'iq', 'iq-type': 'iq3_xxs', 'iq-scale-iters': 15 },
-            'IQ4_XS': { label: 'IQ4_XS', 'quant-type': 'iq', 'iq-type': 'iq4_xs', 'iq-scale-iters': 15 },
+            'IQ1_S': { label: 'IQ1_S', 'quant-type': 'iq', 'iq-type': 'iq1_s' },
+            'IQ1_M': { label: 'IQ1_M', 'quant-type': 'iq', 'iq-type': 'iq1_m' },
+            'IQ2_XXS': { label: 'IQ2_XXS', 'quant-type': 'iq', 'iq-type': 'iq2_xxs' },
+            'IQ2_XS': { label: 'IQ2_XS', 'quant-type': 'iq', 'iq-type': 'iq2_xs' },
+            'IQ2_S': { label: 'IQ2_S', 'quant-type': 'iq', 'iq-type': 'iq2_s' },
+            'IQ3_XXS': { label: 'IQ3_XXS', 'quant-type': 'iq', 'iq-type': 'iq3_xxs' },
+            'IQ3_S': { label: 'IQ3_S', 'quant-type': 'iq', 'iq-type': 'iq3_s' },
+            'IQ4_XS': { label: 'IQ4_XS', 'quant-type': 'iq', 'iq-type': 'iq4_xs' },
+            'IQ4_NL': { label: 'IQ4_NL', 'quant-type': 'iq', 'iq-type': 'iq4_nl' },
         }
     },
     {

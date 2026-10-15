@@ -126,7 +126,6 @@ export const elements = {
     // --- IQ Quantization Settings ---
     get iqSettings() { return document.getElementById('iq-settings'); },
     get iqTypeEl() { return document.getElementById('iq-type'); },
-    get iqScaleItersEl() { return document.getElementById('iq-scale-iters'); },
 
     // --- Other Formats ---
     get mxfpSettings() { return document.getElementById('mxfp-settings'); },
@@ -180,7 +179,7 @@ export const elements = {
             this.turboSignSeedEl,
             this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
             this.trellisWhtEl, this.trellisWhtScopeEl, this.trellisOptItersEl, this.trellisSignSeedEl,
-            this.iqTypeEl, this.iqScaleItersEl,
+            this.iqTypeEl,
             this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl,
             this.axisIgnoreOutliers, this.axisOutlierPct, this.axisManualMin, this.axisManualMax,
             this.useImportance
@@ -348,7 +347,6 @@ export function getSettings() {
         trellisSignSeed: parseInt(elements.trellisSignSeedEl?.value) || 42,
 
         iqType: elements.iqTypeEl?.value || 'iq2_xxs',
-        iqScaleIters: elements.iqScaleItersEl ? (parseInt(elements.iqScaleItersEl.value) || 6) : 6,
 
         mxfpFormat: elements.mxfpFormatEl?.value || 'mxfp4_e2m1',
         primitiveFormat: elements.primitiveFormatEl?.value || 'fp32',
