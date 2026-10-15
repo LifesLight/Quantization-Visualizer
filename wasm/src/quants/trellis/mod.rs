@@ -72,8 +72,6 @@ pub fn quantize(
 
     QuantizeOutput {
         q_floats: y[..n].to_vec(),
-        t_floats: None,
-        t_q_floats: None,
         bpw: t.bpw(n),
         formula_html: (t.formula_html)(),
         block_size: 32,
@@ -161,6 +159,7 @@ pub fn format_inspector(
         idx,
         &active[base..end],
         &out.q_floats[base..end],
+        settings.rotation_type != "none",
     ));
     data
 }

@@ -11,13 +11,14 @@ A visualizer for floating-point quantization. It shows how different schemes map
 *   **Symmetric (Block Scale):** Block-wise quantization where weights share a single scale factor per block.
 *   **Asymmetric (Block Scale + Zero):** Block-wise quantization with both a scale and a minimum offset per block.
 *   **K-Quant (Nested Scales):** Superblock structure where sub-block scales are themselves quantized by a shared super-scale.
-*   **TurboQuant (Scalar WHT):** SRHT rotation normalizes the coefficient distribution, then a precomputed Lloyd-Max codebook quantizes each coordinate independently. Optional QJL adds a 1-bit residual correction to remove inner-product bias.
+*   **TurboQuant:** Implemented from the paper ([arXiv:2504.19874](https://arxiv.org/abs/2504.19874)), TurboQuant_mse and TurboQuant_prod.
 *   **Trellis (KT):** Ported from ik_llama.cpp's `iqk_quantize.cpp`.
 *   **IQ-Quant (Grid-Based):** Ported from llama.cpp's `ggml-quants.c`.
 
 ### Interface
 
 *   **Data Generation:** Generate synthetic weights using Normal, Laplace, Bimodal, or Outlier-heavy distributions.
+*   **Rotation:** Hadamard, Randomized Hadamard or Random Orthogonal rotation in front of any quant, with a toggle to view the rotated values.
 *   **Inspector:** Hover over bars to see the exact reconstruction math (`Q * Scale + Offset`) and error stats for that specific block.
 *   **Stats:** Live calculation of Bits-Per-Weight (BPW), compression ratio, and global Mean Squared Error (MSE).
 

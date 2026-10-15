@@ -1,44 +1,34 @@
 export const presetGroups = [
     {
-        label: "Hardware: NVIDIA",
+        label: "Hardware",
         presets: {
-            'nvfp4': { label: 'Blackwell NVFP4', 'quant-type': 'nvfp4', 'nvfp4-tensor-size': 256 }
-        }
-    },
-    {
-        label: "Hardware: OCP (Standard)",
-        presets: {
+            'nvfp4': { label: 'NVFP4 (Blackwell)', 'quant-type': 'nvfp4' },
             'mxfp4': { label: 'MXFP4 (E2M1)', 'quant-type': 'mxfp', 'mxfp-format': 'mxfp4_e2m1' },
-            'mxfp6': { label: 'MXFP6 (E3M2)', 'quant-type': 'mxfp', 'mxfp-format': 'mxfp6_e2m3' },
+            'mxfp6': { label: 'MXFP6 (E2M3)', 'quant-type': 'mxfp', 'mxfp-format': 'mxfp6_e2m3' },
         }
     },
     {
-        label: "Llama.cpp: Symmetric",
+        label: "llama.cpp: Legacy",
         presets: {
-            'Q2_0': { label: 'Q2_0', 'quant-type': 'sym', 'quant-bits': 2, 'block-size': 32 },
             'Q4_0': { label: 'Q4_0', 'quant-type': 'sym', 'quant-bits': 4, 'block-size': 32 },
+            'Q5_0': { label: 'Q5_0', 'quant-type': 'sym', 'quant-bits': 5, 'block-size': 32 },
             'Q8_0': { label: 'Q8_0', 'quant-type': 'sym', 'quant-bits': 8, 'block-size': 32 },
-        }
-    },
-    {
-        label: "Llama.cpp: Asymmetric",
-        presets: {
-            'Q2_1': { label: 'Q2_1', 'quant-type': 'asym', 'quant-bits': 2, 'block-size': 32 },
             'Q4_1': { label: 'Q4_1', 'quant-type': 'asym', 'quant-bits': 4, 'block-size': 32 },
+            'Q5_1': { label: 'Q5_1', 'quant-type': 'asym', 'quant-bits': 5, 'block-size': 32 },
         }
     },
     {
-        label: "Llama.cpp: K-Quant",
+        label: "llama.cpp: K-Quants",
         presets: {
-            'Q2_K': { label: 'Q2_K', 'quant-type': 'kquant', 'quant-bits': 2, 'block-size': 16, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 4, 'subblock-offset': true },
-            'Q3_K': { label: 'Q3_K', 'quant-type': 'kquant', 'quant-bits': 3, 'block-size': 16, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 6, 'subblock-offset': false },
-            'Q4_K': { label: 'Q4_K', 'quant-type': 'kquant', 'quant-bits': 4, 'block-size': 32, 'superblock-size': 256, 'subblock-size': 32, 'subblock-bits': 6, 'subblock-offset': true },
-            'Q5_K': { label: 'Q5_K', 'quant-type': 'kquant', 'quant-bits': 5, 'block-size': 32, 'superblock-size': 256, 'subblock-size': 32, 'subblock-bits': 6, 'subblock-offset': true },
-            'Q6_K': { label: 'Q6_K', 'quant-type': 'kquant', 'quant-bits': 6, 'block-size': 16, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 8, 'subblock-offset': false },
+            'Q2_K': { label: 'Q2_K', 'quant-type': 'kquant', 'quant-bits': 2, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 4, 'subblock-offset': true },
+            'Q3_K': { label: 'Q3_K', 'quant-type': 'kquant', 'quant-bits': 3, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 6, 'subblock-offset': false },
+            'Q4_K': { label: 'Q4_K', 'quant-type': 'kquant', 'quant-bits': 4, 'superblock-size': 256, 'subblock-size': 32, 'subblock-bits': 6, 'subblock-offset': true },
+            'Q5_K': { label: 'Q5_K', 'quant-type': 'kquant', 'quant-bits': 5, 'superblock-size': 256, 'subblock-size': 32, 'subblock-bits': 6, 'subblock-offset': true },
+            'Q6_K': { label: 'Q6_K', 'quant-type': 'kquant', 'quant-bits': 6, 'superblock-size': 256, 'subblock-size': 16, 'subblock-bits': 8, 'subblock-offset': false },
         }
     },
     {
-        label: "Llama.cpp: IQ Quants",
+        label: "llama.cpp: IQ",
         presets: {
             'IQ1_S': { label: 'IQ1_S', 'quant-type': 'iq', 'iq-type': 'iq1_s' },
             'IQ1_M': { label: 'IQ1_M', 'quant-type': 'iq', 'iq-type': 'iq1_m' },
@@ -52,28 +42,20 @@ export const presetGroups = [
         }
     },
     {
-        label: "Llama.cpp: TurboQuant",
-        presets: {
-            'turbo2': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false, 'turbo-sign-seed': 42 },
-            'turbo3': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false, 'turbo-sign-seed': 42 },
-            'turbo4': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 4, 'turbo-block-size': 128, 'turbo-wht': true, 'turbo-qjl': false, 'turbo-sign-seed': 42 },
-        }
-    },
-    {
-        label: "Paper: TurboQuant",
-        presets: {
-            'turbo2_qjl': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 1, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true, 'turbo-sign-seed': 42 },
-            'turbo3_qjl': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true, 'turbo-sign-seed': 42 },
-            'turbo4_qjl': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 32, 'turbo-wht': true, 'turbo-qjl': true, 'turbo-sign-seed': 42 },
-        }
-    },
-    {
         label: "ik_llama.cpp: Trellis (KT)",
         presets: {
             'IQ1_KT': { label: 'IQ1_KT', 'quant-type': 'trellis', 'trellis-type': 'iq1_kt' },
             'IQ2_KT': { label: 'IQ2_KT', 'quant-type': 'trellis', 'trellis-type': 'iq2_kt' },
             'IQ3_KT': { label: 'IQ3_KT', 'quant-type': 'trellis', 'trellis-type': 'iq3_kt' },
             'IQ4_KT': { label: 'IQ4_KT', 'quant-type': 'trellis', 'trellis-type': 'iq4_kt' },
+        }
+    },
+    {
+        label: "Paper: TurboQuant",
+        presets: {
+            'turbo2': { label: 'Turbo2', 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-qjl': false, 'turbo-seed': 42, 'rotation-type': 'orthogonal', 'rotation-seed': 42 },
+            'turbo3': { label: 'Turbo3', 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-qjl': false, 'turbo-seed': 42, 'rotation-type': 'orthogonal', 'rotation-seed': 42 },
+            'turbo4': { label: 'Turbo4', 'quant-type': 'turbo', 'turbo-bits': 4, 'turbo-block-size': 128, 'turbo-qjl': false, 'turbo-seed': 42, 'rotation-type': 'orthogonal', 'rotation-seed': 42 },
         }
     }
 ];

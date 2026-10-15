@@ -12,6 +12,7 @@ pub fn render(
     idx: usize,
     orig: &[f32],
     recon: &[f32],
+    rotated: bool,
 ) -> String {
     let ibl = idx / QK_K;
     let j = idx % QK_K;
@@ -55,7 +56,7 @@ pub fn render(
         "inherit",
     ));
     chain.push_str(&chain_row(
-        "= weight",
+        if rotated { "= coeff" } else { "= weight" },
         &format!("{:.5}", recon.get(j).copied().unwrap_or(0.0)),
         "var(--accent-color)",
     ));

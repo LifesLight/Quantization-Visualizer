@@ -6,6 +6,11 @@ import { state, getBaseFloats } from './state.js';
 import { elements } from '../ui.js';
 import { getF32Array } from '../wasmWrapper.js';
 
+/** Error values, scientific below 1e-3 so tiny ones stay readable. */
+export function fmtErr(v) {
+    return v !== 0 && Math.abs(v) < 1e-3 ? v.toExponential(3) : v.toFixed(6);
+}
+
 export function resizeCanvasCssOnly() {
     const canvas = document.getElementById('main-canvas');
     if (!canvas || !elements.chartArea) return;
@@ -297,12 +302,15 @@ export function updateInspector(idx) {
     const val = state.showSRHT && tFloats ? tFloats[sliceIdx] : floats[sliceIdx];
     const valQ = state.showSRHT && tQFloats ? tQFloats[sliceIdx] : qFloats[sliceIdx];
 
-    let mathHtml = insData.mathStr ? `<div class="data-row" style="margin-top:4px; color:var(--text-muted);"><span>Math:</span> <span style="color:var(--text-main);">${insData.mathStr}</span></div>` : '';
-    const lblOrig = state.showSRHT ? "Transformed:" : "Original:";
-    const lblQuant = state.showSRHT ? "Quantized (WHT):" : "Quantized:";
+    // with a rotation the quant math is for rotated coefficient sliceIdx, the weight mixes its whole block
+    const rotHere = insData.rotationStr && !state.showSRHT;
+    let mathHtml = rotHere ? `<div class="data-row" style="margin-top:4px; color:var(--text-muted);" title="This weight is R&#7488;&middot;q over its rotation block. Coeff and the cards are rotated coefficient ${sliceIdx}."><span>Rotation:</span> <span style="color:var(--text-main);">${insData.rotationStr}</span></div>` : '';
+    mathHtml += insData.mathStr ? `<div class="data-row" style="margin-top:4px; color:var(--text-muted);"><span>${rotHere ? 'Coeff:' : 'Math:'}</span> <span style="color:var(--text-main);">${insData.mathStr}</span></div>` : '';
+    const lblOrig = state.showSRHT ? "Rotated:" : "Original:";
+    const lblQuant = state.showSRHT ? "Quantized (rotated):" : "Quantized:";
     const errVal = Math.abs(val - valQ);
 
-    let baseHtml = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl" title="${val}">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl" title="${valQ}">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span title="${errVal}">${errVal.toFixed(6)}</span></div>`;
+    let baseHtml = `<div class="data-row"><span>${lblOrig}</span> <span class="val-hl" title="${val}">${val.toFixed(5)}</span></div><div class="data-row"><span>${lblQuant}</span> <span class="val-hl" title="${valQ}">${valQ.toFixed(5)}</span></div>${mathHtml}<div class="data-row" style="margin-top:4px"><span>Abs Error:</span> <span title="${errVal}">${fmtErr(errVal)}</span></div>`;
 
     if (insData.importanceRaw !== undefined) {
         baseHtml += `<div class="data-row" style="margin-top:4px" title="Relative to the max value in the block: ${insData.importancePctMax.toFixed(2)}%"><span>Importance:</span> <span>${insData.importancePctSum.toFixed(2)}%</span></div>`;
@@ -311,12 +319,12 @@ export function updateInspector(idx) {
     elements.insWData.innerHTML = baseHtml;
 
     let blockHtml = '';
-    if (insData.mse !== undefined) blockHtml += `<div class="data-row"><span>MSE:</span> <span class="val-hl">${insData.mse.toFixed(6)}</span></div>`;
-    if (insData.mae !== undefined) blockHtml += `<div class="data-row"><span>MAE:</span> <span>${insData.mae.toFixed(6)}</span></div>`;
+    if (insData.mse !== undefined) blockHtml += `<div class="data-row"><span>MSE:</span> <span class="val-hl">${fmtErr(insData.mse)}</span></div>`;
+    if (insData.mae !== undefined) blockHtml += `<div class="data-row"><span>MAE:</span> <span>${fmtErr(insData.mae)}</span></div>`;
     if (insData.scale !== undefined) blockHtml += `<div class="data-row" style="margin-top:4px"><span>${insData.scaleLabel ?? 'Scale (FP16):'}</span> <span>${insData.scale.toFixed(5)}</span></div>`;
     if (insData.min !== undefined) blockHtml += `<div class="data-row"><span>Min (FP16):</span> <span>${insData.min.toFixed(5)}</span></div>`;
     if (insData.scaleE !== undefined) blockHtml += `<div class="data-row" style="margin-top:4px"><span>Block Scale (E8M0):</span> <span>2<sup>${insData.scaleE}</sup></span></div>`;
-    if (insData.qjlScale !== undefined && insData.qjlScale > 0) blockHtml += `<div class="data-row"><span>QJL Scale:</span> <span>${insData.qjlScale.toFixed(5)}</span></div>`;
+    if (insData.qjlScale !== undefined && insData.qjlScale > 0) blockHtml += `<div class="data-row"><span>Residual (FP16):</span> <span>${insData.qjlScale.toFixed(5)}</span></div>`;
 
     if (insData.blockIdx !== undefined) {
         elements.iBIdx.textContent = `[${insData.blockIdx}]`;
@@ -333,14 +341,14 @@ export function updateInspector(idx) {
         elements.iSBIdx.textContent = `[${insData.superIdx ?? '-'}]`;
         elements.insSBData.innerHTML = insData.detailHtml;
     } else if (insData.globalScale !== undefined) {
-        superHtml += `<div class="data-row"><span>Global MSE:</span> <span class="val-hl">${insData.globalMse.toFixed(6)}</span></div>`;
-        superHtml += `<div class="data-row"><span>Global MAE:</span> <span>${insData.globalMae.toFixed(6)}</span></div>`;
+        superHtml += `<div class="data-row"><span>Global MSE:</span> <span class="val-hl">${fmtErr(insData.globalMse)}</span></div>`;
+        superHtml += `<div class="data-row"><span>Global MAE:</span> <span>${fmtErr(insData.globalMae)}</span></div>`;
         superHtml += `<div class="data-row" style="margin-top:4px"><span>Global Scale (FP32):</span> <span>${insData.globalScale.toFixed(6)}</span></div>`;
         elements.iSBIdx.textContent = '[Global]';
         elements.insSBData.innerHTML = superHtml;
     } else if (insData.superIdx !== undefined) {
-        superHtml += `<div class="data-row"><span>Super MSE:</span> <span class="val-hl">${insData.superMse.toFixed(6)}</span></div>`;
-        superHtml += `<div class="data-row"><span>Super MAE:</span> <span>${insData.superMae.toFixed(6)}</span></div>`;
+        superHtml += `<div class="data-row"><span>Super MSE:</span> <span class="val-hl">${fmtErr(insData.superMse)}</span></div>`;
+        superHtml += `<div class="data-row"><span>Super MAE:</span> <span>${fmtErr(insData.superMae)}</span></div>`;
         superHtml += `<div class="data-row" style="margin-top:4px"><span>Super Scale (FP16):</span> <span>${insData.superScale.toFixed(5)}</span></div>`;
         if (insData.superMin !== undefined) superHtml += `<div class="data-row"><span>Super Min (FP16):</span> <span>${insData.superMin.toFixed(5)}</span></div>`;
         elements.iSBIdx.textContent = `[${insData.superIdx}]`;

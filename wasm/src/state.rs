@@ -1,5 +1,6 @@
 use crate::math_utils::get_err_stats;
 use crate::quants::*;
+use crate::rotation::Rotation;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -55,6 +56,15 @@ struct RenderCacheKey {
     manual_max_bits: u32,
 }
 
+/// What the rotation adds around the quant: its input and the weights rotated back.
+struct Rotated {
+    rot: Rotation,
+    /// R·x, what the quant saw.
+    floats: Vec<f32>,
+    /// Rᵀ·q, the final weights.
+    q_floats: Vec<f32>,
+}
+
 /// The core application state object maintained between Javascript boundaries.
 #[wasm_bindgen]
 pub struct AppBackend {
@@ -70,6 +80,7 @@ pub struct AppBackend {
     imp_block_size: usize,
 
     last_output: Option<QuantizeOutput>,
+    last_rot: Option<Rotated>,
     clip_start: usize,
     clip_end: usize,
 
@@ -99,6 +110,7 @@ impl AppBackend {
             imp_block_size: 0,
 
             last_output: None,
+            last_rot: None,
             clip_start: 0,
             clip_end: 0,
 
@@ -261,22 +273,56 @@ impl AppBackend {
             None
         };
 
+        // with a rotation the quant sees R·x and the importance of the rotated coefficients
+        let rotation = Rotation::from_settings(&settings);
+        let rot_floats = rotation.as_ref().map(|r| r.forward(&self.active_floats));
+        let rot_importance = match (&rotation, &importance_opt) {
+            (Some(r), Some(imp)) => Some(r.importance(imp.raw)),
+            _ => None,
+        };
+        let importance_opt = importance_opt.map(|imp| ImportanceResult {
+            raw: rot_importance.as_deref().unwrap_or(imp.raw),
+            ..imp
+        });
+        let input = rot_floats.as_deref().unwrap_or(&self.active_floats);
+
         let output = match settings.q_type.as_str() {
-            "primitive" => {
-                primitive::quantize(&self.active_floats, importance_opt.as_ref(), &settings)
-            }
-            "sym" => sym::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
-            "asym" => asym::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
-            "kquant" => kquant::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
-            "nvfp4" => nvfp4::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
-            "mxfp" => mxfp::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
-            "turbo" => turbo::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
-            "trellis" => trellis::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
-            "iq" => iq::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
-            _ => primitive::quantize(&self.active_floats, importance_opt.as_ref(), &settings),
+            "primitive" => primitive::quantize(input, importance_opt.as_ref(), &settings),
+            "sym" => sym::quantize(input, importance_opt.as_ref(), &settings),
+            "asym" => asym::quantize(input, importance_opt.as_ref(), &settings),
+            "kquant" => kquant::quantize(input, importance_opt.as_ref(), &settings),
+            "nvfp4" => nvfp4::quantize(input, importance_opt.as_ref(), &settings),
+            "mxfp" => mxfp::quantize(input, importance_opt.as_ref(), &settings),
+            "turbo" => turbo::quantize(input, importance_opt.as_ref(), &settings),
+            "trellis" => trellis::quantize(input, importance_opt.as_ref(), &settings),
+            "iq" => iq::quantize(input, importance_opt.as_ref(), &settings),
+            _ => primitive::quantize(input, importance_opt.as_ref(), &settings),
         };
 
-        let (global_mse, global_mae) = get_err_stats(&self.active_floats, &output.q_floats);
+        let mut formula_html = output.formula_html.clone();
+        let rotated = rotation.map(|rot| {
+            formula_html.push_str(&format!(
+                " <span style=\"color:var(--text-muted);font-size:0.8rem;cursor:help;text-decoration:underline dotted;\" title=\"Every {} weights are rotated before quantizing and rotated back after, the quant only sees R&middot;x. Same MSE in both views.{}\">{} {}.</span>",
+                rot.size,
+                if has_importance {
+                    " Importance is rotated as &Sigma; R&sup2;&middot;w, for Hadamard that is the block mean."
+                } else {
+                    ""
+                },
+                rot.name(),
+                rot.size
+            ));
+            let q_floats = rot.inverse(&output.q_floats);
+            Rotated {
+                rot,
+                floats: rot_floats.unwrap_or_default(),
+                q_floats,
+            }
+        });
+        // all stats are on the weights, after rotating back
+        let final_q: &[f32] = rotated.as_ref().map_or(&output.q_floats, |r| &r.q_floats);
+
+        let (global_mse, global_mae) = get_err_stats(&self.active_floats, final_q);
         let mut sig_power = 0.0_f64;
         let mut sum_abs = 0.0_f64;
         let mut max_error = 0.0_f64;
@@ -285,7 +331,7 @@ impl AppBackend {
 
         for i in 0..self.active_floats.len() {
             let vf = self.active_floats[i] as f64;
-            let qf = output.q_floats[i] as f64;
+            let qf = final_q[i] as f64;
             sig_power += vf * vf;
             sum_abs += vf.abs();
             let err = (vf - qf).abs();
@@ -317,7 +363,7 @@ impl AppBackend {
             let mut w_dot = 0.0;
             for i in 0..self.active_floats.len() {
                 let val = self.active_floats[i] as f64;
-                let q_val = output.q_floats[i] as f64;
+                let q_val = final_q[i] as f64;
                 let diff = val - q_val;
                 let w = self.active_importance[i] as f64;
 
@@ -342,10 +388,10 @@ impl AppBackend {
 
         let stats = QuantStats {
             bpw: output.bpw,
-            formula_html: output.formula_html.clone(),
+            formula_html,
             block_size: output.block_size,
             super_block_size: output.super_block_size,
-            has_srht: output.t_floats.is_some(),
+            has_srht: rotated.is_some(),
             global_mse,
             global_mae,
             global_variance,
@@ -364,6 +410,7 @@ impl AppBackend {
         };
 
         self.last_output = Some(output);
+        self.last_rot = rotated;
         self.best_key = None;
         self.best_range_cache = None;
 
@@ -372,11 +419,9 @@ impl AppBackend {
 
     fn get_val_for_global_idx(&self, g: usize, use_srht: bool) -> f32 {
         if use_srht {
-            if let Some(out) = &self.last_output {
-                if let Some(t) = out.t_floats.as_ref() {
-                    if g >= self.clip_start && g <= self.clip_end {
-                        return t[g - self.clip_start];
-                    }
+            if let Some(r) = &self.last_rot {
+                if g >= self.clip_start && g <= self.clip_end {
+                    return r.floats[g - self.clip_start];
                 }
             }
         }
@@ -503,12 +548,7 @@ impl AppBackend {
         let zs = z_start.min(n - 1);
         let ze = z_end.min(n - 1).max(zs);
 
-        let effective_srht = use_srht
-            && self
-                .last_output
-                .as_ref()
-                .and_then(|o| o.t_floats.as_ref())
-                .is_some();
+        let effective_srht = use_srht && self.last_rot.is_some();
 
         let (render_min, render_max) = self.calculate_bounds(zs, ze, effective_srht, &settings);
 
@@ -543,12 +583,7 @@ impl AppBackend {
         let zs = z_start.min(n - 1);
         let ze = z_end.min(n - 1).max(zs);
 
-        let effective_srht = use_srht
-            && self
-                .last_output
-                .as_ref()
-                .and_then(|o| o.t_floats.as_ref())
-                .is_some();
+        let effective_srht = use_srht && self.last_rot.is_some();
 
         let w = width_css.ceil().max(1.0) as usize;
         let width_bits = width_css.to_bits();
@@ -712,44 +747,55 @@ impl AppBackend {
         self.base_importance.iter().cloned().fold(0.0_f32, f32::max)
     }
     pub fn get_q_floats_ptr(&self) -> *const f32 {
-        self.last_output
-            .as_ref()
-            .map(|o| o.q_floats.as_ptr())
-            .unwrap_or(std::ptr::null())
+        match (&self.last_rot, &self.last_output) {
+            (Some(r), _) => r.q_floats.as_ptr(),
+            (None, Some(o)) => o.q_floats.as_ptr(),
+            _ => std::ptr::null(),
+        }
     }
+    /// Rotated input, only with a rotation.
     pub fn get_t_floats_ptr(&self) -> *const f32 {
-        self.last_output
+        self.last_rot
             .as_ref()
-            .and_then(|o| o.t_floats.as_ref())
-            .map(|v| v.as_ptr())
+            .map(|r| r.floats.as_ptr())
             .unwrap_or(std::ptr::null())
     }
+    /// Quant output before rotating back, only with a rotation.
     pub fn get_t_q_floats_ptr(&self) -> *const f32 {
-        self.last_output
-            .as_ref()
-            .and_then(|o| o.t_q_floats.as_ref())
-            .map(|v| v.as_ptr())
-            .unwrap_or(std::ptr::null())
+        match (&self.last_rot, &self.last_output) {
+            (Some(_), Some(o)) => o.q_floats.as_ptr(),
+            _ => std::ptr::null(),
+        }
     }
 
     /// Uniform interface to fetch rendering metadata about specific index interactions.
     pub fn get_inspector_data(&self, idx: usize, settings_js: JsValue) -> JsValue {
         let settings: Settings = serde_wasm_bindgen::from_value(settings_js).unwrap();
         if let Some(out) = &self.last_output {
+            // with a rotation the quant inspectors describe rotated coefficient idx
+            let active = self
+                .last_rot
+                .as_ref()
+                .map_or(&self.active_floats, |r| &r.floats);
             let mut data = match settings.q_type.as_str() {
-                "primitive" => {
-                    primitive::format_inspector(idx, &self.active_floats, out, &settings)
-                }
-                "sym" => sym::format_inspector(idx, &self.active_floats, out, &settings),
-                "asym" => asym::format_inspector(idx, &self.active_floats, out, &settings),
-                "kquant" => kquant::format_inspector(idx, &self.active_floats, out, &settings),
-                "nvfp4" => nvfp4::format_inspector(idx, &self.active_floats, out, &settings),
-                "mxfp" => mxfp::format_inspector(idx, &self.active_floats, out, &settings),
-                "turbo" => turbo::format_inspector(idx, &self.active_floats, out, &settings),
-                "trellis" => trellis::format_inspector(idx, &self.active_floats, out, &settings),
-                "iq" => iq::format_inspector(idx, &self.active_floats, out, &settings),
-                _ => primitive::format_inspector(idx, &self.active_floats, out, &settings),
+                "primitive" => primitive::format_inspector(idx, active, out, &settings),
+                "sym" => sym::format_inspector(idx, active, out, &settings),
+                "asym" => asym::format_inspector(idx, active, out, &settings),
+                "kquant" => kquant::format_inspector(idx, active, out, &settings),
+                "nvfp4" => nvfp4::format_inspector(idx, active, out, &settings),
+                "mxfp" => mxfp::format_inspector(idx, active, out, &settings),
+                "turbo" => turbo::format_inspector(idx, active, out, &settings),
+                "trellis" => trellis::format_inspector(idx, active, out, &settings),
+                "iq" => iq::format_inspector(idx, active, out, &settings),
+                _ => primitive::format_inspector(idx, active, out, &settings),
             };
+            if let Some(r) = &self.last_rot {
+                data.rotation_str = Some(format!(
+                    "R&#7488;q, {} {}",
+                    r.rot.short_name(),
+                    r.rot.piece_len(idx, active.len())
+                ));
+            }
             if settings.use_importance && self.active_importance.len() == self.active_floats.len() {
                 let b_size = self.imp_block_size;
                 let b_idx = idx / b_size;

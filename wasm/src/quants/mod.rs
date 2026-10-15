@@ -42,9 +42,12 @@ pub struct Settings {
     pub has_offset: bool,
     pub turbo_bits: u32,
     pub turbo_block_size: usize,
-    pub use_wht: bool,
     pub use_qjl: bool,
-    pub turbo_sign_seed: u32,
+    pub turbo_seed: u32,
+    pub rotation_type: String,
+    /// 0 is the quant's own block, see get_rotation_block_size.
+    pub rotation_size: usize,
+    pub rotation_seed: u32,
     pub trellis_type: String,
     pub iq_type: String,
     pub mxfp_format: String,
@@ -74,11 +77,23 @@ pub fn get_importance_block_size(q_type: &str, settings: &Settings) -> usize {
     }
 }
 
+/// Rotation size when the rotation is left on "Quant Block": the unit that shares a scale.
+pub fn get_rotation_block_size(q_type: &str, settings: &Settings) -> usize {
+    match q_type {
+        "sym" | "asym" => settings.block_size,
+        "kquant" => settings.sb_size,
+        "nvfp4" => 16,
+        "mxfp" => 32,
+        "turbo" => settings.turbo_block_size,
+        "iq" if settings.iq_type == "iq4_nl" => 32,
+        // super-blocks of the IQ and KT types, primitives have no block at all
+        _ => 256,
+    }
+}
+
 /// The standardized output containing the quantized data arrays and computed stats.
 pub struct QuantizeOutput {
     pub q_floats: Vec<f32>,
-    pub t_floats: Option<Vec<f32>>,
-    pub t_q_floats: Option<Vec<f32>>,
     pub bpw: f32,
     pub formula_html: String,
     pub block_size: usize,
@@ -94,7 +109,7 @@ pub enum QuantMeta {
     KQuant(Vec<KBlockMeta>, Vec<KSuperMeta>),
     Nvfp4(Vec<Nvfp4BlockMeta>, f32, f64, f64), // Nvfp4BlockMeta, global_scale, gmse, gmae
     Mxfp(Vec<MxfpBlockMeta>),
-    Turbo(Vec<TurboBlockMeta>),
+    Turbo(turbo::TurboMeta),
     Trellis(trellis::TrellisMeta),
     Iq(Vec<IqBlockMeta>),
 }
@@ -121,6 +136,7 @@ pub struct InspectorData {
     pub global_mse: Option<f64>,
     pub global_mae: Option<f64>,
     pub detail_html: Option<String>,
+    pub rotation_str: Option<String>,
     pub importance_raw: Option<f32>,
     pub importance_pct_sum: Option<f32>,
     pub importance_pct_max: Option<f32>,
@@ -172,14 +188,6 @@ pub struct MxfpBlockMeta {
     pub size: usize,
     pub scale_e: i32,
     pub scale: f32,
-    pub mse: f64,
-    pub mae: f64,
-}
-pub struct TurboBlockMeta {
-    pub idx: usize,
-    pub size: usize,
-    pub scale: f32,
-    pub qjl_scale: f32,
     pub mse: f64,
     pub mae: f64,
 }

@@ -340,7 +340,7 @@
                                 <path d="M7 9h5v1H7z" />
                             </svg>
                         </button>
-                        <button id="btn-toggle-srht" class="icon-btn top-right" title="SRHT transformed display"
+                        <button id="btn-toggle-srht" class="icon-btn top-right" title="Rotated domain display"
                             style="display: none;">
                             <svg viewBox="0 0 24 24" fill="currentColor">
                                 <path
@@ -482,11 +482,13 @@
 
                     <div id="turbo-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">
-                            <label for="turbo-bits">Lloyd-Max Centroids (Bits)</label>
+                            <label for="turbo-bits"
+                                title="Bits per coordinate. With QJL one of them goes to the residual signs.">Bit-width (b)</label>
                             <input type="number" id="turbo-bits" value="4" min="1" max="8">
                         </div>
                         <div class="settings-group">
-                            <label for="turbo-block-size">WHT Block Size</label>
+                            <label for="turbo-block-size"
+                                title="Weights per vector. Every vector gets its own norm, the rotation is d&times;d.">Vector Size (d)</label>
                             <select id="turbo-block-size">
                                 <option value="32">32</option>
                                 <option value="64">64</option>
@@ -494,18 +496,11 @@
                                 <option value="256">256</option>
                                 <option value="512">512</option>
                                 <option value="1024">1024</option>
-                                <option value="2048">2048</option>
                             </select>
                         </div>
                         <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
-                            title="Subsampled Randomized Hadamard Transform. Applies a diagonal random sign flip followed by a Walsh-Hadamard Transform to mathematically guarantee a Gaussian-like distribution, eliminating outlier impact.">
-                            <input type="checkbox" id="turbo-wht" checked
-                                style="width: auto; margin: 0; cursor: pointer;">
-                            <label for="turbo-wht" style="margin: 0; cursor: pointer;">Enable SRHT</label>
-                        </div>
-                        <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
-                            title="Quantized Johnson-Lindenstrauss. Adds a 1-bit symmetric error correction (+/- MAE) to neutralize inner-product bias and reduce the aggregate quantization error.">
-                            <input type="checkbox" id="turbo-qjl" checked
+                            title="TurboQuant_prod. b&minus;1 bits of levels plus 1-bit QJL of the residual. Unbiased inner products, higher MSE than _mse at the same b.">
+                            <input type="checkbox" id="turbo-qjl"
                                 style="width: auto; margin: 0; cursor: pointer;">
                             <label for="turbo-qjl" style="margin: 0; cursor: pointer;">Enable QJL</label>
                         </div>
@@ -520,10 +515,10 @@
                             </button>
                             <div id="turbo-adv-panel" class="adv-panel" style="display: none; padding-top: 8px;">
                                 <div class="settings-group">
-                                    <label for="turbo-sign-seed"
-                                        title="Seed for the deterministic pseudo-random sign flips (the diagonal matrix 'D' in SRHT). Used to ensure the transform is identically reversible.">SRHT
-                                        Sign Seed</label>
-                                    <input type="number" id="turbo-sign-seed" value="42">
+                                    <label for="turbo-seed"
+                                        title="Seed for the QJL matrix S. The rotation has its own seed.">QJL
+                                        Seed</label>
+                                    <input type="number" id="turbo-seed" value="42">
                                 </div>
                             </div>
                         </div>
@@ -595,11 +590,47 @@
                         </div>
                     </div>
 
-                    <div class="settings-group" id="importance-stats-group" style="display: none; margin-top: auto;">
+                    <div id="rotation-settings"
+                        style="display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                        <div class="settings-group">
+                            <label for="rotation-type"
+                                title="Rotates the weights before quantizing and back after. Works with every scheme, the quant only sees the rotated values.">Rotation</label>
+                            <select id="rotation-type">
+                                <option value="none" selected>None</option>
+                                <option value="hadamard">Hadamard</option>
+                                <option value="rht">Randomized Hadamard</option>
+                                <option value="orthogonal">Random Orthogonal</option>
+                            </select>
+                        </div>
+                        <div class="settings-group" id="rotation-size-group" style="display: none;">
+                            <label for="rotation-size"
+                                title="Weights per rotation block. Quant Block is the block that shares a scale: super-block for K, IQ and KT, d for TurboQuant. Random Orthogonal is capped at 1024.">Rotation
+                                Size</label>
+                            <select id="rotation-size">
+                                <option value="0" selected>Quant Block</option>
+                                <option value="16">16</option>
+                                <option value="32">32</option>
+                                <option value="64">64</option>
+                                <option value="128">128</option>
+                                <option value="256">256</option>
+                                <option value="512">512</option>
+                                <option value="1024">1024</option>
+                                <option value="2048">2048</option>
+                                <option value="4096">4096</option>
+                            </select>
+                        </div>
+                        <div class="settings-group" id="rotation-seed-group" style="display: none;">
+                            <label for="rotation-seed"
+                                title="Seed for the random signs or the random orthogonal matrix.">Rotation Seed</label>
+                            <input type="number" id="rotation-seed" value="42">
+                        </div>
+                    </div>
+
+                    <div class="settings-group" id="importance-stats-group" style="display: none;">
                         <label>Importance Stats</label>
                         <div class="stats-box" id="importance-stats">Waiting...</div>
                     </div>
-                    <div class="settings-group" id="global-stats-group" style="margin-top: auto;">
+                    <div class="settings-group" id="global-stats-group">
                         <label>Global Stats</label>
                         <div class="stats-box" id="quant-stats">Waiting...</div>
                     </div>

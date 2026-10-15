@@ -5,7 +5,7 @@
 import { state, getBaseFloats, getImportanceFloats } from './state.js';
 import { elements, getSettings, validateImportance } from '../ui.js';
 import registry from '../quants/registry.js';
-import { updateDbBarVisibility, drawDatasetBar, updateInspector, updateOverlays } from './components.js';
+import { updateDbBarVisibility, drawDatasetBar, updateInspector, updateOverlays, fmtErr } from './components.js';
 import { getF32Array, getI32Array } from '../wasmWrapper.js';
 
 let requantizeTimeout = null;
@@ -108,7 +108,7 @@ export function render(opts = {}) {
         elements.quantStats.textContent = "Waiting...";
         elements.importanceStats.textContent = "Waiting...";
         elements.importanceStatsGroup.style.display = 'none';
-        elements.globalStatsGroup.style.marginTop = 'auto';
+        elements.globalStatsGroup.style.marginTop = '';
         elements.chartMaxLbl.textContent = "Max: 0";
         elements.chartMinLbl.textContent = "Min: 0";
         elements.formulaBox.innerHTML = "";
@@ -143,7 +143,7 @@ export function render(opts = {}) {
     const sqnr = (stats.global_mse === 0 || stats.global_variance === 0) ? Infinity : 10 * Math.log10(stats.global_variance / stats.global_mse);
     const relError = stats.global_sum_abs === 0 ? 0 : ((stats.global_mae * actLen) / stats.global_sum_abs) * 100;
 
-    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${stats.global_mse.toFixed(6)}\nCosine Sim: ${stats.global_cosine_similarity.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nMax Error : ${stats.max_error.toFixed(6)}\nRel. Error: ${relError.toFixed(2)}%`;
+    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${fmtErr(stats.global_mse)}\nCosine Sim: ${stats.global_cosine_similarity.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nMax Error : ${fmtErr(stats.max_error)}\nRel. Error: ${relError.toFixed(2)}%`;
     elements.quantStats.textContent = statsText;
 
     if (stats.has_importance) {
@@ -152,11 +152,11 @@ export function render(opts = {}) {
 
         const wSqnr = stats.weighted_snr === null || stats.weighted_snr === Infinity ? '∞' : stats.weighted_snr.toFixed(2);
 
-        let impStatsText = `Weighted MSE: ${stats.weighted_mse.toFixed(6)}\nW-SQNR      : ${wSqnr} dB\nW-Cosine Sim: ${stats.weighted_cosine_similarity.toFixed(6)}`;
+        let impStatsText = `Weighted MSE: ${fmtErr(stats.weighted_mse)}\nW-SQNR      : ${wSqnr} dB\nW-Cosine Sim: ${stats.weighted_cosine_similarity.toFixed(6)}`;
         elements.importanceStats.textContent = impStatsText;
     } else {
         elements.importanceStatsGroup.style.display = 'none';
-        elements.globalStatsGroup.style.marginTop = 'auto';
+        elements.globalStatsGroup.style.marginTop = '';
     }
 
     elements.formulaBox.innerHTML = formulaHTML;

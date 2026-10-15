@@ -27,8 +27,6 @@ pub fn quantize(
 
     QuantizeOutput {
         q_floats,
-        t_floats: None,
-        t_q_floats: None,
         bpw,
         formula_html: format!("Weights in {} precision.", format_name),
         block_size: 0,

@@ -1,6 +1,4 @@
 use half::{bf16 as half_bf16, f16 as half_f16};
-use std::cell::RefCell;
-use std::collections::HashMap;
 
 /// Simulates standard FP16 quantization by routing through the `half` crate.
 pub fn fp16(val: f32) -> f32 {
@@ -180,107 +178,6 @@ pub fn refine_asym_scale_offset(
         }
     }
     (optimal_scale, optimal_min)
-}
-
-/// In-place Fast Walsh-Hadamard Transform (FWHT).
-/// This orthogonal transform is commonly used in quantization (like QuIP#) to distribute outlier magnitude evenly.
-pub fn fwht_f32_inplace(res: &mut [f32]) {
-    let p2 = res.len();
-    let mut h = 1;
-    while h < p2 {
-        let mut i = 0;
-        while i < p2 {
-            for j in i..i + h {
-                let x = res[j];
-                let y = res[j + h];
-                res[j] = x + y;
-                res[j + h] = x - y;
-            }
-            i += h * 2;
-        }
-        h *= 2;
-    }
-    // Scale for orthonormality
-    let scale = 1.0 / (p2 as f32).sqrt();
-    for x in res.iter_mut() {
-        *x *= scale;
-    }
-}
-
-/// Generates a pseudo-random sign (+1.0 or -1.0) based on an index and a seed.
-/// Creates a deterministically random diagonal sign matrix applied before FWHT.
-pub fn get_sign_flip(index: usize, seed: u32) -> f32 {
-    let h = ((index as f64) * 12.9898 + (seed as f64) * 78.233 + 1.0).sin() * 43758.5453;
-    if (h - h.floor()) >= 0.5 {
-        1.0
-    } else {
-        -1.0
-    }
-}
-
-thread_local! {
-    /// Memoization cache for Lloyd-Max Centroid calculation to avoid redundant PDF integration
-    static LLOYD_MAX_CACHE: RefCell<HashMap<(u32, String), Vec<f32>>> = RefCell::new(HashMap::new());
-}
-
-/// Computes theoretically optimal discrete levels (centroids) using the Lloyd-Max algorithm.
-pub fn get_lloyd_max_centroids(bits: u32, dist: &str) -> Vec<f32> {
-    let key = (bits, dist.to_string());
-
-    if let Some(cached) = LLOYD_MAX_CACHE.with(|c| c.borrow().get(&key).cloned()) {
-        return cached;
-    }
-
-    let levels = 1_usize << bits;
-    let mut centroids = vec![0.0; levels];
-    for i in 0..levels {
-        centroids[i] = -3.0 + (6.0 * (i as f64 + 0.5)) / (levels as f64);
-    }
-
-    let is_laplace = dist == "laplace";
-    let pdf = |x: f64| -> f64 {
-        if is_laplace {
-            0.5 * (-x.abs()).exp()
-        } else {
-            (-x * x / 2.0).exp() // Normal PDF basis
-        }
-    };
-
-    let steps = 200;
-    // 100 iterations is more than enough for stability
-    for _ in 0..100 {
-        let mut thresholds = vec![0.0; levels + 1];
-        thresholds[0] = -10.0;
-        for i in 0..levels - 1 {
-            thresholds[i + 1] = (centroids[i] + centroids[i + 1]) / 2.0;
-        }
-        thresholds[levels] = 10.0;
-
-        for i in 0..levels {
-            let mut num = 0.0;
-            let mut den = 0.0;
-            let t_start = thresholds[i];
-            let t_end = thresholds[i + 1];
-            let dt = (t_end - t_start) / (steps as f64);
-            for j in 0..steps {
-                let x = t_start + (j as f64 + 0.5) * dt;
-                let p = pdf(x);
-                num += x * p;
-                den += p;
-            }
-            if den > 1e-9 {
-                centroids[i] = num / den;
-            }
-        }
-    }
-
-    let result: Vec<f32> = centroids.iter().map(|&x| x as f32).collect();
-
-    LLOYD_MAX_CACHE.with(|c| {
-        c.borrow_mut().insert(key, result.clone());
-    });
-
-    result
 }
 
 /// Snaps a scalar value to the absolute closest centroid found within a provided codebook.

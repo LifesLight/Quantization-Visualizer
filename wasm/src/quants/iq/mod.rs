@@ -90,8 +90,6 @@ pub fn quantize(
 
     QuantizeOutput {
         q_floats,
-        t_floats: None,
-        t_q_floats: None,
         bpw: t.bpw(),
         formula_html,
         block_size: t.sub_size,
@@ -140,6 +138,7 @@ pub fn format_inspector(
         j,
         &active[base..base + bm.size],
         &out.q_floats[base..base + bm.size],
+        settings.rotation_type != "none",
     ));
     data
 }

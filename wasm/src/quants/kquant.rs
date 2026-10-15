@@ -276,8 +276,6 @@ pub fn quantize(
 
     QuantizeOutput {
         q_floats,
-        t_floats: None,
-        t_q_floats: None,
         bpw,
         formula_html: if has_offset {
             format!("<span>Weight = <span class=\"eq-pill\">Q_Weight<span class=\"bits\">{}b</span></span> &times; ( <span class=\"eq-pill\">SubScale_Int<span class=\"bits\">{}b</span></span> &times; <span class=\"eq-pill\">SuperScale<span class=\"bits\">16b</span></span> ) - ( <span class=\"eq-pill\">SubMin_Int<span class=\"bits\">{}b</span></span> &times; <span class=\"eq-pill\">SuperMinScale<span class=\"bits\">16b</span></span> )</span>", weight_bits, sub_bits, sub_bits)

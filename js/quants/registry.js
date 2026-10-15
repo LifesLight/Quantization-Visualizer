@@ -19,10 +19,10 @@ symQuant.label = "Symmetric (Block Scale)";
 asymQuant.label = "Asymmetric (Block Scale + Zero)";
 kquantQuant.label = "K-Quant (Nested Scales)";
 iqQuant.label = "IQ Quants (llama.cpp)";
+trellisQuant.label = "Trellis (ik_llama.cpp KT)";
 
 // Complex
-turboQuant.label = "TurboQuant (Scalar WHT)";
-trellisQuant.label = "Trellis (ik_llama.cpp KT)";
+turboQuant.label = "TurboQuant (Paper)";
 
 
 const registry = {
@@ -33,8 +33,8 @@ const registry = {
     'asym': asymQuant,
     'kquant': kquantQuant,
     'iq': iqQuant,
-    'turbo': turboQuant,
     'trellis': trellisQuant,
+    'turbo': turboQuant,
 };
 
 export default registry;

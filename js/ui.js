@@ -104,11 +104,17 @@ export const elements = {
     get turboSettings() { return document.getElementById('turbo-settings'); },
     get turboBitsEl() { return document.getElementById('turbo-bits'); },
     get turboBlockSizeEl() { return document.getElementById('turbo-block-size'); },
-    get turboWhtEl() { return document.getElementById('turbo-wht'); },
     get turboQjlEl() { return document.getElementById('turbo-qjl'); },
-    get turboSignSeedEl() { return document.getElementById('turbo-sign-seed'); },
+    get turboSeedEl() { return document.getElementById('turbo-seed'); },
     get turboAdvToggle() { return document.getElementById('turbo-adv-toggle'); },
     get turboAdvPanel() { return document.getElementById('turbo-adv-panel'); },
+
+    // --- Rotation Settings ---
+    get rotationTypeEl() { return document.getElementById('rotation-type'); },
+    get rotationSizeEl() { return document.getElementById('rotation-size'); },
+    get rotationSeedEl() { return document.getElementById('rotation-seed'); },
+    get rotationSizeGroup() { return document.getElementById('rotation-size-group'); },
+    get rotationSeedGroup() { return document.getElementById('rotation-seed-group'); },
 
     // --- Trellis Settings ---
     get trellisSettings() { return document.getElementById('trellis-settings'); },
@@ -166,8 +172,8 @@ export const elements = {
             this.subOffsetEl, this.distEl, this.genStdEl,
             this.genScaleEl, this.genBimodalDistEl, this.genBimodalSpreadEl,
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
-            this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
-            this.turboSignSeedEl,
+            this.turboBitsEl, this.turboBlockSizeEl, this.turboQjlEl, this.turboSeedEl,
+            this.rotationTypeEl, this.rotationSizeEl, this.rotationSeedEl,
             this.trellisTypeEl,
             this.iqTypeEl,
             this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl,
@@ -210,6 +216,10 @@ export function populateDynamicSelectors() {
 export function applyPreset(presetId) {
     const p = getPresetById(presetId);
     if (!p) return;
+    // presets without a rotation run without one
+    elements.rotationTypeEl.value = 'none';
+    elements.rotationSizeEl.value = '0';
+    elements.rotationSeedEl.value = '42';
     for (const [id, val] of Object.entries(p)) {
         if (id === 'label') continue;
         const el = document.getElementById(id);
@@ -323,9 +333,12 @@ export function getSettings() {
 
         turboBits: parseInt(elements.turboBitsEl.value) || 4,
         turboBlockSize: parseInt(elements.turboBlockSizeEl.value) || 128,
-        useWht: elements.turboWhtEl.checked,
         useQjl: elements.turboQjlEl.checked,
-        turboSignSeed: parseInt(elements.turboSignSeedEl?.value) || 42,
+        turboSeed: parseInt(elements.turboSeedEl?.value) || 42,
+
+        rotationType: elements.rotationTypeEl?.value || 'none',
+        rotationSize: parseInt(elements.rotationSizeEl?.value) || 0,
+        rotationSeed: parseInt(elements.rotationSeedEl?.value) || 42,
 
         trellisType: elements.trellisTypeEl?.value || 'iq2_kt',
 
@@ -355,7 +368,11 @@ export function updateUI() {
     if (elements.mxfpSettings) elements.mxfpSettings.style.display = 'none';
     if (elements.primitiveSettings) elements.primitiveSettings.style.display = 'none';
     if (elements.iqSettings) elements.iqSettings.style.display = 'none';
-    if (elements.cardBlock) elements.cardBlock.style.display = 'flex';
+    uiHelpers.showBlockCard(true);
+
+    const rot = elements.rotationTypeEl.value;
+    elements.rotationSizeGroup.style.display = rot !== 'none' ? 'flex' : 'none';
+    elements.rotationSeedGroup.style.display = rot === 'rht' || rot === 'orthogonal' ? 'flex' : 'none';
 
     if (quant && quant.setupUI) {
         quant.setupUI(uiHelpers);

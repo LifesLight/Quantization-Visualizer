@@ -6,6 +6,7 @@ export default {
         ui.showKQuantSettings(false);
         ui.showTurboSettings(true);
         ui.showQuantBits(false);
-        ui.showSuperBlockCard(false);
+        ui.showSuperBlockCard(true, 'TQ Decode');
+        ui.showBlockCard(true, 'Vector stats');
     }
 };

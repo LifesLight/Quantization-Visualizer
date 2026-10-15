@@ -35,6 +35,7 @@ pub fn render(
     j: usize,
     orig: &[f32],
     recon: &[f32],
+    rotated: bool,
 ) -> String {
     let mut html = String::from(r#"<div style="display:flex; flex-direction:column; gap:6px;">"#);
 
@@ -106,7 +107,7 @@ pub fn render(
     };
     chain.push_str(&chain_row(&label, &value, "inherit"));
     chain.push_str(&chain_row(
-        "= weight",
+        if rotated { "= coeff" } else { "= weight" },
         &format!("{:.5}", recon.get(j).copied().unwrap_or(0.0)),
         "var(--accent-color)",
     ));
