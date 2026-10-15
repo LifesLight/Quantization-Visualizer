@@ -12,6 +12,7 @@ A visualizer for floating-point quantization. It shows how different schemes map
 *   **Asymmetric (Block Scale + Zero):** Block-wise quantization with both a scale and a minimum offset per block.
 *   **K-Quant (Nested Scales):** Superblock structure where sub-block scales are themselves quantized by a shared super-scale.
 *   **TurboQuant:** Implemented from the paper ([arXiv:2504.19874](https://arxiv.org/abs/2504.19874)), TurboQuant_mse and TurboQuant_prod.
+*   **QTIP:** Implemented from the paper ([arXiv:2406.11235](https://arxiv.org/abs/2406.11235)) and its reference code, bitshift trellis with tail-biting Viterbi and the 1MAD, 3INST and HYB codes.
 *   **IQ_K (Shifted Tables):** Ported from ik_llama.cpp's `iqk_quantize.cpp`.
 *   **Trellis (KT):** Ported from ik_llama.cpp's `iqk_quantize.cpp`.
 *   **IQ-Quant (Grid-Based):** Ported from llama.cpp's `ggml-quants.c`.

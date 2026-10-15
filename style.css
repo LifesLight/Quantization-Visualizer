@@ -946,7 +946,7 @@ button.action-btn:hover:not(.secondary) {
 .pp-search {
     width: 100%;
     box-sizing: border-box;
-    padding: 8px 10px;
+    padding: 7px 10px;
     margin-bottom: 6px;
     border-radius: 8px;
     border: 1px solid var(--border-color);
@@ -982,7 +982,7 @@ button.action-btn:hover:not(.secondary) {
 .pp-bits,
 .pp-cell {
     border-top: 1px solid var(--border-color);
-    padding: 4px 1px;
+    padding: 3px 1px;
 }
 
 .pp-bits {
@@ -990,7 +990,7 @@ button.action-btn:hover:not(.secondary) {
     font-size: 1.1rem;
     font-weight: 600;
     line-height: 1;
-    padding-top: 8px;
+    padding-top: 6px;
     color: var(--text-muted);
     cursor: default;
 }
@@ -998,17 +998,16 @@ button.action-btn:hover:not(.secondary) {
 .pp-cell {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
 }
 
 .pp-item {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 1px;
     width: 100%;
-    padding: 3px 7px;
-    line-height: 1.25;
+    padding: 2px 6px;
+    line-height: 1.15;
     border: 1px solid transparent;
     border-radius: 6px;
     background: none;
@@ -1019,13 +1018,13 @@ button.action-btn:hover:not(.secondary) {
 }
 
 .pp-name {
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 600;
     white-space: nowrap;
 }
 
 .pp-bpw {
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     color: var(--text-muted);
 }
 

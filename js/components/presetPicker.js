@@ -21,7 +21,10 @@ export function presetPanel({ value, choose, close, panel }) {
     presetGroups.forEach((group, col) => {
         Object.entries(group.presets).forEach(([id, p]) => {
             const full = p.label || id;
-            all.push({ id, full, label: full.replace(/\s*\(.*\)$/, ''), bpw: p.bpw, col, group });
+            // "MXFP6 (E2M3)": the element format goes on the second line, other notes only in the tooltip
+            const m = full.match(/^(.*?)\s*\((.*)\)$/);
+            const variant = m && /^E\dM\d$/.test(m[2]) ? `${m[2]} ` : '';
+            all.push({ id, full, label: m ? m[1] : full, variant, bpw: p.bpw, col, group });
         });
     });
     all.sort((a, b) => a.bpw - b.bpw);
@@ -50,7 +53,7 @@ export function presetPanel({ value, choose, close, panel }) {
         b.title = `${p.full}\n${p.group.label}, ${fmt(p.bpw)} bits per weight`;
         b.innerHTML = '<span class="pp-name"></span><span class="pp-bpw"></span>';
         b.children[0].textContent = p.label;
-        b.children[1].textContent = fmt(p.bpw);
+        b.children[1].textContent = p.variant + fmt(p.bpw);
         if (p.id === value) {
             b.classList.add('selected');
             b.setAttribute('aria-current', 'true');

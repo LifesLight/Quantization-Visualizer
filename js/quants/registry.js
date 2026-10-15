@@ -8,6 +8,7 @@ import nvfp4Quant from './nvfp4.js';
 import mxfpQuant from './mxfp.js';
 import iqQuant from './iq.js';
 import iqkQuant from './iqk.js';
+import qtipQuant from './qtip.js';
 
 primitiveQuant.label = "Primitive (FP Types)";
 
@@ -25,6 +26,7 @@ trellisQuant.label = "Trellis (ik_llama.cpp KT)";
 
 // Complex
 turboQuant.label = "TurboQuant (Paper)";
+qtipQuant.label = "QTIP (Paper)";
 
 
 const registry = {
@@ -38,6 +40,7 @@ const registry = {
     'iqk': iqkQuant,
     'trellis': trellisQuant,
     'turbo': turboQuant,
+    'qtip': qtipQuant,
 };
 
 export default registry;

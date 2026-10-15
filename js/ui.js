@@ -128,6 +128,15 @@ export const elements = {
     get iqkSettings() { return document.getElementById('iqk-settings'); },
     get iqkTypeEl() { return document.getElementById('iqk-type'); },
 
+    // --- QTIP Settings ---
+    get qtipSettings() { return document.getElementById('qtip-settings'); },
+    get qtipCodeEl() { return document.getElementById('qtip-code'); },
+    get qtipBitsEl() { return document.getElementById('qtip-bits'); },
+    get qtipLEl() { return document.getElementById('qtip-l'); },
+    get qtipScaleEl() { return document.getElementById('qtip-scale'); },
+    get qtipAdvToggle() { return document.getElementById('qtip-adv-toggle'); },
+    get qtipAdvPanel() { return document.getElementById('qtip-adv-panel'); },
+
     // --- Other Formats ---
     get mxfpSettings() { return document.getElementById('mxfp-settings'); },
     get mxfpFormatEl() { return document.getElementById('mxfp-format'); },
@@ -180,6 +189,7 @@ export const elements = {
             this.rotationTypeEl, this.rotationSizeEl, this.rotationSeedEl,
             this.trellisTypeEl,
             this.iqTypeEl, this.iqkTypeEl,
+            this.qtipCodeEl, this.qtipBitsEl, this.qtipLEl, this.qtipScaleEl,
             this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl,
             this.axisIgnoreOutliers, this.axisOutlierPct, this.axisManualMin, this.axisManualMax,
             this.useImportance
@@ -308,6 +318,7 @@ export const uiHelpers = {
     showPrimitiveSettings: (show) => { if (elements.primitiveSettings) elements.primitiveSettings.style.display = show ? 'flex' : 'none'; },
     showIqSettings: (show) => { if (elements.iqSettings) elements.iqSettings.style.display = show ? 'flex' : 'none'; },
     showIqkSettings: (show) => { if (elements.iqkSettings) elements.iqkSettings.style.display = show ? 'flex' : 'none'; },
+    showQtipSettings: (show) => { if (elements.qtipSettings) elements.qtipSettings.style.display = show ? 'flex' : 'none'; },
     showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
     showSuperBlockCard: (show, title = 'Super-Block stats') => {
         elements.cardSuper.style.display = show ? 'flex' : 'none';
@@ -350,6 +361,11 @@ export function getSettings() {
         iqType: elements.iqTypeEl?.value || 'iq2_xxs',
         iqkType: elements.iqkTypeEl?.value || 'iq4_k',
 
+        qtipCode: elements.qtipCodeEl?.value || 'hyb',
+        qtipBits: parseInt(elements.qtipBitsEl?.value) || 2,
+        qtipL: parseInt(elements.qtipLEl?.value) || 16,
+        qtipScale: parseFloat(elements.qtipScaleEl?.value) || 0.9,
+
         mxfpFormat: elements.mxfpFormatEl?.value || 'mxfp4_e2m1',
         primitiveFormat: elements.primitiveFormatEl?.value || 'fp32',
 
@@ -375,6 +391,7 @@ export function updateUI() {
     if (elements.primitiveSettings) elements.primitiveSettings.style.display = 'none';
     if (elements.iqSettings) elements.iqSettings.style.display = 'none';
     if (elements.iqkSettings) elements.iqkSettings.style.display = 'none';
+    if (elements.qtipSettings) elements.qtipSettings.style.display = 'none';
     uiHelpers.showBlockCard(true);
 
     const rot = elements.rotationTypeEl.value;
@@ -426,6 +443,7 @@ export function initUIListeners() {
     setupToggle(elements.impRawToggle, elements.impRawPanel);
     setupToggle(elements.impGenAdvToggle, elements.impGenAdvPanel);
     setupToggle(elements.turboAdvToggle, elements.turboAdvPanel);
+    setupToggle(elements.qtipAdvToggle, elements.qtipAdvPanel);
     setupToggle(elements.axisToggleBtn, elements.axisPanel);
     setupToggle(elements.dataTransformToggle, elements.dataTransformPanel);
 

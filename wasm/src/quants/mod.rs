@@ -7,6 +7,7 @@ pub mod kquant;
 pub mod mxfp;
 pub mod nvfp4;
 pub mod primitive;
+pub mod qtip;
 pub mod sym;
 pub mod trellis;
 pub mod turbo;
@@ -52,6 +53,10 @@ pub struct Settings {
     pub trellis_type: String,
     pub iq_type: String,
     pub iqk_type: String,
+    pub qtip_code: String,
+    pub qtip_bits: u32,
+    pub qtip_l: u32,
+    pub qtip_scale: f32,
     pub mxfp_format: String,
     pub primitive_format: String,
     pub centering_mode: String,
@@ -116,6 +121,7 @@ pub enum QuantMeta {
     Trellis(trellis::TrellisMeta),
     Iq(Vec<IqBlockMeta>),
     Iqk(iqk::IqkMeta),
+    Qtip(qtip::QtipMeta),
 }
 
 /// Individual block inspection data retrieved via UI interactions. Serialized to JS Object.

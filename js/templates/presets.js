@@ -6,6 +6,9 @@ export const presetGroups = [
             'nvfp4': { label: 'NVFP4 (Blackwell)', bpw: 4.5, 'quant-type': 'nvfp4' },
             'mxfp4': { label: 'MXFP4 (E2M1)', bpw: 4.25, 'quant-type': 'mxfp', 'mxfp-format': 'mxfp4_e2m1' },
             'mxfp6': { label: 'MXFP6 (E2M3)', bpw: 6.25, 'quant-type': 'mxfp', 'mxfp-format': 'mxfp6_e2m3' },
+            'mxfp6_e3m2': { label: 'MXFP6 (E3M2)', bpw: 6.25, 'quant-type': 'mxfp', 'mxfp-format': 'mxfp6_e3m2' },
+            'fp8_e4m3': { label: 'FP8 (E4M3)', bpw: 8, 'quant-type': 'primitive', 'primitive-format': 'fp8_e4m3' },
+            'fp8_e5m2': { label: 'FP8 (E5M2)', bpw: 8, 'quant-type': 'primitive', 'primitive-format': 'fp8_e5m2' },
         }
     },
     {
@@ -49,9 +52,15 @@ export const presetGroups = [
         label: "ik_llama.cpp: IQ_K",
         short: 'IQ_K',
         presets: {
+            'IQ2_KS': { label: 'IQ2_KS', bpw: 2.1875, 'quant-type': 'iqk', 'iqk-type': 'iq2_ks' },
             'IQ2_K': { label: 'IQ2_K', bpw: 2.375, 'quant-type': 'iqk', 'iqk-type': 'iq2_k' },
+            'IQ2_KL': { label: 'IQ2_KL', bpw: 2.6875, 'quant-type': 'iqk', 'iqk-type': 'iq2_kl' },
+            'IQ3_KS': { label: 'IQ3_KS', bpw: 3.1875, 'quant-type': 'iqk', 'iqk-type': 'iq3_ks' },
             'IQ3_K': { label: 'IQ3_K', bpw: 3.4375, 'quant-type': 'iqk', 'iqk-type': 'iq3_k' },
+            'IQ4_KSS': { label: 'IQ4_KSS', bpw: 4, 'quant-type': 'iqk', 'iqk-type': 'iq4_kss' },
+            'IQ4_KS': { label: 'IQ4_KS', bpw: 4.25, 'quant-type': 'iqk', 'iqk-type': 'iq4_ks' },
             'IQ4_K': { label: 'IQ4_K', bpw: 4.5, 'quant-type': 'iqk', 'iqk-type': 'iq4_k' },
+            'IQ5_KS': { label: 'IQ5_KS', bpw: 5.25, 'quant-type': 'iqk', 'iqk-type': 'iq5_ks' },
             'IQ5_K': { label: 'IQ5_K', bpw: 5.5, 'quant-type': 'iqk', 'iqk-type': 'iq5_k' },
             'IQ6_K': { label: 'IQ6_K', bpw: 6.625, 'quant-type': 'iqk', 'iqk-type': 'iq6_k' },
         }
@@ -73,6 +82,15 @@ export const presetGroups = [
             'turbo2': { label: 'Turbo2', bpw: 2.125, 'quant-type': 'turbo', 'turbo-bits': 2, 'turbo-block-size': 128, 'turbo-qjl': false, 'turbo-seed': 42, 'rotation-type': 'orthogonal', 'rotation-seed': 42 },
             'turbo3': { label: 'Turbo3', bpw: 3.125, 'quant-type': 'turbo', 'turbo-bits': 3, 'turbo-block-size': 128, 'turbo-qjl': false, 'turbo-seed': 42, 'rotation-type': 'orthogonal', 'rotation-seed': 42 },
             'turbo4': { label: 'Turbo4', bpw: 4.125, 'quant-type': 'turbo', 'turbo-bits': 4, 'turbo-block-size': 128, 'turbo-qjl': false, 'turbo-seed': 42, 'rotation-type': 'orthogonal', 'rotation-seed': 42 },
+        }
+    },
+    {
+        label: "Paper: QTIP",
+        short: 'QTIP',
+        presets: {
+            'qtip2': { label: 'QTIP2', bpw: 2, 'quant-type': 'qtip', 'qtip-code': 'hyb', 'qtip-bits': 2, 'qtip-l': 16, 'qtip-scale': 0.9, 'rotation-type': 'rht', 'rotation-size': 4096, 'rotation-seed': 42 },
+            'qtip3': { label: 'QTIP3', bpw: 3, 'quant-type': 'qtip', 'qtip-code': 'hyb', 'qtip-bits': 3, 'qtip-l': 16, 'qtip-scale': 0.9, 'rotation-type': 'rht', 'rotation-size': 4096, 'rotation-seed': 42 },
+            'qtip4': { label: 'QTIP4', bpw: 4, 'quant-type': 'qtip', 'qtip-code': 'hyb', 'qtip-bits': 4, 'qtip-l': 16, 'qtip-scale': 0.9, 'rotation-type': 'rht', 'rotation-size': 4096, 'rotation-seed': 42 },
         }
     }
 ];
