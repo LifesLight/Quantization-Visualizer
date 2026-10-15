@@ -30,7 +30,7 @@ pub struct IqType {
     /// Weights sharing one codebook index.
     pub group_size: usize,
     pub bytes: usize,
-    /// llama.cpp refuses to quantize these without an imatrix.
+    /// llama-quantize refuses these without an imatrix, they get a flat one when importance is off.
     pub needs_imatrix: bool,
     pub quantize: fn(&[f32], Option<&[f32]>) -> Encoded,
     pub dequantize: fn(&[u8], &mut [f32]),

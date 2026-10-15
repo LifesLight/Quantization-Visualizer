@@ -11,7 +11,7 @@ pub static TYPE: IqType = IqType {
     sub_size: 16,
     group_size: 8,
     bytes: 56,
-    needs_imatrix: false,
+    needs_imatrix: true,
     quantize,
     dequantize,
     decode,
