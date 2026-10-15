@@ -124,6 +124,10 @@ export const elements = {
     get iqSettings() { return document.getElementById('iq-settings'); },
     get iqTypeEl() { return document.getElementById('iq-type'); },
 
+    // --- IQ_K Settings ---
+    get iqkSettings() { return document.getElementById('iqk-settings'); },
+    get iqkTypeEl() { return document.getElementById('iqk-type'); },
+
     // --- Other Formats ---
     get mxfpSettings() { return document.getElementById('mxfp-settings'); },
     get mxfpFormatEl() { return document.getElementById('mxfp-format'); },
@@ -175,7 +179,7 @@ export const elements = {
             this.turboBitsEl, this.turboBlockSizeEl, this.turboQjlEl, this.turboSeedEl,
             this.rotationTypeEl, this.rotationSizeEl, this.rotationSeedEl,
             this.trellisTypeEl,
-            this.iqTypeEl,
+            this.iqTypeEl, this.iqkTypeEl,
             this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl,
             this.axisIgnoreOutliers, this.axisOutlierPct, this.axisManualMin, this.axisManualMax,
             this.useImportance
@@ -303,6 +307,7 @@ export const uiHelpers = {
     showMxfpSettings: (show) => { if (elements.mxfpSettings) elements.mxfpSettings.style.display = show ? 'flex' : 'none'; },
     showPrimitiveSettings: (show) => { if (elements.primitiveSettings) elements.primitiveSettings.style.display = show ? 'flex' : 'none'; },
     showIqSettings: (show) => { if (elements.iqSettings) elements.iqSettings.style.display = show ? 'flex' : 'none'; },
+    showIqkSettings: (show) => { if (elements.iqkSettings) elements.iqkSettings.style.display = show ? 'flex' : 'none'; },
     showQuantBits: (show) => elements.qBitsEl.parentElement.style.display = show ? 'flex' : 'none',
     showSuperBlockCard: (show, title = 'Super-Block stats') => {
         elements.cardSuper.style.display = show ? 'flex' : 'none';
@@ -343,6 +348,7 @@ export function getSettings() {
         trellisType: elements.trellisTypeEl?.value || 'iq2_kt',
 
         iqType: elements.iqTypeEl?.value || 'iq2_xxs',
+        iqkType: elements.iqkTypeEl?.value || 'iq4_k',
 
         mxfpFormat: elements.mxfpFormatEl?.value || 'mxfp4_e2m1',
         primitiveFormat: elements.primitiveFormatEl?.value || 'fp32',
@@ -368,6 +374,7 @@ export function updateUI() {
     if (elements.mxfpSettings) elements.mxfpSettings.style.display = 'none';
     if (elements.primitiveSettings) elements.primitiveSettings.style.display = 'none';
     if (elements.iqSettings) elements.iqSettings.style.display = 'none';
+    if (elements.iqkSettings) elements.iqkSettings.style.display = 'none';
     uiHelpers.showBlockCard(true);
 
     const rot = elements.rotationTypeEl.value;

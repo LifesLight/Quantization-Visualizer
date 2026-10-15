@@ -296,6 +296,7 @@ impl AppBackend {
             "turbo" => turbo::quantize(input, importance_opt.as_ref(), &settings),
             "trellis" => trellis::quantize(input, importance_opt.as_ref(), &settings),
             "iq" => iq::quantize(input, importance_opt.as_ref(), &settings),
+            "iqk" => iqk::quantize(input, importance_opt.as_ref(), &settings),
             _ => primitive::quantize(input, importance_opt.as_ref(), &settings),
         };
 
@@ -787,6 +788,7 @@ impl AppBackend {
                 "turbo" => turbo::format_inspector(idx, active, out, &settings),
                 "trellis" => trellis::format_inspector(idx, active, out, &settings),
                 "iq" => iq::format_inspector(idx, active, out, &settings),
+                "iqk" => iqk::format_inspector(idx, active, out, &settings),
                 _ => primitive::format_inspector(idx, active, out, &settings),
             };
             if let Some(r) = &self.last_rot {

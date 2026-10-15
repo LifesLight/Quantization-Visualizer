@@ -557,6 +557,27 @@
                         </div>
                     </div>
 
+                    <div id="iqk-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
+                        <div class="settings-group">
+                            <label for="iqk-type"
+                                title="Non-linear tables where every block can switch to a shifted copy of the table. _KS: one scale per row instead of per 256.">IQ_K
+                                Quantization Format</label>
+                            <select id="iqk-type">
+                                <option value="iq2_ks">IQ2_KS (2.19 BPW)</option>
+                                <option value="iq2_k">IQ2_K (2.38 BPW)</option>
+                                <option value="iq2_kl">IQ2_KL (2.69 BPW)</option>
+                                <option value="iq3_ks">IQ3_KS (3.19 BPW)</option>
+                                <option value="iq3_k">IQ3_K (3.44 BPW)</option>
+                                <option value="iq4_kss">IQ4_KSS (4.00 BPW)</option>
+                                <option value="iq4_ks">IQ4_KS (4.25 BPW)</option>
+                                <option value="iq4_k" selected>IQ4_K (4.50 BPW)</option>
+                                <option value="iq5_ks">IQ5_KS (5.25 BPW)</option>
+                                <option value="iq5_k">IQ5_K (5.50 BPW)</option>
+                                <option value="iq6_k">IQ6_K (6.63 BPW)</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div id="kquant-settings"
                         style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">

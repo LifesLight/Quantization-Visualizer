@@ -42,6 +42,16 @@ export const presetGroups = [
         }
     },
     {
+        label: "ik_llama.cpp: IQ_K",
+        presets: {
+            'IQ2_K': { label: 'IQ2_K', 'quant-type': 'iqk', 'iqk-type': 'iq2_k' },
+            'IQ3_K': { label: 'IQ3_K', 'quant-type': 'iqk', 'iqk-type': 'iq3_k' },
+            'IQ4_K': { label: 'IQ4_K', 'quant-type': 'iqk', 'iqk-type': 'iq4_k' },
+            'IQ5_K': { label: 'IQ5_K', 'quant-type': 'iqk', 'iqk-type': 'iq5_k' },
+            'IQ6_K': { label: 'IQ6_K', 'quant-type': 'iqk', 'iqk-type': 'iq6_k' },
+        }
+    },
+    {
         label: "ik_llama.cpp: Trellis (KT)",
         presets: {
             'IQ1_KT': { label: 'IQ1_KT', 'quant-type': 'trellis', 'trellis-type': 'iq1_kt' },

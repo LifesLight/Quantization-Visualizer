@@ -2,6 +2,7 @@
 
 pub mod asym;
 pub mod iq;
+pub mod iqk;
 pub mod kquant;
 pub mod mxfp;
 pub mod nvfp4;
@@ -50,6 +51,7 @@ pub struct Settings {
     pub rotation_seed: u32,
     pub trellis_type: String,
     pub iq_type: String,
+    pub iqk_type: String,
     pub mxfp_format: String,
     pub primitive_format: String,
     pub centering_mode: String,
@@ -66,6 +68,7 @@ pub fn get_importance_block_size(q_type: &str, settings: &Settings) -> usize {
         "kquant" => settings.sub_size,
         "sym" | "asym" => settings.block_size,
         "trellis" => 256,
+        "iqk" => iqk::k_type(&settings.iqk_type).imatrix_block,
         "iq" => {
             if settings.iq_type == "iq4_nl" {
                 32
@@ -112,6 +115,7 @@ pub enum QuantMeta {
     Turbo(turbo::TurboMeta),
     Trellis(trellis::TrellisMeta),
     Iq(Vec<IqBlockMeta>),
+    Iqk(iqk::IqkMeta),
 }
 
 /// Individual block inspection data retrieved via UI interactions. Serialized to JS Object.

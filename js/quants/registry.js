@@ -7,6 +7,7 @@ import trellisQuant from './trellis.js';
 import nvfp4Quant from './nvfp4.js';
 import mxfpQuant from './mxfp.js';
 import iqQuant from './iq.js';
+import iqkQuant from './iqk.js';
 
 primitiveQuant.label = "Primitive (FP Types)";
 
@@ -19,6 +20,7 @@ symQuant.label = "Symmetric (Block Scale)";
 asymQuant.label = "Asymmetric (Block Scale + Zero)";
 kquantQuant.label = "K-Quant (Nested Scales)";
 iqQuant.label = "IQ Quants (llama.cpp)";
+iqkQuant.label = "IQ_K Quants (ik_llama.cpp)";
 trellisQuant.label = "Trellis (ik_llama.cpp KT)";
 
 // Complex
@@ -33,6 +35,7 @@ const registry = {
     'asym': asymQuant,
     'kquant': kquantQuant,
     'iq': iqQuant,
+    'iqk': iqkQuant,
     'trellis': trellisQuant,
     'turbo': turboQuant,
 };
