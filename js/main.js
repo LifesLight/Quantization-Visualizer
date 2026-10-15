@@ -15,6 +15,8 @@ import { setupResizeObserver, setupFileHandling, setupAutoUpdateListeners, setup
 import { setBackend } from './render/state.js';
 import { debouncedRequantize } from './render/core.js';
 import { updateDbBarVisibility } from './render/components.js';
+import { enhanceSelects } from './components/dropdown.js';
+import { presetPanel, presetLabel } from './components/presetPicker.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. Initialize WASM Backend
@@ -24,6 +26,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 2. Setup Base UI Dropdowns
     populateDynamicSelectors();
+    enhanceSelects(document.querySelectorAll('select'), {
+        'preset-select': { panel: presetPanel, label: presetLabel, align: 'end' },
+    });
     initUIListeners();
 
     // 3. Attach Render & Component Listeners

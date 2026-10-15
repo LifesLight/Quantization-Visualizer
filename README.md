@@ -19,6 +19,7 @@ A visualizer for floating-point quantization. It shows how different schemes map
 ### Interface
 
 *   **Data Generation:** Generate synthetic weights using Normal, Laplace, Bimodal, or Outlier-heavy distributions.
+*   **Presets:** Laid out by bits per weight (rows) and family (columns), type to filter.
 *   **Rotation:** Hadamard, Randomized Hadamard or Random Orthogonal rotation in front of any quant, with a toggle to view the rotated values.
 *   **Inspector:** Hover over bars to see the exact reconstruction math (`Q * Scale + Offset`) and error stats for that specific block.
 *   **Stats:** Live calculation of Bits-Per-Weight (BPW), compression ratio, and global Mean Squared Error (MSE).

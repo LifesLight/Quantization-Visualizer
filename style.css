@@ -787,3 +787,300 @@ button.action-btn:hover:not(.secondary) {
 #db-active-region:active {
     cursor: grabbing;
 }
+
+/* Custom dropdowns (js/components/dropdown.js), the native select stays underneath */
+.cs {
+    position: relative;
+    width: 100%;
+}
+
+.cs-native {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.cs-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: var(--input-bg);
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.cs-button:hover {
+    border-color: var(--highlight-border);
+}
+
+.cs-button:focus-visible,
+.cs.open .cs-button {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.cs-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.cs-button .cs-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cs-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.cs-chevron {
+    width: 6px;
+    height: 6px;
+    margin: 0 3px 3px 2px;
+    border-right: 1.5px solid var(--text-muted);
+    border-bottom: 1.5px solid var(--text-muted);
+    transform: rotate(45deg);
+    transition: transform 0.12s ease;
+    flex-shrink: 0;
+}
+
+.cs.open .cs-chevron {
+    transform: translateY(3px) rotate(-135deg);
+}
+
+.cs-panel {
+    position: fixed;
+    z-index: 1000;
+    box-sizing: border-box;
+    overflow: auto;
+    background: var(--card-bg);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 16px 36px -12px rgb(15 23 42 / 0.28), 0 2px 6px rgb(15 23 42 / 0.06);
+    animation: cs-in 0.1s ease-out;
+}
+
+[data-theme="dark"] .cs-panel {
+    box-shadow: 0 16px 36px -12px rgb(0 0 0 / 0.7), 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+@keyframes cs-in {
+    from {
+        opacity: 0;
+        transform: translateY(-3px);
+    }
+}
+
+.cs-list {
+    padding: 4px;
+}
+
+.cs-list [role="listbox"]:focus {
+    outline: none;
+}
+
+.cs-option {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.cs-option.active {
+    background: var(--hover-bg-strong);
+}
+
+.cs-option.selected {
+    color: var(--primary-color);
+    font-weight: 600;
+    box-shadow: inset 2px 0 0 var(--primary-color);
+}
+
+.cs-option.disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.cs-group {
+    padding: 8px 10px 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.cs-group:first-child {
+    padding-top: 4px;
+}
+
+/* Preset picker: bit range down, preset group across */
+.pp {
+    padding: 10px 10px 6px;
+}
+
+.pp-search {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.85rem;
+}
+
+.pp-search::placeholder {
+    color: var(--text-muted);
+}
+
+.pp-grid {
+    display: grid;
+}
+
+.pp-corner,
+.pp-col {
+    padding: 6px 7px 5px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.pp-corner {
+    padding-left: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 400;
+}
+
+.pp-bits,
+.pp-cell {
+    border-top: 1px solid var(--border-color);
+    padding: 4px 1px;
+}
+
+.pp-bits {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1;
+    padding-top: 8px;
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.pp-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pp-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    width: 100%;
+    padding: 3px 7px;
+    line-height: 1.25;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-main);
+    font-family: 'JetBrains Mono', monospace;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pp-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pp-bpw {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+.pp-item:hover {
+    background: var(--highlight-bg);
+    border-color: var(--highlight-border);
+}
+
+.pp-item:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+}
+
+.pp-item.selected {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+.pp-item.selected .pp-bpw {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.pp-item.selected:focus-visible {
+    outline-color: var(--text-main);
+}
+
+.pp-item.dim {
+    opacity: 0.2;
+}
+
+.pp-grid.compact {
+    display: block;
+}
+
+.pp-row {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+}
+
+.pp-grid.compact .pp-cell {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.pp-grid.compact .pp-item {
+    width: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cs-panel {
+        animation: none;
+    }
+
+    .cs-chevron {
+        transition: none;
+    }
+}
