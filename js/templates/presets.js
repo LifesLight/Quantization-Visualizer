@@ -68,11 +68,12 @@ export const presetGroups = [
         }
     },
     {
-        label: "Trellis",
+        label: "ik_llama.cpp: Trellis (KT)",
         presets: {
-            'tcq2': { label: 'TCQ2', 'quant-type': 'trellis', 'trellis-bits': 2, 'trellis-block-size': 256, 'trellis-states': 16, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42, },
-            'tcq3': { label: 'TCQ3', 'quant-type': 'trellis', 'trellis-bits': 3, 'trellis-block-size': 256, 'trellis-states': 8, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42, },
-            'tcq4': { label: 'TCQ4', 'quant-type': 'trellis', 'trellis-bits': 4, 'trellis-block-size': 256, 'trellis-states': 4, 'trellis-cb-type': 'lloyd', 'trellis-wht': true, 'trellis-wht-scope': 'global', 'trellis-opt-iters': 8, 'trellis-sign-seed': 42, }
+            'IQ1_KT': { label: 'IQ1_KT', 'quant-type': 'trellis', 'trellis-type': 'iq1_kt' },
+            'IQ2_KT': { label: 'IQ2_KT', 'quant-type': 'trellis', 'trellis-type': 'iq2_kt' },
+            'IQ3_KT': { label: 'IQ3_KT', 'quant-type': 'trellis', 'trellis-type': 'iq3_kt' },
+            'IQ4_KT': { label: 'IQ4_KT', 'quant-type': 'trellis', 'trellis-type': 'iq4_kt' },
         }
     }
 ];

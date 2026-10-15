@@ -5,7 +5,7 @@ pub mod algos;
 pub mod grid;
 #[rustfmt::skip]
 pub mod lut;
-mod view;
+pub(crate) mod view;
 
 use algos::IqType;
 
@@ -133,7 +133,7 @@ pub fn format_inspector(
     data.mae = Some(mae);
     data.scale = Some(dec.dl);
     data.scale_label = Some("Sub-scale:".into());
-    data.iq_html = Some(view::render(
+    data.detail_html = Some(view::render(
         t,
         bm,
         &dec,

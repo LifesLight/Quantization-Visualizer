@@ -3,9 +3,9 @@
 use super::algos::{Codebook, IqDecode, IqType, Signs};
 use crate::quants::IqBlockMeta;
 
-const TINY: &str = "font-size:0.65rem; color:var(--text-muted);";
+pub(crate) const TINY: &str = "font-size:0.65rem; color:var(--text-muted);";
 
-fn trim(v: f32) -> String {
+pub(crate) fn trim(v: f32) -> String {
     if v.fract() == 0.0 {
         format!("{}", v as i32)
     } else {
@@ -14,14 +14,14 @@ fn trim(v: f32) -> String {
 }
 
 /// One labeled row: short muted label on the left, content filling the rest.
-fn row(label: &str, title: &str, content: &str) -> String {
+pub(crate) fn row(label: &str, title: &str, content: &str) -> String {
     format!(
         r#"<div style="display:flex; align-items:center; gap:6px;" title="{}"><span style="{} width:3.2em; flex:none;">{}</span><div style="flex:1; min-width:0;">{}</div></div>"#,
         title, TINY, label, content
     )
 }
 
-fn chain_row(label: &str, value: &str, color: &str) -> String {
+pub(crate) fn chain_row(label: &str, value: &str, color: &str) -> String {
     format!(
         r#"<div style="display:flex; justify-content:space-between; gap:6px;"><span>{}</span><span style="font-weight:bold; color:{};">{}</span></div>"#,
         label, color, value
@@ -110,44 +110,12 @@ pub fn render(
         &format!("{:.5}", recon.get(j).copied().unwrap_or(0.0)),
         "var(--accent-color)",
     ));
-    html.push_str(&format!(
-        r#"<div style="display:flex; flex-direction:column; gap:1px; background:var(--hover-bg-strong); padding:5px 7px; border-radius:6px; font-size:0.72rem;">{}</div>"#,
-        chain
-    ));
+    html.push_str(&chain_box(&chain));
 
     // Sub-block scales of this super-block
     let subs = (t.sub_scales)(&bm.bytes);
     if subs.len() > 1 {
-        let max = subs.iter().fold(0.0f32, |m, &s| m.max(s.abs()));
-        let active = j / t.sub_size;
-        let mut bars = String::new();
-        for (i, &s) in subs.iter().enumerate() {
-            let pct = if max > 0.0 {
-                s.abs() / max * 100.0
-            } else {
-                0.0
-            };
-            let style = if i == active {
-                "background:var(--accent-color);"
-            } else {
-                "background:var(--primary-color); opacity:0.55;"
-            };
-            bars.push_str(&format!(
-                r#"<div style="flex:1; height:{:.1}%; {} border-radius:1px 1px 0 0;" title="Sub-block {}: {:.5}"></div>"#,
-                pct.max(6.0),
-                style,
-                i,
-                s
-            ));
-        }
-        html.push_str(&row(
-            "scales",
-            &format!("{} sub-blocks of {} weights", subs.len(), t.sub_size),
-            &format!(
-                r#"<div style="display:flex; gap:1px; height:20px; align-items:flex-end; border-bottom:1px solid var(--border-color);">{}</div>"#,
-                bars
-            ),
-        ));
+        html.push_str(&scale_bars(&subs, j / t.sub_size, t.sub_size));
     }
 
     match dec.signs {
@@ -167,41 +135,7 @@ pub fn render(
 
 fn signs_row(dec: &IqDecode, neg: u8, j: usize, orig: &[f32]) -> String {
     let parity = matches!(dec.signs, Signs::Parity { .. });
-    let start = (j / 8) * 8;
-    let mut boxes = String::new();
-    let mut flipped = None;
-    for k in 0..8 {
-        let e = start + k;
-        let q_neg = neg & (1 << k) != 0;
-        let is_flip = orig.get(e).map_or(false, |&v| (v < 0.0) != q_neg);
-        if is_flip {
-            flipped = Some(k);
-        }
-        let bg = if q_neg {
-            "var(--negative-color)"
-        } else {
-            "var(--accent-color)"
-        };
-        let border = if is_flip {
-            "border:1px solid #fbbf24;"
-        } else if parity && k == 7 {
-            "border:1px dashed var(--text-muted);"
-        } else {
-            "border:1px solid transparent;"
-        };
-        let hover = if e == j {
-            " box-shadow:0 0 0 1px var(--text-main);"
-        } else {
-            ""
-        };
-        boxes.push_str(&format!(
-            r#"<div style="flex:1; text-align:center; font-size:0.62rem; line-height:14px; border-radius:3px; background:{}; color:white; font-weight:bold; {}{}">{}</div>"#,
-            bg,
-            border,
-            hover,
-            if q_neg { "&minus;" } else { "+" }
-        ));
-    }
+    let (boxes, flipped) = sign_boxes(neg, parity, j, orig);
     let title = if parity {
         match flipped {
             Some(k) => format!("7 stored sign bits, dashed 8th implied by even parity. Odd negative count, #{} (smallest w&middot;x&sup2;) flipped.", k + 1),
@@ -210,11 +144,7 @@ fn signs_row(dec: &IqDecode, neg: u8, j: usize, orig: &[f32]) -> String {
     } else {
         "8 stored sign bits.".into()
     };
-    row(
-        "signs",
-        &title,
-        &format!(r#"<div style="display:flex; gap:2px;">{}</div>"#, boxes),
-    )
+    row("signs", &title, &boxes)
 }
 
 fn levels_row(dec: &IqDecode, idx: usize, values: &[i8], x: Option<f32>) -> String {
@@ -251,5 +181,89 @@ fn levels_row(dec: &IqDecode, idx: usize, values: &[i8], x: Option<f32>) -> Stri
             r#"<div style="position:relative; height:12px; margin:0 3px; border-bottom:1px solid var(--border-color);">{}</div><div style="{} margin-top:1px;">{}</div>"#,
             strip, TINY, caption
         ),
+    )
+}
+
+pub(crate) fn chain_box(chain: &str) -> String {
+    format!(
+        r#"<div style="display:flex; flex-direction:column; gap:1px; background:var(--hover-bg-strong); padding:5px 7px; border-radius:6px; font-size:0.72rem;">{}</div>"#,
+        chain
+    )
+}
+
+/// Bar per sub-block scale of the hovered super-block, the active one highlighted.
+pub(crate) fn scale_bars(subs: &[f32], active: usize, sub_size: usize) -> String {
+    let max = subs.iter().fold(0.0f32, |m, &s| m.max(s.abs()));
+    let mut bars = String::new();
+    for (i, &s) in subs.iter().enumerate() {
+        let pct = if max > 0.0 {
+            s.abs() / max * 100.0
+        } else {
+            0.0
+        };
+        let style = if i == active {
+            "background:var(--accent-color);"
+        } else {
+            "background:var(--primary-color); opacity:0.55;"
+        };
+        bars.push_str(&format!(
+            r#"<div style="flex:1; height:{:.1}%; {} border-radius:1px 1px 0 0;" title="Sub-block {}: {:.5}"></div>"#,
+            pct.max(6.0),
+            style,
+            i,
+            s
+        ));
+    }
+    row(
+        "scales",
+        &format!("{} sub-blocks of {} weights", subs.len(), sub_size),
+        &format!(
+            r#"<div style="display:flex; gap:1px; height:20px; align-items:flex-end; border-bottom:1px solid var(--border-color);">{}</div>"#,
+            bars
+        ),
+    )
+}
+
+/// Sign boxes for the 8 weights around j. Flips against the original data get an amber
+/// outline, with parity the implied 8th box is dashed. Returns the html and the flipped lane.
+pub(crate) fn sign_boxes(neg: u8, parity: bool, j: usize, orig: &[f32]) -> (String, Option<usize>) {
+    let start = (j / 8) * 8;
+    let mut boxes = String::new();
+    let mut flipped = None;
+    for k in 0..8 {
+        let e = start + k;
+        let q_neg = neg & (1 << k) != 0;
+        let is_flip = orig.get(e).map_or(false, |&v| (v < 0.0) != q_neg);
+        if is_flip {
+            flipped = Some(k);
+        }
+        let bg = if q_neg {
+            "var(--negative-color)"
+        } else {
+            "var(--accent-color)"
+        };
+        let border = if is_flip {
+            "border:1px solid #fbbf24;"
+        } else if parity && k == 7 {
+            "border:1px dashed var(--text-muted);"
+        } else {
+            "border:1px solid transparent;"
+        };
+        let hover = if e == j {
+            " box-shadow:0 0 0 1px var(--text-main);"
+        } else {
+            ""
+        };
+        boxes.push_str(&format!(
+            r#"<div style="flex:1; text-align:center; font-size:0.62rem; line-height:14px; border-radius:3px; background:{}; color:white; font-weight:bold; {}{}">{}</div>"#,
+            bg,
+            border,
+            hover,
+            if q_neg { "&minus;" } else { "+" }
+        ));
+    }
+    (
+        format!(r#"<div style="display:flex; gap:2px;">{}</div>"#, boxes),
+        flipped,
     )
 }

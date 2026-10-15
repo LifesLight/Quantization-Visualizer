@@ -532,93 +532,17 @@
                     <div id="trellis-settings"
                         style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">
                         <div class="settings-group">
-                            <label for="trellis-bits"
-                                title="Nominal bits per weight before scale overhead. TCQ uses path constraints, so the effective quality can beat plain scalar quantization at the same rate.">
-                                Trellis Rate (Bits/Weight)
+                            <label for="trellis-type"
+                                title="Trellis types from ik_llama.cpp. Groups of weights store an index into a codebook that is generated on the fly by an LCG, one FP32 scale per row.">
+                                KT Quantization Format
                             </label>
-                            <input type="number" id="trellis-bits" value="4" min="1" max="8">
-                        </div>
-                        <div class="settings-group">
-                            <label for="trellis-block-size"
-                                title="How many weights share one RMS scale and one trellis traceback. Bigger blocks usually compress better but adapt more slowly.">
-                                Viterbi Block Size
-                            </label>
-                            <select id="trellis-block-size">
-                                <option value="16">16</option>
-                                <option value="32">32</option>
-                                <option value="64">64</option>
-                                <option value="128" selected>128</option>
-                                <option value="256">256</option>
-                                <option value="512">512</option>
-                                <option value="1024">1024</option>
-                                <option value="2048">2048</option>
+                            <select id="trellis-type">
+                                <option value="iq1_kt">IQ1_KT (1.75 BPW)</option>
+                                <option value="iq2_kt" selected>IQ2_KT (2.13 BPW)</option>
+                                <option value="iq3_kt">IQ3_KT (3.13 BPW)</option>
+                                <option value="iq4_kt">IQ4_KT (4.00 BPW)</option>
                             </select>
                         </div>
-                        <div class="settings-group">
-                            <label for="trellis-states"
-                                title="How much path memory the search keeps. More states means more candidate paths and usually lower error, but more compute.">
-                                Trellis Complexity
-                            </label>
-                            <select id="trellis-states">
-                                <option value="1">1-State (Scalar)</option>
-                                <option value="4" selected>4-State (Baseline TCQ)</option>
-                                <option value="8">8-State (Better)</option>
-                                <option value="16">16-State (High)</option>
-                                <option value="64">64-State (Very High)</option>
-                                <option value="256">256-State (Research)</option>
-                            </select>
-                        </div>
-                        <div class="settings-group">
-                            <label for="trellis-cb-type"
-                                title="How the codebook levels are spaced. Uniform is evenly spaced; Lloyd-Max matches underlying values better.">
-                                Codebook Distribution
-                            </label>
-                            <select id="trellis-cb-type">
-                                <option value="lloyd" selected>Lloyd-Max (Gaussian)</option>
-                                <option value="laplace">Lloyd-Max (Laplacian)</option>
-                                <option value="uniform">Uniform (Linear)</option>
-                            </select>
-                        </div>
-                        <div class="settings-group" style="flex-direction: row; align-items: center; gap: 8px;"
-                            title="Subsampled Randomized Hadamard Transform to suppress outliers.">
-                            <input type="checkbox" id="trellis-wht" style="width: auto; margin: 0; cursor: pointer;">
-                            <label for="trellis-wht" style="margin: 0; cursor: pointer;">Enable SRHT</label>
-                        </div>
-
-                        <!-- Advanced Trellis Settings Wrapper -->
-                        <div class="trellis-advanced-wrapper" style="margin-top: 4px;">
-                            <button id="trellis-adv-toggle" class="adv-toggle-btn">
-                                <span>Advanced Parameters</span>
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                    <path d="M7 10l5 5 5-5z" />
-                                </svg>
-                            </button>
-                            <div id="trellis-adv-panel" class="adv-panel" style="display: none; padding-top: 8px;">
-                                <div class="settings-group">
-                                    <label for="trellis-wht-scope"
-                                        title="Global applies FWHT across the entire dataset, perfectly smearing outlier energy so a single Global Scale can be used. Local applies FWHT per-block, which allows fine-tuned scales but forces local scales to spike if an outlier is trapped in that block, destroying precision for surrounding weights.">SRHT
-                                        Transform & Scale Scope</label>
-                                    <select id="trellis-wht-scope">
-                                        <option value="global" selected>Global (Global Tensor Transform + Scale)
-                                        </option>
-                                        <option value="local">Local (Per-Block Transform + Scale)</option>
-                                    </select>
-                                </div>
-                                <div class="settings-group">
-                                    <label for="trellis-opt-iters"
-                                        title="Uses Golden-Section Search to find the mathematically optimal scale by simulating the Viterbi TCQ path. Set > 0 to enable. Higher values reduce quantization error (MSE).">Scale
-                                        Optimization Iters</label>
-                                    <input type="number" id="trellis-opt-iters" value="0" min="0" max="25">
-                                </div>
-                                <div class="settings-group">
-                                    <label for="trellis-sign-seed"
-                                        title="Seed for the deterministic pseudo-random sign flips (the diagonal matrix 'D' in SRHT). Used to ensure the transform is identically reversible.">SRHT
-                                        Sign Seed</label>
-                                    <input type="number" id="trellis-sign-seed" value="42">
-                                </div>
-                            </div>
-                        </div>
-
                     </div>
 
                     <div id="iq-settings" style="display: none; flex-direction: column; gap: 12px; margin-top: 6px;">

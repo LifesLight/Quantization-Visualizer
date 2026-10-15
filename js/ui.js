@@ -112,16 +112,7 @@ export const elements = {
 
     // --- Trellis Settings ---
     get trellisSettings() { return document.getElementById('trellis-settings'); },
-    get trellisBitsEl() { return document.getElementById('trellis-bits'); },
-    get trellisBlockSizeEl() { return document.getElementById('trellis-block-size'); },
-    get trellisStatesEl() { return document.getElementById('trellis-states'); },
-    get trellisCbTypeEl() { return document.getElementById('trellis-cb-type'); },
-    get trellisWhtEl() { return document.getElementById('trellis-wht'); },
-    get trellisWhtScopeEl() { return document.getElementById('trellis-wht-scope'); },
-    get trellisOptItersEl() { return document.getElementById('trellis-opt-iters'); },
-    get trellisSignSeedEl() { return document.getElementById('trellis-sign-seed'); },
-    get trellisAdvToggle() { return document.getElementById('trellis-adv-toggle'); },
-    get trellisAdvPanel() { return document.getElementById('trellis-adv-panel'); },
+    get trellisTypeEl() { return document.getElementById('trellis-type'); },
 
     // --- IQ Quantization Settings ---
     get iqSettings() { return document.getElementById('iq-settings'); },
@@ -177,8 +168,7 @@ export const elements = {
             this.genOutlierProbEl, this.genOutlierMultEl, this.genUniRangeEl,
             this.turboBitsEl, this.turboBlockSizeEl, this.turboWhtEl, this.turboQjlEl,
             this.turboSignSeedEl,
-            this.trellisBitsEl, this.trellisBlockSizeEl, this.trellisStatesEl, this.trellisCbTypeEl,
-            this.trellisWhtEl, this.trellisWhtScopeEl, this.trellisOptItersEl, this.trellisSignSeedEl,
+            this.trellisTypeEl,
             this.iqTypeEl,
             this.mxfpFormatEl, this.primitiveFormatEl, this.dataScaleEl, this.dataOffsetEl,
             this.axisIgnoreOutliers, this.axisOutlierPct, this.axisManualMin, this.axisManualMax,
@@ -337,14 +327,7 @@ export function getSettings() {
         useQjl: elements.turboQjlEl.checked,
         turboSignSeed: parseInt(elements.turboSignSeedEl?.value) || 42,
 
-        trellisBits: parseInt(elements.trellisBitsEl.value) || 4,
-        trellisBlockSize: parseInt(elements.trellisBlockSizeEl.value) || 64,
-        trellisStates: parseInt(elements.trellisStatesEl.value) || 4,
-        trellisCbType: elements.trellisCbTypeEl.value,
-        trellisUseWht: elements.trellisWhtEl?.checked || false,
-        trellisWhtScope: elements.trellisWhtScopeEl?.value || 'global',
-        trellisOptIters: parseInt(elements.trellisOptItersEl?.value) || 0,
-        trellisSignSeed: parseInt(elements.trellisSignSeedEl?.value) || 42,
+        trellisType: elements.trellisTypeEl?.value || 'iq2_kt',
 
         iqType: elements.iqTypeEl?.value || 'iq2_xxs',
 
@@ -419,7 +402,6 @@ export function initUIListeners() {
     setupToggle(elements.impRawToggle, elements.impRawPanel);
     setupToggle(elements.impGenAdvToggle, elements.impGenAdvPanel);
     setupToggle(elements.turboAdvToggle, elements.turboAdvPanel);
-    setupToggle(elements.trellisAdvToggle, elements.trellisAdvPanel);
     setupToggle(elements.axisToggleBtn, elements.axisPanel);
     setupToggle(elements.dataTransformToggle, elements.dataTransformPanel);
 

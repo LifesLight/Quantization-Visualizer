@@ -22,7 +22,7 @@ iqQuant.label = "IQ Quants (llama.cpp)";
 
 // Complex
 turboQuant.label = "TurboQuant (Scalar WHT)";
-trellisQuant.label = "Trellis (Viterbi WHT)";
+trellisQuant.label = "Trellis (ik_llama.cpp KT)";
 
 
 const registry = {

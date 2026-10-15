@@ -326,108 +326,12 @@ export function updateInspector(idx) {
         elements.insBData.innerHTML = '<div class="empty-state">Hover over a block to inspect</div>';
     }
 
-    // --- Advanced Metadata Rendering (Trellis / Superblocks / Globals / IQ) ---
+    // --- Advanced Metadata Rendering (IQ / KT detail cards, Superblocks, Globals) ---
     let superHtml = '';
 
-    if (insData.trellisJson) {
-        const p = JSON.parse(insData.trellisJson);
-        const states = state.currentRenderData.settings.trellisStates || 1;
-
-        let candHtml = '';
-
-        let candsList = p.candidates || [];
-
-        // PADDING LOGIC: If a Viterbi branch was pruned (length is 1), 
-        // inject a dummy None branch so the UI visually stacks up properly.
-        if (states > 1 && candsList.length === 1) {
-            candsList.push({ isNone: true });
-        }
-
-        if (candsList.length > 0) {
-            for (let c of candsList) {
-                if (c.isNone) {
-                    candHtml += `
-                        <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; padding:5px 8px; border-radius:6px; border:1px dashed var(--border-color); opacity:0.4;">
-                            <div style="display:flex; gap:6px; align-items:center; font-size:11px;">
-                                <span>- None -</span>
-                            </div>
-                            <div style="font-size:11px; display:flex; gap:8px;">
-                                <span style="width:45px; text-align:right;">-</span>
-                                <span style="opacity:0.6; width:65px; text-align:right;">-</span>
-                            </div>
-                        </div>`;
-                    continue;
-                }
-
-                const active = c.prevState === p.prevState && c.subset === p.subset && c.cbIdx === p.cbIdx;
-                const border = active ? 'var(--primary-color)' : 'var(--border-color)';
-                const bg = active ? 'var(--card-bg)' : 'transparent';
-                const textCol = active ? 'var(--primary-color)' : 'inherit';
-                const opacity = active ? '1' : '0.6';
-                const weight = active ? 'bold' : 'normal';
-
-                candHtml += `
-                    <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; padding:5px 8px; border-radius:6px; border:1px solid ${border}; background:${bg}; color:${textCol}; font-weight:${weight}; opacity:${opacity};">
-                        <div style="display:flex; gap:6px; align-items:center; font-size:11px;">
-                            <span>S${c.prevState} &rarr; D${c.subset}</span>
-                        </div>
-                        <div style="font-size:11px; display:flex; gap:8px;">
-                            <span style="width:45px; text-align:right;">q=${(c.cbVal ?? 0).toFixed(3)}</span>
-                            <span style="opacity:0.6; width:65px; text-align:right;">(c=${(c.cost ?? 0).toFixed(3)})</span>
-                        </div>
-                    </div>`;
-            }
-        } else {
-            candHtml = '<div style="opacity:0.6; font-size:11px; padding: 4px 0;">No candidates (Initial State)</div>';
-        }
-
-        elements.iSBIdx.textContent = `[t=${sliceIdx % (state.currentRenderData.settings.trellisBlockSize || 1)}]`;
-        elements.insSBData.innerHTML = `
-            <div style="display:flex; flex-direction:column; gap:12px;">
-                ${states > 1 ? `
-                <div>
-                    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
-                        <div style="font-size:10px; font-weight:600; opacity:0.6; text-transform:uppercase; letter-spacing:0.5px;">Viterbi State Transition</div>
-                        <div style="font-size:10px; opacity:0.8;">Codebook Idx: <strong style="color:var(--text-color);">${p.cbIdx}</strong></div>
-                    </div>
-                    <div style="display:flex; align-items:center; justify-content:space-between; background: var(--card-bg); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color);">
-                        <div style="text-align:center; flex: 0 0 auto;">
-                            <div style="font-size:9px; opacity:0.6; margin-bottom:6px; letter-spacing:0.5px;">PREV</div>
-                            <div style="background:transparent; border:2px solid var(--border-color); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:11px; margin:0 auto;">S${p.prevState}</div>
-                        </div>
-                        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 0 10px;">
-                            <div style="font-size:10px; font-weight:bold; color:var(--primary-color); margin-bottom:4px;">Subset D${p.subset}</div>
-                            <div style="width:100%; height:2px; background:var(--primary-color); position:relative;">
-                                <div style="position:absolute; right:0; top:-4px; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:6px solid var(--primary-color);"></div>
-                            </div>
-                            <div style="font-size:9px; opacity:0.6; margin-top:6px;">Path Cost: ${(p.cost ?? 0) < 1e9 ? (p.cost ?? 0).toFixed(3) : '∞'}</div>
-                        </div>
-                        <div style="text-align:center; flex: 0 0 auto;">
-                            <div style="font-size:9px; opacity:0.6; margin-bottom:6px; letter-spacing:0.5px;">CURR</div>
-                            <div style="background:var(--primary-color); color:white; border:2px solid var(--primary-color); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:11px; margin:0 auto;">S${p.state}</div>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <div style="font-size:10px; font-weight:600; opacity:0.6; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">Evaluated Branches (to S${p.state})</div>
-                    <div style="display:flex; flex-direction:column; gap:4px; max-height:140px; overflow-y:auto; padding-right:4px;">
-                        ${candHtml}
-                    </div>
-                </div>
-                ` : `
-                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
-                    <div style="font-size:10px; font-weight:600; opacity:0.6; text-transform:uppercase; letter-spacing:0.5px;">Scalar Quantization</div>
-                    <div style="font-size:10px; opacity:0.8;">Codebook Idx: <strong style="color:var(--text-color);">${p.cbIdx}</strong></div>
-                </div>
-                <div style="font-size:11px; line-height:1.4; color:var(--text-muted); padding:10px; border:1px dashed var(--border-color); border-radius:6px; text-align:center;">
-                    Values are snapped to the closest level in the codebook independently, without path memory.
-                </div>
-                `}
-            </div>
-        `;
-    } else if (insData.iqHtml) {
+    if (insData.detailHtml) {
         elements.iSBIdx.textContent = `[${insData.superIdx ?? '-'}]`;
-        elements.insSBData.innerHTML = insData.iqHtml;
+        elements.insSBData.innerHTML = insData.detailHtml;
     } else if (insData.globalScale !== undefined) {
         superHtml += `<div class="data-row"><span>Global MSE:</span> <span class="val-hl">${insData.globalMse.toFixed(6)}</span></div>`;
         superHtml += `<div class="data-row"><span>Global MAE:</span> <span>${insData.globalMae.toFixed(6)}</span></div>`;

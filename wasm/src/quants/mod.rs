@@ -45,14 +45,7 @@ pub struct Settings {
     pub use_wht: bool,
     pub use_qjl: bool,
     pub turbo_sign_seed: u32,
-    pub trellis_bits: u32,
-    pub trellis_block_size: usize,
-    pub trellis_states: usize,
-    pub trellis_cb_type: String,
-    pub trellis_use_wht: bool,
-    pub trellis_wht_scope: String,
-    pub trellis_opt_iters: usize,
-    pub trellis_sign_seed: u32,
+    pub trellis_type: String,
     pub iq_type: String,
     pub mxfp_format: String,
     pub primitive_format: String,
@@ -69,6 +62,7 @@ pub fn get_importance_block_size(q_type: &str, settings: &Settings) -> usize {
     match q_type {
         "kquant" => settings.sub_size,
         "sym" | "asym" => settings.block_size,
+        "trellis" => 256,
         "iq" => {
             if settings.iq_type == "iq4_nl" {
                 32
@@ -101,7 +95,7 @@ pub enum QuantMeta {
     Nvfp4(Vec<Nvfp4BlockMeta>, f32, f64, f64), // Nvfp4BlockMeta, global_scale, gmse, gmae
     Mxfp(Vec<MxfpBlockMeta>),
     Turbo(Vec<TurboBlockMeta>),
-    Trellis(Vec<TrellisBlockMeta>),
+    Trellis(trellis::TrellisMeta),
     Iq(Vec<IqBlockMeta>),
 }
 
@@ -126,8 +120,7 @@ pub struct InspectorData {
     pub global_scale: Option<f32>,
     pub global_mse: Option<f64>,
     pub global_mae: Option<f64>,
-    pub trellis_json: Option<String>,
-    pub iq_html: Option<String>,
+    pub detail_html: Option<String>,
     pub importance_raw: Option<f32>,
     pub importance_pct_sum: Option<f32>,
     pub importance_pct_max: Option<f32>,
@@ -189,14 +182,6 @@ pub struct TurboBlockMeta {
     pub qjl_scale: f32,
     pub mse: f64,
     pub mae: f64,
-}
-pub struct TrellisBlockMeta {
-    pub idx: usize,
-    pub size: usize,
-    pub scale: f32,
-    pub mse: f64,
-    pub mae: f64,
-    pub chunk_w: Vec<f64>,
 }
 pub struct IqBlockMeta {
     pub idx: usize,

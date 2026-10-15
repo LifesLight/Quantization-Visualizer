@@ -12,7 +12,7 @@ A visualizer for floating-point quantization. It shows how different schemes map
 *   **Asymmetric (Block Scale + Zero):** Block-wise quantization with both a scale and a minimum offset per block.
 *   **K-Quant (Nested Scales):** Superblock structure where sub-block scales are themselves quantized by a shared super-scale.
 *   **TurboQuant (Scalar WHT):** SRHT rotation normalizes the coefficient distribution, then a precomputed Lloyd-Max codebook quantizes each coordinate independently. Optional QJL adds a 1-bit residual correction to remove inner-product bias.
-*   **Trellis (Viterbi WHT):** SRHT rotation followed by a multi-state Viterbi search that minimizes MSE over the full sequence rather than per value independently, using Ungerboeck set partitioning to increase effective codebook resolution.
+*   **Trellis (KT):** Ported from ik_llama.cpp's `iqk_quantize.cpp`.
 *   **IQ-Quant (Grid-Based):** Ported from llama.cpp's `ggml-quants.c`.
 
 ### Interface
