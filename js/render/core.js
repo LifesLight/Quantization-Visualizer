@@ -143,7 +143,7 @@ export function render(opts = {}) {
     const sqnr = (stats.global_mse === 0 || stats.global_variance === 0) ? Infinity : 10 * Math.log10(stats.global_variance / stats.global_mse);
     const relError = stats.global_sum_abs === 0 ? 0 : ((stats.global_mae * actLen) / stats.global_sum_abs) * 100;
 
-    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nRatio     : ${settings.qType === 'none' ? '1.00' : (32 / bpw).toFixed(2)}x smaller\nGlobal MSE: ${fmtErr(stats.global_mse)}\nCosine Sim: ${stats.global_cosine_similarity.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nMax Error : ${fmtErr(stats.max_error)}\nRel. Error: ${relError.toFixed(2)}%`;
+    let statsText = `BPW Limit : ${settings.qType === 'none' ? '32.000' : bpw.toFixed(3)} bits\nGlobal MSE: ${fmtErr(stats.global_mse)}\nCosine Sim: ${stats.global_cosine_similarity.toFixed(6)}\nSQNR      : ${sqnr === Infinity ? '∞' : sqnr.toFixed(2)} dB\nMax Error : ${fmtErr(stats.max_error)}\nRel. Error: ${relError.toFixed(2)}%`;
     elements.quantStats.textContent = statsText;
 
     if (stats.has_importance) {
