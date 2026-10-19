@@ -88,7 +88,7 @@ export function updateOverlays() {
         const sliceIdx = useClip ? primaryIdx - state.clipStart : primaryIdx;
         if (sliceIdx >= 0 && sliceIdx < state.currentRenderData.actLen) {
             const actBlockSize = stats.block_size || 0;
-            const actSbSize = stats.super_block_size || 0;
+            const actSbSize = stats.super_block_size > actBlockSize ? stats.super_block_size : 0;
             const showBlocks = actBlockSize > 0 && (barW < 1 ? (actBlockSize * barW) >= 8 : true);
             const showSupers = actSbSize > 0 && (barW < 1 ? (actSbSize * barW) >= 8 : true);
 

@@ -115,6 +115,7 @@ export const elements = {
     get rotationSeedEl() { return document.getElementById('rotation-seed'); },
     get rotationSizeGroup() { return document.getElementById('rotation-size-group'); },
     get rotationSeedGroup() { return document.getElementById('rotation-seed-group'); },
+    get rotationImpWarning() { return document.getElementById('rotation-imp-warning'); },
 
     // --- Trellis Settings ---
     get trellisSettings() { return document.getElementById('trellis-settings'); },

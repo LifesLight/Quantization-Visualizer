@@ -29,11 +29,13 @@ export function requantize(overrideClipCheck = false) {
     if (N === 0) {
         state.currentRenderData = null;
         validateImportance(0, 0, "");
+        elements.rotationImpWarning.style.display = 'none';
         render();
         return;
     }
 
-    validateImportance(N, impFloats.length, elements.inputImportanceEl.value);
+    const impOn = validateImportance(N, impFloats.length, elements.inputImportanceEl.value);
+    elements.rotationImpWarning.style.display = impOn && elements.rotationTypeEl.value !== 'none' ? 'block' : 'none';
 
     if (elements.dbModeClip && !elements.dbModeClip.checked) {
         state.clipStart = 0;
@@ -312,7 +314,8 @@ export function render(opts = {}) {
     }
 
     const actBlockSize = stats.block_size || 0;
-    const actSbSize = stats.super_block_size || 0;
+    // a super-block no bigger than the block is just the block (QTIP tiles), draw it as one level
+    const actSbSize = stats.super_block_size > actBlockSize ? stats.super_block_size : 0;
 
     const showBlocks = actBlockSize > 0 && (barW < 1 ? (actBlockSize * barW) >= 8 : true);
     const showSupers = actSbSize > 0 && (barW < 1 ? (actSbSize * barW) >= 8 : true);

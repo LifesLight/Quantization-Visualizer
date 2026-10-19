@@ -664,6 +664,9 @@
                                 <option value="rht">Randomized Hadamard</option>
                                 <option value="orthogonal">Random Orthogonal</option>
                             </select>
+                            <div id="rotation-imp-warning" style="display: none; color: #eab308; font-size: 0.75rem; cursor: help;"
+                                title="The imatrix is E[x&sup2;] per input column, the diagonal of the Hessian H. A rotated weight would need the diagonal of R&middot;H&middot;R&#7488;, which also needs the off-diagonal entries of H. From the diagonal alone the quant gets &Sigma; R&sup2;&middot;w: for Hadamard every R&sup2; is 1/n, so all weights of a block get the block mean, Random Orthogonal lands close to that. Weighted MSE is still measured on the unrotated weights. QuIP#, QTIP and QuaRot use the full Hessian (GPTQ / LDLQ) for this.">
+                                Imatrix mostly averages out under rotation.</div>
                         </div>
                         <div class="settings-group" id="rotation-size-group" style="display: none;">
                             <label for="rotation-size"
